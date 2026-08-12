@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -65,7 +66,13 @@ func main() {
 	}
 
 	srv := server.New(gdb, st, cfg)
-	handler := srv.Routes(static.Dist)
+	// The embed.FS is rooted at the static package dir; re-root to "dist" so
+	// http.FileServerFS can find index.html at the FS root.
+	distRoot, err := fs.Sub(static.Dist, "dist")
+	if err != nil {
+		log.Fatalf("sub dist: %v", err)
+	}
+	handler := srv.Routes(distRoot)
 
 	log.Printf("app-dist listening on %s (storage: %s)", cfg.Server.Addr, cfg.Storage.Backend)
 	if err := http.ListenAndServe(cfg.Server.Addr, handler); err != nil {

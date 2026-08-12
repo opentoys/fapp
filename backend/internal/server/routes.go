@@ -1,8 +1,12 @@
 package server
 
 import (
+	"io"
 	"io/fs"
+	"mime"
 	"net/http"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,18 +52,46 @@ func (s *Server) Routes(dist fs.FS) http.Handler {
 	return mux
 }
 
-// staticHandler serves SPA: fallback to index.html for unknown paths.
+// staticHandler serves SPA: serves the file if it exists, otherwise falls
+// back to index.html. Uses embed.FS directly to avoid http.FileServerFS's
+// internal-redirect quirks with re-rooted fs.FS.
 func staticHandler(dist fs.FS) http.HandlerFunc {
-	fileServer := http.FileServerFS(dist)
+	indexBytes := func() []byte {
+		f, err := dist.Open("index.html")
+		if err != nil {
+			return nil
+		}
+		defer f.Close()
+		b, _ := io.ReadAll(f)
+		return b
+	}
+	idx := indexBytes()
 	return func(w http.ResponseWriter, r *http.Request) {
 		p := strings.TrimPrefix(r.URL.Path, "/")
 		if p == "" {
 			p = "index.html"
 		}
-		if _, err := fs.Stat(dist, p); err != nil {
-			p = "index.html"
+		// For paths with extensions, require the file to exist.
+		if strings.Contains(p, ".") {
+			f, err := dist.Open(p)
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			defer f.Close()
+			stat, _ := f.Stat()
+			if ct := mime.TypeByExtension(filepath.Ext(p)); ct != "" {
+				w.Header().Set("Content-Type", ct)
+			} else {
+				w.Header().Set("Content-Type", "application/octet-stream")
+			}
+			w.Header().Set("Content-Length", strconv.FormatInt(stat.Size(), 10))
+			io.Copy(w, f)
+			return
 		}
-		r.URL.Path = "/" + p
-		fileServer.ServeHTTP(w, r)
+		// SPA fallback for paths without an extension.
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Content-Length", strconv.Itoa(len(idx)))
+		w.Write(idx)
 	}
 }
