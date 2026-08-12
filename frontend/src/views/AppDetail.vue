@@ -2,23 +2,33 @@
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api/client'
-import type { AppDetail as AD, Version } from '../api/types'
+import type { AppDetail } from '../api/types'
+import StatusDot from '../components/StatusDot.vue'
+import MonoText from '../components/MonoText.vue'
 
 const route = useRoute()
-const detail = ref<AD | null>(null)
-const pwd = ref<Record<number, string>>({})
+const data = ref<AppDetail | null>(null)
 const error = ref('')
+const passwordPrompt = ref<{ versionId: number; password: string } | null>(null)
+const dialogOpen = ref(false)
+const passwordError = ref('')
 
-onMounted(async () => {
+function openPasswordPrompt(versionId: number) {
+  passwordPrompt.value = { versionId, password: '' }
+  dialogOpen.value = true
+}
+function closePasswordPrompt() {
+  dialogOpen.value = false
+  passwordPrompt.value = null
+}
+
+onMounted(load)
+async function load() {
   try {
-    detail.value = await api.appDetail(Number(route.params.id))
+    data.value = await api.appDetail(Number(route.params.id))
   } catch (e) {
     error.value = (e as Error).message
   }
-})
-
-function expired(v: Version): boolean {
-  return v.access_mode === 'expiry' && !!v.expires_at && Date.parse(v.expires_at) < Date.now()
 }
 
 function fmtSize(n: number): string {
@@ -28,60 +38,228 @@ function fmtSize(n: number): string {
   return n + ' B'
 }
 
-async function trigger(v: Version, kind: 'download' | 'install') {
-  if (expired(v)) return
+function fmtDate(s: string): string {
+  return new Date(s).toISOString().replace('T', ' ').slice(0, 19)
+}
+
+async function download(v: { id: number; access_mode: string }) {
+  passwordError.value = ''
+  if (v.access_mode === 'password') {
+    openPasswordPrompt(v.id)
+    return
+  }
+  await doDownload(v.id, undefined)
+}
+
+async function submitPassword() {
+  if (!passwordPrompt.value) return
+  const pwd = passwordPrompt.value.password
+  const vid = passwordPrompt.value.versionId
+  closePasswordPrompt()
+  await doDownload(vid, pwd)
+}
+
+async function doDownload(versionId: number, password: string | undefined) {
   try {
-    const url = kind === 'download' ? await api.downloadUrl(v.id, pwd.value[v.id]) : await api.installUrl(v.id, pwd.value[v.id])
-    window.open(url, '_blank')
-    if (kind === 'download') v.download_count++
+    const url = await api.downloadUrl(versionId, password)
+    window.location.href = url
   } catch (e) {
-    alert((e as Error).message)
+    error.value = (e as Error).message
   }
 }
 </script>
 
 <template>
-  <div v-if="detail" class="detail">
-    <header>
-      <h1>{{ detail.app.name }}</h1>
-      <p>{{ detail.app.description }}</p>
-    </header>
-    <p v-if="error" class="err">{{ error }}</p>
+  <div class="app-detail">
+    <v-alert v-if="error" type="error" variant="outlined" class="mb-4">
+      {{ error }}
+    </v-alert>
 
-    <div class="channels" v-for="c in detail.channels" :key="c.id">
-      <h3>渠道：{{ c.name }}</h3>
-      <div class="version" v-for="v in detail.versions.filter((x) => x.channel_id === c.id)" :key="v.id">
-        <div class="vinfo">
-          <span class="ver">{{ v.version_name }}</span>
-          <span class="meta">{{ v.file_type.toUpperCase() }} · {{ fmtSize(v.file_size) }}</span>
+    <div v-if="data" class="layout">
+      <aside class="left">
+        <div class="eyebrow">▌ APP</div>
+        <h1 class="title">{{ data.app.name }}</h1>
+        <p v-if="data.app.description" class="desc">{{ data.app.description }}</p>
+
+        <div v-if="data.channels.length" class="channels">
+          <div class="eyebrow">▌ CHANNELS</div>
+          <div class="channel-list">
+            <span v-for="c in data.channels" :key="c.id" class="channel">
+              <MonoText>{{ c.name }}</MonoText>
+            </span>
+          </div>
         </div>
-        <pre class="log" v-if="v.changelog">{{ v.changelog }}</pre>
-        <div v-if="expired(v)" class="expired">链接已过期</div>
-        <div v-else class="actions">
-          <input
-            v-if="v.access_mode === 'password'"
-            v-model="pwd[v.id]"
-            type="password"
-            placeholder="访问密码"
-            @keyup.enter="trigger(v, 'download')"
-          />
-          <button @click="trigger(v, 'download')">下载</button>
-          <button @click="trigger(v, 'install')">安装</button>
-          <span class="counts">下载 {{ v.download_count }} · 安装 {{ v.install_count }}</span>
+      </aside>
+
+      <section class="right">
+        <div class="eyebrow">▌ VERSIONS</div>
+        <div v-if="data.versions.length" class="version-list">
+          <div
+            v-for="v in data.versions"
+            :key="v.id"
+            class="version-row"
+            :class="{ disabled: !v.enabled }"
+          >
+            <div class="ver-head">
+              <MonoText class="ver-name">{{ v.version_name }}</MonoText>
+              <MonoText muted> · code {{ v.version_code }} · {{ fmtSize(v.file_size) }}</MonoText>
+              <span v-if="!v.enabled" class="taken-down">TAKEN DOWN</span>
+            </div>
+            <div class="ver-meta">
+              <MonoText muted class="sha">{{ v.sha256.slice(0, 16) }}…</MonoText>
+              <MonoText muted> · {{ fmtDate(v.created_at) }}</MonoText>
+            </div>
+            <div class="ver-status">
+              <StatusDot :mode="v.enabled ? v.access_mode : 'taken_down'" />
+            </div>
+            <p v-if="v.changelog" class="changelog">{{ v.changelog }}</p>
+            <div v-if="v.enabled" class="actions">
+              <v-btn
+                variant="outlined"
+                size="small"
+                :disabled="v.access_mode === 'expiry' && !!v.expires_at && new Date(v.expires_at) < new Date()"
+                @click="download(v)"
+              >
+                Download
+              </v-btn>
+            </div>
+          </div>
         </div>
-      </div>
+        <div v-else class="empty">
+          <p>no versions yet</p>
+        </div>
+      </section>
     </div>
+
+    <v-dialog v-model="dialogOpen" max-width="400">
+      <v-card class="pa-5">
+        <div class="eyebrow">▌ PASSWORD REQUIRED</div>
+        <p class="dialog-body">This version is password protected.</p>
+        <v-text-field
+          v-if="passwordPrompt"
+          v-model="passwordPrompt.password"
+          label="Password"
+          type="password"
+          autofocus
+          @keyup.enter="submitPassword"
+        />
+        <div class="dialog-actions">
+          <v-btn variant="text" @click="closePasswordPrompt">Cancel</v-btn>
+          <v-btn color="primary" @click="submitPassword">Continue</v-btn>
+        </div>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
 <style scoped>
-.detail { max-width: 720px; margin: 0 auto; padding: 24px; }
-.version { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 12px 0; }
-.vinfo { display: flex; gap: 12px; align-items: baseline; }
-.ver { font-weight: 600; font-size: 18px; }
-.meta, .counts { color: #888; font-size: 13px; }
-.log { white-space: pre-wrap; background: #f6f6f6; padding: 8px; border-radius: 4px; }
-.actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
-.expired { color: #d33; font-weight: 600; }
-.err { color: #d33; }
+.app-detail {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: var(--sp-8) var(--sp-6);
+}
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: var(--sp-8);
+}
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+  margin-bottom: var(--sp-2);
+}
+.title {
+  font-size: 2.25rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--sp-3) 0;
+}
+.desc {
+  color: var(--text-mute);
+  margin: 0 0 var(--sp-6) 0;
+}
+.channels {
+  margin-top: var(--sp-4);
+}
+.channel-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.channel {
+  display: inline-block;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.8rem;
+}
+.right .eyebrow {
+  margin-bottom: var(--sp-3);
+}
+.version-list {
+  border-top: 1px solid var(--border);
+}
+.version-row {
+  padding: var(--sp-4) 0;
+  border-bottom: 1px solid var(--border);
+}
+.version-row.disabled { opacity: 0.5; }
+.ver-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-1);
+  flex-wrap: wrap;
+}
+.ver-name {
+  font-size: 1.1rem;
+  color: var(--text);
+}
+.taken-down {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  padding: 2px 6px;
+}
+.ver-meta {
+  margin-bottom: var(--sp-2);
+}
+.sha {
+  font-size: 0.75rem;
+}
+.ver-status {
+  margin-bottom: var(--sp-2);
+}
+.changelog {
+  font-size: 0.85rem;
+  color: var(--text-mute);
+  margin: var(--sp-2) 0;
+  white-space: pre-wrap;
+}
+.actions {
+  margin-top: var(--sp-2);
+}
+.empty {
+  padding: var(--sp-6) 0;
+  color: var(--text-mute);
+  text-align: center;
+}
+.dialog-body {
+  margin: var(--sp-3) 0;
+  color: var(--text-mute);
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+}
 </style>
