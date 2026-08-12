@@ -1,11 +1,15 @@
 package server
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"disapp/internal/model"
+	"disapp/internal/password"
+	"disapp/internal/storage"
 	"disapp/internal/web"
 )
 
@@ -118,4 +122,159 @@ func (s *Server) CreateChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	web.SendJson(w, ch)
+}
+
+// UploadVersion handles multipart file upload for a new version.
+func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		web.SendError(w, web.CodeBadRequest, "multipart 解析失败")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		web.SendError(w, web.CodeBadRequest, "缺少文件")
+		return
+	}
+	defer file.Close()
+
+	appID, _ := strconv.ParseInt(r.FormValue("app_id"), 10, 64)
+	channelID, _ := strconv.ParseInt(r.FormValue("channel_id"), 10, 64)
+	versionCode, _ := strconv.Atoi(r.FormValue("version_code"))
+	versionName := r.FormValue("version_name")
+	accessMode := r.FormValue("access_mode")
+	if accessMode == "" {
+		accessMode = model.AccessPublic
+	}
+
+	if versionName == "" || appID == 0 {
+		web.SendError(w, web.CodeBadRequest, "app_id 与 version_name 必填")
+		return
+	}
+
+	// Create record first to get version_id for storage key.
+	v := model.Version{
+		AppID:          appID,
+		ChannelID:      channelID,
+		VersionName:    versionName,
+		VersionCode:    versionCode,
+		FileName:       header.Filename,
+		FileType:       model.FileType(header.Filename),
+		AccessMode:     accessMode,
+		Changelog:      r.FormValue("changelog"),
+		Enabled:        true,
+		StorageBackend: storageBackendName(s),
+	}
+	switch accessMode {
+	case model.AccessPassword:
+		hash, salt := password.Hash(r.FormValue("password"))
+		v.PasswordHash, v.Salt = hash, salt
+	case model.AccessExpiry:
+		expiresAt, _ := time.Parse(time.RFC3339, r.FormValue("expires_at"))
+		if !expiresAt.IsZero() {
+			v.ExpiresAt = &expiresAt
+		}
+	}
+	if err := s.DB.Create(&v).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "创建版本失败")
+		return
+	}
+
+	// Compute sha256 + size while writing to storage.
+	key := storage.Key(appID, v.ID, header.Filename)
+	hr := newHashReader(file)
+	if _, err := s.Storage.Save(r.Context(), key, hr); err != nil {
+		s.DB.Delete(&v)
+		web.SendError(w, web.CodeInternal, "存储写入失败")
+		return
+	}
+	s.DB.Model(&v).Updates(map[string]any{
+		"storage_key": key,
+		"file_size":   hr.n,
+		"sha256":      hex.EncodeToString(hr.h.Sum(nil)),
+	})
+	web.SendJson(w, v)
+}
+
+// UpdateVersion updates version info (changelog, access mode, enabled, etc).
+func (s *Server) UpdateVersion(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var v model.Version
+	if err := s.DB.First(&v, id).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "版本不存在")
+		return
+	}
+	var req struct {
+		Changelog  *string    `json:"changelog"`
+		AccessMode *string    `json:"access_mode"`
+		Password   *string    `json:"password"`
+		ExpiresAt  *time.Time `json:"expires_at"`
+		Enabled    *bool      `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		web.SendError(w, web.CodeBadRequest, "bad request")
+		return
+	}
+	if req.Changelog != nil {
+		v.Changelog = *req.Changelog
+	}
+	if req.AccessMode != nil {
+		v.AccessMode = *req.AccessMode
+	}
+	if req.Password != nil && *req.Password != "" {
+		h, salt := password.Hash(*req.Password)
+		v.PasswordHash, v.Salt = h, salt
+	}
+	if req.ExpiresAt != nil {
+		v.ExpiresAt = req.ExpiresAt
+	}
+	if req.Enabled != nil {
+		v.Enabled = *req.Enabled
+	}
+	if err := s.DB.Save(&v).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "保存失败")
+		return
+	}
+	web.SendJson(w, v)
+}
+
+// DeleteVersion deletes a version, optionally deleting the storage file.
+func (s *Server) DeleteVersion(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var v model.Version
+	if err := s.DB.First(&v, id).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "版本不存在")
+		return
+	}
+	if r.URL.Query().Get("delete_file") == "true" && v.StorageKey != "" {
+		s.Storage.Delete(r.Context(), v.StorageKey)
+	}
+	if err := s.DB.Delete(&model.Version{}, id).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "删除失败")
+		return
+	}
+	web.SendJson(w, map[string]any{"ok": true})
+}
+
+// VersionStats returns download/install stats for a version.
+func (s *Server) VersionStats(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var v model.Version
+	if err := s.DB.First(&v, id).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "版本不存在")
+		return
+	}
+	var recent []model.DownloadLog
+	s.DB.Where("version_id = ?", id).Order("id desc").Limit(20).Find(&recent)
+	web.SendJson(w, map[string]any{
+		"download_count": v.DownloadCount,
+		"install_count":  v.InstallCount,
+		"recent":         recent,
+	})
+}
+
+func storageBackendName(s *Server) string {
+	if s.Config.Storage.Backend == "" {
+		return "local"
+	}
+	return s.Config.Storage.Backend
 }
