@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"disapp/internal/config"
 	"disapp/internal/db"
@@ -22,6 +23,13 @@ func main() {
 	cfg, err := config.Load(path)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
+	}
+
+	// Ensure data directory exists for sqlite db.
+	if dir := filepath.Dir(cfg.Database.DSN); dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			log.Fatalf("create db dir: %v", err)
+		}
 	}
 
 	gdb, err := db.Open(cfg.Database.DSN)
