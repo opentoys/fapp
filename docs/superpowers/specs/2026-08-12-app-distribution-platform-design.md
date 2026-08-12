@@ -15,7 +15,7 @@
 
 | 层 | 选型 |
 |----|------|
-| 后端语言 | Go 1.24 |
+| 后端语言 | Go 1.25（libtnb/sqlite v1.1.2 要求 go>=1.25） |
 | Web 框架 | 标准库 `net/http`（自定义中间件封装，见 §10） |
 | ORM | GORM |
 | 数据库 | `github.com/libtnb/sqlite`（基于 modernc.org/sqlite，纯 Go 无 CGO） |

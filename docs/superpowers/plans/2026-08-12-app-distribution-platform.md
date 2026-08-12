@@ -6,7 +6,7 @@
 
 **Architecture:** Go 标准库 `net/http` + GORM + `github.com/libtnb/sqlite`（纯 Go 无 CGO）。存储抽象为 `Storage` 接口（LocalStorage / COSStorage），下载 COS 走预签名 URL。Vue3 前端编译后 `go:embed` 进单二进制。JSON 配置文件切换存储后端。
 
-**Tech Stack:** Go 1.24、net/http、GORM、libtnb/sqlite、golang-jwt/jwt/v5、cos-go-sdk-v5、Vue 3、Vite、TypeScript、vue-router、axios
+**Tech Stack:** Go 1.25（libtnb/sqlite v1.1.2 要求 go>=1.25，Go 自动下载工具链）、net/http、GORM、libtnb/sqlite、golang-jwt/jwt/v5、cos-go-sdk-v5、Vue 3、Vite、TypeScript、vue-router、axios
 
 ---
 
