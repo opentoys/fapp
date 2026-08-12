@@ -1,0 +1,8 @@
+.vscode/
+.claude/
+.agent/
+bin/
+data/
+config.json
+node_modules/
+backend/static/dist/
