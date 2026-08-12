@@ -15,6 +15,12 @@ github.com/jinzhu/inflection v1.0.0 h1:K317FqzuhWc8YvSVlFMCCUb36O/S9MCKRDI7QkRKD
 github.com/jinzhu/inflection v1.0.0/go.mod h1:h+uFLlag+Qp1Va5pdKtLDYj+kHp5pxUVkryuEj+Srlc=
 github.com/jinzhu/now v1.1.5 h1:/o9tlHleP7gOFmsnYNz3RGnqzefHA47wQpKrrdTIwXQ=
 github.com/jinzhu/now v1.1.5/go.mod h1:d3SSVoowX0Lcu0IBviAWJpolVfI5UJVZZ7cO71lE/z8=
+github.com/libtnb/sqlite v1.1.2 h1:3g8nez8MwdEhn+oqt3bfKWnYJxk0ZGTO0kVA1WT+hjQ=
+github.com/libtnb/sqlite v1.1.2/go.mod h1:2PGCWOR6HqqXuoIVMmwfJ655epvRO8sw0b9kHWuKNsQ=
+github.com/libtnb/sqlite v1.2.0 h1:XsA7jsXHH2qmFkTWoy5YCKJybzHzWQ0flqDFP5Y9Yto=
+github.com/libtnb/sqlite v1.2.0/go.mod h1:O6vURH5fa5IgSmXd/qLAL2zSnYFUd7xSIumsmX3BrSI=
+github.com/libtnb/sqlite v1.2.1 h1:lrhN3yG49pj1gmtMMP6Es0lhKIkzDeqBul2EWOLyjpY=
+github.com/libtnb/sqlite v1.2.1/go.mod h1:pGq13BirCjkM6ihkWWxs0PGFhBiwUyA0PqdSmgDWfmM=
 github.com/libtnb/sqlite v1.2.2 h1:Ku5hAPP5B3A4kQcDn4Z3qyNMafKzuAbnFZX4oD9wR4I=
 github.com/libtnb/sqlite v1.2.2/go.mod h1:JkAuxM7HHo0tc7dQENjIGpp/yIfrLX5nKr5ME9wuvmI=
 github.com/mattn/go-isatty v0.0.24 h1:tGZZoVgT/KiqK1c8ocVLeDS8BSWMRd47J3Lbz7vsReI=
