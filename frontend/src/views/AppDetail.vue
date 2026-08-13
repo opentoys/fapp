@@ -3,8 +3,6 @@ import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api/client'
 import type { AppDetail } from '../api/types'
-import StatusDot from '../components/StatusDot.vue'
-import MonoText from '../components/MonoText.vue'
 
 const route = useRoute()
 const data = ref<AppDetail | null>(null)
@@ -42,6 +40,18 @@ function fmtDate(s: string): string {
   return new Date(s).toISOString().replace('T', ' ').slice(0, 19)
 }
 
+function accessColor(mode: string, enabled: boolean): string {
+  if (!enabled) return 'error'
+  if (mode === 'public') return 'success'
+  if (mode === 'password' || mode === 'expiry') return 'warning'
+  return 'grey'
+}
+
+function accessLabel(mode: string, enabled: boolean): string {
+  if (!enabled) return 'taken down'
+  return mode
+}
+
 async function download(v: { id: number; access_mode: string }) {
   passwordError.value = ''
   if (v.access_mode === 'password') {
@@ -70,196 +80,112 @@ async function doDownload(versionId: number, password: string | undefined) {
 </script>
 
 <template>
-  <div class="app-detail">
-    <v-alert v-if="error" type="error" variant="outlined" class="mb-4">
+  <v-container class="pa-6" max-width="1200">
+    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable>
       {{ error }}
     </v-alert>
 
-    <div v-if="data" class="layout">
-      <aside class="left">
-        <div class="eyebrow">▌ APP</div>
-        <h1 class="title">{{ data.app.name }}</h1>
-        <p v-if="data.app.description" class="desc">{{ data.app.description }}</p>
+    <template v-if="data">
+      <v-row>
+        <v-col cols="12" md="4">
+          <h1 class="text-h4 mb-2">{{ data.app.name }}</h1>
+          <p v-if="data.app.description" class="text-body-1 mb-4">{{ data.app.description }}</p>
 
-        <div v-if="data.channels.length" class="channels">
-          <div class="eyebrow">▌ CHANNELS</div>
-          <div class="channel-list">
-            <span v-for="c in data.channels" :key="c.id" class="channel">
-              <MonoText>{{ c.name }}</MonoText>
-            </span>
+          <div v-if="data.channels.length" class="mb-4">
+            <div class="text-overline mb-2">Channels</div>
+            <v-chip
+              v-for="c in data.channels"
+              :key="c.id"
+              class="mr-2 mb-2"
+              variant="outlined"
+            >
+              {{ c.name }}
+            </v-chip>
           </div>
-        </div>
-      </aside>
+        </v-col>
 
-      <section class="right">
-        <div class="eyebrow">▌ VERSIONS</div>
-        <div v-if="data.versions.length" class="version-list">
-          <div
-            v-for="v in data.versions"
-            :key="v.id"
-            class="version-row"
-            :class="{ disabled: !v.enabled }"
-          >
-            <div class="ver-head">
-              <MonoText class="ver-name">{{ v.version_name }}</MonoText>
-              <MonoText muted> · code {{ v.version_code }} · {{ fmtSize(v.file_size) }}</MonoText>
-              <span v-if="!v.enabled" class="taken-down">TAKEN DOWN</span>
-            </div>
-            <div class="ver-meta">
-              <MonoText muted class="sha">{{ v.sha256.slice(0, 16) }}…</MonoText>
-              <MonoText muted> · {{ fmtDate(v.created_at) }}</MonoText>
-            </div>
-            <div class="ver-status">
-              <StatusDot :mode="v.enabled ? v.access_mode : 'taken_down'" />
-            </div>
-            <p v-if="v.changelog" class="changelog">{{ v.changelog }}</p>
-            <div v-if="v.enabled" class="actions">
-              <v-btn
-                variant="outlined"
-                size="small"
-                :disabled="v.access_mode === 'expiry' && !!v.expires_at && new Date(v.expires_at) < new Date()"
-                @click="download(v)"
+        <v-col cols="12" md="8">
+          <div class="text-overline mb-3">Versions</div>
+
+          <v-card v-if="data.versions.length" variant="outlined">
+            <v-list lines="three">
+              <v-list-item
+                v-for="v in data.versions"
+                :key="v.id"
+                :class="{ 'text-disabled': !v.enabled }"
               >
-                Download
-              </v-btn>
-            </div>
-          </div>
-        </div>
-        <div v-else class="empty">
-          <p>no versions yet</p>
-        </div>
-      </section>
-    </div>
+                <template #prepend>
+                  <v-chip
+                    :color="accessColor(v.access_mode, v.enabled)"
+                    size="small"
+                    variant="tonal"
+                    class="mr-3"
+                  >
+                    {{ accessLabel(v.access_mode, v.enabled) }}
+                  </v-chip>
+                </template>
+
+                <v-list-item-title>
+                  <span class="text-h6">{{ v.version_name }}</span>
+                  <span class="text-body-2 text-medium-emphasis ml-2">
+                    code {{ v.version_code }} · {{ fmtSize(v.file_size) }}
+                  </span>
+                </v-list-item-title>
+
+                <v-list-item-subtitle>
+                  <code class="text-caption">{{ v.sha256.slice(0, 16) }}…</code>
+                  <span class="text-caption text-medium-emphasis ml-2">{{ fmtDate(v.created_at) }}</span>
+                </v-list-item-subtitle>
+
+                <template v-if="v.changelog" #append>
+                  <v-list-item-subtitle class="text-body-2 mt-1" style="white-space: pre-wrap;">
+                    {{ v.changelog }}
+                  </v-list-item-subtitle>
+                </template>
+
+                <template #append>
+                  <v-btn
+                    v-if="v.enabled"
+                    color="primary"
+                    variant="flat"
+                    size="small"
+                    :disabled="v.access_mode === 'expiry' && !!v.expires_at && new Date(v.expires_at) < new Date()"
+                    @click="download(v)"
+                  >
+                    Download
+                  </v-btn>
+                </template>
+              </v-list-item>
+            </v-list>
+          </v-card>
+
+          <v-card v-else variant="tonal" class="text-center pa-8">
+            <v-card-text>No versions yet.</v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
+    </template>
 
     <v-dialog v-model="dialogOpen" max-width="400">
-      <v-card class="pa-5">
-        <div class="eyebrow">▌ PASSWORD REQUIRED</div>
-        <p class="dialog-body">This version is password protected.</p>
-        <v-text-field
-          v-if="passwordPrompt"
-          v-model="passwordPrompt.password"
-          label="Password"
-          type="password"
-          autofocus
-          @keyup.enter="submitPassword"
-        />
-        <div class="dialog-actions">
-          <v-btn variant="text" @click="closePasswordPrompt">Cancel</v-btn>
-          <v-btn color="primary" @click="submitPassword">Continue</v-btn>
-        </div>
+      <v-card>
+        <v-card-title>Password required</v-card-title>
+        <v-card-text>
+          <p class="mb-3">This version is password protected.</p>
+          <v-text-field
+            v-if="passwordPrompt"
+            v-model="passwordPrompt.password"
+            label="Password"
+            type="password"
+            autofocus
+            @keyup.enter="submitPassword"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="closePasswordPrompt">Cancel</v-btn>
+          <v-btn color="primary" variant="flat" @click="submitPassword">Continue</v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
-  </div>
+  </v-container>
 </template>
-
-<style scoped>
-.app-detail {
-  max-width: var(--max-w);
-  margin: 0 auto;
-  padding: var(--sp-8) var(--sp-6);
-}
-.layout {
-  display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: var(--sp-8);
-}
-.eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-mute);
-  margin-bottom: var(--sp-2);
-}
-.title {
-  font-size: 2.25rem;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  margin: 0 0 var(--sp-3) 0;
-}
-.desc {
-  color: var(--text-mute);
-  margin: 0 0 var(--sp-6) 0;
-}
-.channels {
-  margin-top: var(--sp-4);
-}
-.channel-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-}
-.channel {
-  display: inline-block;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  font-size: 0.8rem;
-}
-.right .eyebrow {
-  margin-bottom: var(--sp-3);
-}
-.version-list {
-  border-top: 1px solid var(--border);
-}
-.version-row {
-  padding: var(--sp-4) 0;
-  border-bottom: 1px solid var(--border);
-}
-.version-row.disabled { opacity: 0.5; }
-.ver-head {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-1);
-  flex-wrap: wrap;
-}
-.ver-name {
-  font-size: 1.1rem;
-  color: var(--text);
-}
-.taken-down {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  color: var(--danger);
-  border: 1px solid var(--danger);
-  padding: 2px 6px;
-}
-.ver-meta {
-  margin-bottom: var(--sp-2);
-}
-.sha {
-  font-size: 0.75rem;
-}
-.ver-status {
-  margin-bottom: var(--sp-2);
-}
-.changelog {
-  font-size: 0.85rem;
-  color: var(--text-mute);
-  margin: var(--sp-2) 0;
-  white-space: pre-wrap;
-}
-.actions {
-  margin-top: var(--sp-2);
-}
-.empty {
-  padding: var(--sp-6) 0;
-  color: var(--text-mute);
-  text-align: center;
-}
-.dialog-body {
-  margin: var(--sp-3) 0;
-  color: var(--text-mute);
-}
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--sp-2);
-  margin-top: var(--sp-3);
-}
-@media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; }
-}
-</style>

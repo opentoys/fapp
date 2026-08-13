@@ -2,7 +2,6 @@
 import { onMounted, ref } from 'vue'
 import { api } from '../../api/client'
 import type { AppItem } from '../../api/types'
-import MonoText from '../../components/MonoText.vue'
 
 const apps = ref<AppItem[]>([])
 const name = ref('')
@@ -67,17 +66,14 @@ function fmtDate(s: string): string {
 </script>
 
 <template>
-  <div class="admin">
-    <div class="page-header">
-      <div class="eyebrow">▌ ADMIN</div>
-      <h1 class="title">Applications</h1>
-    </div>
+  <v-container class="pa-6" max-width="1200">
+    <h1 class="text-h4 mb-6">Applications</h1>
 
-    <v-alert v-if="error" type="error" variant="outlined" class="mb-4">
+    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable>
       {{ error }}
     </v-alert>
 
-    <div class="create-row">
+    <div class="d-flex align-start mb-6" style="gap: 8px; max-width: 600px;">
       <v-text-field
         v-model="name"
         label="New application name"
@@ -85,7 +81,7 @@ function fmtDate(s: string): string {
         hide-details
         @keyup.enter="create"
       />
-      <v-btn color="primary" :disabled="!name" @click="create">Create</v-btn>
+      <v-btn color="primary" variant="flat" :disabled="!name" @click="create">Create</v-btn>
     </div>
 
     <v-data-table
@@ -95,17 +91,15 @@ function fmtDate(s: string): string {
         { title: 'Created', key: 'created_at' },
         { title: '', key: 'actions', sortable: false, align: 'end' },
       ]"
-      class="mt-6"
-      hide-default-footer
       :items-per-page="-1"
     >
       <template #item.name="{ item }">
-        <router-link :to="`/admin/app/${item.id}`" class="name-link">
+        <router-link :to="`/admin/app/${item.id}`" class="text-primary font-weight-medium">
           {{ item.name }}
         </router-link>
       </template>
       <template #item.created_at="{ item }">
-        <MonoText muted>{{ fmtDate(item.created_at) }}</MonoText>
+        <code class="text-caption">{{ fmtDate(item.created_at) }}</code>
       </template>
       <template #item.actions="{ item }">
         <v-btn
@@ -120,64 +114,21 @@ function fmtDate(s: string): string {
     </v-data-table>
 
     <v-dialog v-model="dialogOpen" max-width="400">
-      <v-card class="pa-5">
-        <div class="eyebrow">▌ CONFIRM DELETE</div>
-        <p class="dialog-body">
+      <v-card>
+        <v-card-title>Confirm delete</v-card-title>
+        <v-card-text>
           Delete <b>{{ deleteTarget?.name }}</b>? Associated versions and channels will be removed.
-        </p>
-        <div class="dialog-actions">
-          <v-btn variant="text" @click="cancelDelete">Cancel</v-btn>
-          <v-btn color="error" @click="confirmDelete">Delete</v-btn>
-        </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="cancelDelete">Cancel</v-btn>
+          <v-btn color="error" variant="flat" @click="confirmDelete">Delete</v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
 
     <v-snackbar v-model="snackbarOpen" :timeout="2000">
       {{ snackbar }}
     </v-snackbar>
-  </div>
+  </v-container>
 </template>
-
-<style scoped>
-.admin {
-  max-width: var(--max-w);
-  margin: 0 auto;
-  padding: var(--sp-8) var(--sp-6);
-}
-.page-header {
-  margin-bottom: var(--sp-6);
-}
-.eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-mute);
-  margin-bottom: var(--sp-2);
-}
-.title {
-  font-size: 2.25rem;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  margin: 0;
-}
-.create-row {
-  display: flex;
-  gap: var(--sp-2);
-  align-items: start;
-  max-width: 600px;
-}
-.name-link {
-  color: var(--accent);
-  font-weight: 500;
-}
-.dialog-body {
-  margin: var(--sp-3) 0;
-  color: var(--text-mute);
-}
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--sp-2);
-}
-</style>

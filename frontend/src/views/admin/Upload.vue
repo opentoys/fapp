@@ -87,86 +87,91 @@ async function submit() {
 </script>
 
 <template>
-  <div class="upload">
-    <div class="page-header">
-      <div class="eyebrow">▌ UPLOAD</div>
-      <h1 class="title">New Version</h1>
-    </div>
+  <v-container class="pa-6" max-width="720">
+    <h1 class="text-h4 mb-6">New Version</h1>
 
-    <v-alert v-if="error" type="error" variant="outlined" class="mb-4">
+    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable>
       {{ error }}
     </v-alert>
 
-    <div class="form">
-      <section class="form-section">
-        <div class="eyebrow">▌ FILE</div>
-        <v-file-input
-          :model-value="file"
-          label="Choose installation package"
-          accept=".apk,.aab,.ipa,.exe,.dmg"
-          prepend-icon=""
-          show-size
-          density="comfortable"
-          @update:model-value="onFileChange"
-        />
-      </section>
-
-      <section class="form-section">
-        <div class="eyebrow">▌ METADATA</div>
-        <v-select
-          v-model="appId"
-          :items="appItems"
-          label="Application"
-        />
-        <v-select
-          v-model="channelId"
-          :items="channelItems"
-          label="Channel"
-          :disabled="!appId"
-          clearable
-        />
-        <div class="row-2">
-          <v-text-field v-model="versionName" label="Version name" placeholder="1.0.0" />
-          <v-text-field
-            v-model.number="versionCode"
-            label="Version code"
-            type="number"
-            placeholder="1"
+    <v-form @submit.prevent="submit">
+      <v-card variant="outlined" class="mb-4">
+        <v-card-text>
+          <v-file-input
+            :model-value="file"
+            label="Choose installation package"
+            accept=".apk,.aab,.ipa,.exe,.dmg"
+            prepend-icon=""
+            show-size
+            @update:model-value="onFileChange"
           />
-        </div>
-        <v-textarea
-          v-model="changelog"
-          label="Changelog"
-          rows="3"
-          auto-grow
-        />
-      </section>
+        </v-card-text>
+      </v-card>
 
-      <section class="form-section">
-        <div class="eyebrow">▌ ACCESS</div>
-        <v-radio-group v-model="accessMode" inline>
-          <v-radio label="Public" value="public" />
-          <v-radio label="Password" value="password" />
-          <v-radio label="Expires" value="expiry" />
-        </v-radio-group>
-        <v-text-field
-          v-if="accessMode === 'password'"
-          v-model="password"
-          label="Download password"
-          type="password"
-        />
-        <v-text-field
-          v-if="accessMode === 'expiry'"
-          v-model="expiresAt"
-          label="Expires at"
-          type="datetime-local"
-        />
-      </section>
+      <v-card variant="outlined" class="mb-4">
+        <v-card-text>
+          <v-select
+            v-model="appId"
+            :items="appItems"
+            label="Application"
+          />
+          <v-select
+            v-model="channelId"
+            :items="channelItems"
+            label="Channel"
+            :disabled="!appId"
+            clearable
+          />
+          <v-row>
+            <v-col cols="12" sm="6">
+              <v-text-field v-model="versionName" label="Version name" placeholder="1.0.0" />
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model.number="versionCode"
+                label="Version code"
+                type="number"
+                placeholder="1"
+              />
+            </v-col>
+          </v-row>
+          <v-textarea
+            v-model="changelog"
+            label="Changelog"
+            rows="3"
+            auto-grow
+          />
+        </v-card-text>
+      </v-card>
 
-      <div class="actions">
-        <v-btn variant="text" @click="router.back()">Cancel</v-btn>
+      <v-card variant="outlined" class="mb-4">
+        <v-card-text>
+          <div class="text-overline mb-2">Access</div>
+          <v-radio-group v-model="accessMode">
+            <v-radio label="Public" value="public" />
+            <v-radio label="Password" value="password" />
+            <v-radio label="Expires" value="expiry" />
+          </v-radio-group>
+          <v-text-field
+            v-if="accessMode === 'password'"
+            v-model="password"
+            label="Download password"
+            type="password"
+          />
+          <v-text-field
+            v-if="accessMode === 'expiry'"
+            v-model="expiresAt"
+            label="Expires at"
+            type="datetime-local"
+          />
+        </v-card-text>
+      </v-card>
+
+      <div class="d-flex justify-end" style="gap: 8px;">
+        <v-btn @click="router.back()">Cancel</v-btn>
         <v-btn
           color="primary"
+          variant="flat"
           :loading="loading"
           :disabled="!file || !appId || !versionName"
           @click="submit"
@@ -174,59 +179,6 @@ async function submit() {
           Upload
         </v-btn>
       </div>
-    </div>
-  </div>
+    </v-form>
+  </v-container>
 </template>
-
-<style scoped>
-.upload {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: var(--sp-8) var(--sp-6);
-}
-.page-header {
-  margin-bottom: var(--sp-6);
-}
-.eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-mute);
-  margin-bottom: var(--sp-2);
-}
-.title {
-  font-size: 2.25rem;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  margin: 0 0 var(--sp-6) 0;
-}
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-6);
-}
-.form-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  padding-bottom: var(--sp-6);
-  border-bottom: 1px solid var(--border);
-}
-.form-section:last-of-type {
-  border-bottom: none;
-}
-.row-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--sp-3);
-}
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--sp-2);
-}
-@media (max-width: 600px) {
-  .row-2 { grid-template-columns: 1fr; }
-}
-</style>

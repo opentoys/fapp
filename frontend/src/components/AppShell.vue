@@ -42,8 +42,8 @@ function logout() {
 
 <template>
   <v-app>
-    <v-app-bar>
-      <v-app-bar-title class="wordmark">▌ DISTRIBUTION</v-app-bar-title>
+    <v-app-bar color="primary" density="compact">
+      <v-app-bar-title>Distribution</v-app-bar-title>
 
       <v-tabs v-if="!isAuthed" :model-value="route.path" align-tabs="center">
         <v-tab
@@ -62,7 +62,6 @@ function logout() {
         :icon="themeIcon"
         :title="themeLabel"
         variant="text"
-        density="comfortable"
         @click="cycle"
       />
 
@@ -81,13 +80,3 @@ function logout() {
     </v-main>
   </v-app>
 </template>
-
-<style scoped>
-.wordmark {
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  letter-spacing: 0.2em;
-  color: var(--accent) !important;
-  text-transform: uppercase;
-}
-</style>
