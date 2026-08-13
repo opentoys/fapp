@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from '../composables/useTheme'
-import { mdiWeatherSunny, mdiWeatherNight, mdiThemeLightDark, mdiLogout } from '@mdi/js'
+import { mdiWeatherSunny, mdiWeatherNight, mdiThemeLightDark, mdiLogout, mdiLogin } from '@mdi/js'
 
 const route = useRoute()
 const router = useRouter()
@@ -11,16 +11,11 @@ const { choice, cycle } = useTheme()
 const isAuthed = computed(() => !!localStorage.getItem('token'))
 
 const tabs = computed(() => {
-  if (isAuthed.value) {
-    return [
-      { label: 'Apps', to: '/' },
-      { label: 'Admin', to: '/admin' },
-      { label: 'Upload', to: '/admin/upload' },
-    ]
-  }
+  if (!isAuthed.value) return []
   return [
     { label: 'Apps', to: '/' },
-    { label: 'Login', to: '/login' },
+    { label: 'Admin', to: '/admin' },
+    { label: 'Upload', to: '/admin/upload' },
   ]
 })
 
@@ -30,9 +25,7 @@ const themeIcon = computed(() => {
   return mdiWeatherNight
 })
 
-const themeLabel = computed(() => {
-  return `Theme: ${choice.value}`
-})
+const themeLabel = computed(() => `Theme: ${choice.value}`)
 
 function logout() {
   localStorage.removeItem('token')
@@ -45,7 +38,7 @@ function logout() {
     <v-app-bar color="primary" density="compact">
       <v-app-bar-title>Distribution</v-app-bar-title>
 
-      <v-tabs v-if="!isAuthed" :model-value="route.path" align-tabs="center">
+      <v-tabs v-if="isAuthed" :model-value="route.path" align-tabs="center">
         <v-tab
           v-for="t in tabs"
           :key="t.to"
@@ -64,6 +57,15 @@ function logout() {
         variant="text"
         @click="cycle"
       />
+
+      <v-btn
+        v-if="!isAuthed && route.path !== '/login'"
+        :prepend-icon="mdiLogin"
+        to="/login"
+        variant="text"
+      >
+        Sign in
+      </v-btn>
 
       <v-btn
         v-if="isAuthed"
