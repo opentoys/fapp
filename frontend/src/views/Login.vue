@@ -2,9 +2,11 @@
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
+import { useAuth } from '../composables/useAuth'
 
 const route = useRoute()
 const router = useRouter()
+const { setToken } = useAuth()
 
 const username = ref('')
 const password = ref('')
@@ -16,7 +18,7 @@ async function submit() {
   loading.value = true
   try {
     const res = await api.login(username.value, password.value)
-    localStorage.setItem('token', res.data.data.token)
+    setToken(res.data.data.token)
     const redirect = (route.query.redirect as string) || '/admin'
     router.push(redirect)
   } catch (e) {

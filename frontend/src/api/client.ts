@@ -1,5 +1,6 @@
 import axios from 'axios'
-import type { ApiResp, AppDetail, AppItem, Channel, Version } from './types'
+import { useAuth } from '../composables/useAuth'
+import type { ApiResp, AppDetail, AppItem, Channel, User, Version } from './types'
 
 const client = axios.create({ baseURL: '/api/v1', timeout: 60000 })
 
@@ -13,7 +14,7 @@ client.interceptors.response.use((res) => {
   const body = res.data as ApiResp<unknown>
   if (body.code !== 0) {
     if (body.code === 401) {
-      localStorage.removeItem('token')
+      useAuth().clearToken()
       if (!location.pathname.startsWith('/login')) location.href = '/login'
     }
     return Promise.reject(new Error(body.msg))
@@ -40,7 +41,7 @@ export const api = {
 
   adminApps: () => client.get<ApiResp<AppItem[]>>('/admin/apps').then((r) => r.data.data),
   createApp: (data: { name: string; description?: string }) =>
-    client.post<ApiResp<AppItem>>('/admin/apps', data),
+    client.post<ApiResp<AppItem>>('/admin/apps', data).then((r) => r.data.data),
   updateApp: (id: number, data: Partial<AppItem>) => client.put<ApiResp<AppItem>>(`/admin/apps/${id}`, data),
   deleteApp: (id: number) => client.delete<ApiResp<unknown>>(`/admin/apps/${id}`),
   channels: (appId?: number) =>
@@ -56,4 +57,11 @@ export const api = {
     client
       .get<ApiResp<{ download_count: number; install_count: number; recent: unknown[] }>>(`/admin/versions/${id}/stats`)
       .then((r) => r.data.data),
+
+  adminUsers: () => client.get<ApiResp<User[]>>('/admin/users').then((r) => r.data.data),
+  createUser: (data: { username: string; password: string }) =>
+    client.post<ApiResp<User>>('/admin/users', data),
+  updateUser: (id: number, data: { password?: string }) =>
+    client.put<ApiResp<User>>(`/admin/users/${id}`, data),
+  deleteUser: (id: number) => client.delete<ApiResp<unknown>>(`/admin/users/${id}`),
 }
