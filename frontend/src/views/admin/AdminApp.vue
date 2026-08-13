@@ -3,8 +3,6 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../../api/client'
 import type { AppDetail, Channel, Version } from '../../api/types'
-import StatusDot from '../../components/StatusDot.vue'
-import MonoText from '../../components/MonoText.vue'
 
 const route = useRoute()
 const data = ref<AppDetail | null>(null)
@@ -100,16 +98,25 @@ function fmtSize(n: number): string {
 function fmtDate(s: string): string {
   return new Date(s).toISOString().replace('T', ' ').slice(0, 19)
 }
+
+function accessColor(mode: string, enabled: boolean): string {
+  if (!enabled) return 'error'
+  if (mode === 'public') return 'success'
+  if (mode === 'password' || mode === 'expiry') return 'warning'
+  return 'grey'
+}
+
+function accessLabel(mode: string, enabled: boolean): string {
+  if (!enabled) return 'taken down'
+  return mode
+}
 </script>
 
 <template>
-  <div class="admin-app">
-    <div v-if="data" class="page-header">
-      <div class="eyebrow">▌ ADMIN</div>
-      <h1 class="title">{{ data.app.name }}</h1>
-    </div>
+  <v-container class="pa-6" max-width="1200">
+    <h1 v-if="data" class="text-h4 mb-2">{{ data.app.name }}</h1>
 
-    <v-alert v-if="error" type="error" variant="outlined" class="mb-4">
+    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable>
       {{ error }}
     </v-alert>
 
@@ -121,223 +128,149 @@ function fmtDate(s: string): string {
 
     <v-divider />
 
-    <!-- Versions tab -->
-    <div v-if="tab === 'versions'" class="tab-body">
-      <v-data-table
-        :items="versions"
-        :headers="[
-          { title: 'Version', key: 'version_name' },
-          { title: 'Size', key: 'file_size' },
-          { title: 'Access', key: 'access_mode' },
-          { title: 'Downloads', key: 'download_count' },
-          { title: 'Status', key: 'enabled' },
-          { title: '', key: 'actions', sortable: false, align: 'end' },
-        ]"
-        hide-default-footer
-        :items-per-page="-1"
-      >
-        <template #item.version_name="{ item }">
-          <MonoText>{{ item.version_name }}</MonoText>
-          <MonoText muted> · code {{ item.version_code }}</MonoText>
-          <v-btn variant="text" size="small" class="ms-2" @click="loadStats(item)">Stats</v-btn>
-        </template>
-        <template #item.file_size="{ item }">
-          <MonoText muted>{{ fmtSize(item.file_size) }}</MonoText>
-        </template>
-        <template #item.access_mode="{ item }">
-          <StatusDot :mode="item.enabled ? item.access_mode : 'taken_down'" />
-        </template>
-        <template #item.download_count="{ item }">
-          <MonoText>{{ item.download_count }}</MonoText>
-        </template>
-        <template #item.enabled="{ item }">
-          <v-btn variant="text" size="small" @click="toggleEnabled(item)">
-            {{ item.enabled ? 'Take down' : 'Re-enable' }}
-          </v-btn>
-        </template>
-        <template #item.actions="{ item }">
-          <v-btn
-            variant="text"
-            size="small"
-            color="error"
-            @click="askDelete(item)"
-          >
-            Delete
-          </v-btn>
-        </template>
-      </v-data-table>
-    </div>
-
-    <!-- Channels tab -->
-    <div v-else-if="tab === 'channels'" class="tab-body">
-      <div class="create-row">
-        <v-text-field
-          v-model="newChannelName"
-          label="New channel name"
-          density="comfortable"
-          hide-details
-          @keyup.enter="createChannel"
-        />
-        <v-btn color="primary" :disabled="!newChannelName" @click="createChannel">
-          Create
-        </v-btn>
-      </div>
-      <v-data-table
-        :items="channels"
-        :headers="[
-          { title: 'Name', key: 'name' },
-          { title: 'ID', key: 'id' },
-        ]"
-        class="mt-6"
-        hide-default-footer
-        :items-per-page="-1"
-      >
-        <template #item.name="{ item }">
-          <MonoText>{{ item.name }}</MonoText>
-        </template>
-        <template #item.id="{ item }">
-          <MonoText muted>{{ item.id }}</MonoText>
-        </template>
-      </v-data-table>
-    </div>
-
-    <!-- Stats tab -->
-    <div v-else-if="tab === 'stats'" class="tab-body">
-      <div v-if="!stats" class="empty">
-        <p>Click "Stats" next to a version in the Versions tab to view stats.</p>
-      </div>
-      <div v-else>
-        <div class="stat-strip">
-          <div class="stat-cell">
-            <div class="stat-label">Downloads</div>
-            <div class="stat-value">{{ stats.download_count }}</div>
-          </div>
-          <div class="stat-cell">
-            <div class="stat-label">Installs</div>
-            <div class="stat-value">{{ stats.install_count }}</div>
-          </div>
-        </div>
-        <div class="eyebrow mt-6">▌ RECENT</div>
+    <v-window v-model="tab" class="mt-6">
+      <v-window-item value="versions">
         <v-data-table
-          :items="stats.recent"
+          :items="versions"
           :headers="[
-            { title: 'Time', key: 'created_at' },
-            { title: 'IP', key: 'ip' },
-            { title: 'User Agent', key: 'user_agent' },
+            { title: 'Version', key: 'version_name' },
+            { title: 'Size', key: 'file_size' },
+            { title: 'Access', key: 'access_mode' },
+            { title: 'Downloads', key: 'download_count' },
+            { title: 'Status', key: 'enabled' },
+            { title: '', key: 'actions', sortable: false, align: 'end' },
           ]"
-          class="mt-2"
-          hide-default-footer
           :items-per-page="-1"
         >
-          <template #item.created_at="{ item }">
-            <MonoText muted>{{ fmtDate(item.created_at) }}</MonoText>
+          <template #item.version_name="{ item }">
+            <code>{{ item.version_name }}</code>
+            <span class="text-caption text-medium-emphasis ml-2">code {{ item.version_code }}</span>
+            <v-btn variant="text" size="small" class="ms-2" @click="loadStats(item)">Stats</v-btn>
           </template>
-          <template #item.ip="{ item }">
-            <MonoText>{{ item.ip }}</MonoText>
+          <template #item.file_size="{ item }">
+            <code class="text-caption">{{ fmtSize(item.file_size) }}</code>
           </template>
-          <template #item.user_agent="{ item }">
-            <MonoText muted class="ua-cell">{{ item.user_agent }}</MonoText>
+          <template #item.access_mode="{ item }">
+            <v-chip
+              :color="accessColor(item.access_mode, item.enabled)"
+              size="small"
+              variant="tonal"
+            >
+              {{ accessLabel(item.access_mode, item.enabled) }}
+            </v-chip>
+          </template>
+          <template #item.download_count="{ item }">
+            {{ item.download_count }}
+          </template>
+          <template #item.enabled="{ item }">
+            <v-btn variant="text" size="small" @click="toggleEnabled(item)">
+              {{ item.enabled ? 'Take down' : 'Re-enable' }}
+            </v-btn>
+          </template>
+          <template #item.actions="{ item }">
+            <v-btn
+              variant="text"
+              size="small"
+              color="error"
+              @click="askDelete(item)"
+            >
+              Delete
+            </v-btn>
           </template>
         </v-data-table>
-        <v-btn class="mt-4" variant="text" @click="stats = null">Clear</v-btn>
-      </div>
-    </div>
+      </v-window-item>
+
+      <v-window-item value="channels">
+        <div class="d-flex align-start mb-6" style="gap: 8px; max-width: 500px;">
+          <v-text-field
+            v-model="newChannelName"
+            label="New channel name"
+            density="comfortable"
+            hide-details
+            @keyup.enter="createChannel"
+          />
+          <v-btn color="primary" variant="flat" :disabled="!newChannelName" @click="createChannel">
+            Create
+          </v-btn>
+        </div>
+        <v-data-table
+          :items="channels"
+          :headers="[
+            { title: 'Name', key: 'name' },
+            { title: 'ID', key: 'id' },
+          ]"
+          :items-per-page="-1"
+        >
+          <template #item.id="{ item }">
+            <code class="text-caption">{{ item.id }}</code>
+          </template>
+        </v-data-table>
+      </v-window-item>
+
+      <v-window-item value="stats">
+        <v-card v-if="!stats" variant="tonal" class="text-center pa-8">
+          <v-card-text>Click "Stats" next to a version in the Versions tab to view stats.</v-card-text>
+        </v-card>
+        <template v-else>
+          <v-row class="mb-4">
+            <v-col cols="6" md="3">
+              <v-card variant="tonal" color="primary">
+                <v-card-text>
+                  <div class="text-overline">Downloads</div>
+                  <div class="text-h4">{{ stats.download_count }}</div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+            <v-col cols="6" md="3">
+              <v-card variant="tonal" color="primary">
+                <v-card-text>
+                  <div class="text-overline">Installs</div>
+                  <div class="text-h4">{{ stats.install_count }}</div>
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
+          <v-data-table
+            :items="stats.recent"
+            :headers="[
+              { title: 'Time', key: 'created_at' },
+              { title: 'IP', key: 'ip' },
+              { title: 'User Agent', key: 'user_agent' },
+            ]"
+            :items-per-page="-1"
+          >
+            <template #item.created_at="{ item }">
+              <code class="text-caption">{{ fmtDate(item.created_at) }}</code>
+            </template>
+            <template #item.ip="{ item }">
+              <code class="text-caption">{{ item.ip }}</code>
+            </template>
+            <template #item.user_agent="{ item }">
+              <code class="text-caption" style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block;">{{ item.user_agent }}</code>
+            </template>
+          </v-data-table>
+          <v-btn class="mt-4" variant="text" @click="stats = null">Clear</v-btn>
+        </template>
+      </v-window-item>
+    </v-window>
 
     <v-dialog v-model="dialogOpen" max-width="400">
-      <v-card class="pa-5">
-        <div class="eyebrow">▌ CONFIRM DELETE</div>
-        <p class="dialog-body">
-          Delete version <MonoText>{{ deleteTarget?.version_name }}</MonoText>
+      <v-card>
+        <v-card-title>Confirm delete</v-card-title>
+        <v-card-text>
+          Delete version <code>{{ deleteTarget?.version_name }}</code>
           and its storage file?
-        </p>
-        <div class="dialog-actions">
-          <v-btn variant="text" @click="cancelDelete">Cancel</v-btn>
-          <v-btn color="error" @click="deleteVersion">Delete</v-btn>
-        </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="cancelDelete">Cancel</v-btn>
+          <v-btn color="error" variant="flat" @click="deleteVersion">Delete</v-btn>
+        </v-card-actions>
       </v-card>
     </v-dialog>
 
     <v-snackbar v-model="snackbarOpen" :timeout="2000">
       {{ snackbar }}
     </v-snackbar>
-  </div>
+  </v-container>
 </template>
-
-<style scoped>
-.admin-app {
-  max-width: var(--max-w);
-  margin: 0 auto;
-  padding: var(--sp-8) var(--sp-6);
-}
-.page-header {
-  margin-bottom: var(--sp-4);
-}
-.eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: var(--text-mute);
-  margin-bottom: var(--sp-2);
-}
-.title {
-  font-size: 2.25rem;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  margin: 0;
-}
-.tab-body {
-  padding: var(--sp-6) 0;
-}
-.create-row {
-  display: flex;
-  gap: var(--sp-2);
-  align-items: start;
-  max-width: 500px;
-}
-.stat-strip {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--sp-2);
-  max-width: 400px;
-}
-.stat-cell {
-  border: 1px solid var(--border);
-  background: var(--surface);
-  padding: var(--sp-3) var(--sp-4);
-}
-.stat-label {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  color: var(--text-mute);
-  margin-bottom: var(--sp-1);
-}
-.stat-value {
-  font-size: 1.75rem;
-  font-weight: 500;
-  color: var(--accent);
-}
-.ua-cell {
-  max-width: 400px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: inline-block;
-}
-.empty {
-  padding: var(--sp-8) 0;
-  color: var(--text-mute);
-  text-align: center;
-}
-.dialog-body {
-  margin: var(--sp-3) 0;
-  color: var(--text-mute);
-}
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--sp-2);
-}
-</style>

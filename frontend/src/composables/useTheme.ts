@@ -1,4 +1,5 @@
 import { ref, watch, onMounted } from 'vue'
+import { useTheme as useVuetifyTheme } from 'vuetify'
 
 export type ThemeChoice = 'system' | 'light' | 'dark'
 
@@ -6,7 +7,6 @@ const STORAGE_KEY = 'disapp-theme'
 
 // Module-level state so all callers share the same value.
 const choice = ref<ThemeChoice>('system')
-const resolved = ref<'light' | 'dark'>('dark')
 
 function readStored(): ThemeChoice {
   const v = localStorage.getItem(STORAGE_KEY)
@@ -18,18 +18,19 @@ function systemPrefersDark(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches
 }
 
-function applyTheme(c: ThemeChoice) {
-  const r = c === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : c
-  resolved.value = r
-  document.documentElement.setAttribute('data-theme', r)
-  localStorage.setItem(STORAGE_KEY, c)
-}
-
 function nextChoice(c: ThemeChoice): ThemeChoice {
   return c === 'system' ? 'light' : c === 'light' ? 'dark' : 'system'
 }
 
 export function useTheme() {
+  const vuetifyTheme = useVuetifyTheme()
+
+  function applyTheme(c: ThemeChoice) {
+    const resolved = c === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : c
+    vuetifyTheme.global.name.value = resolved
+    localStorage.setItem(STORAGE_KEY, c)
+  }
+
   onMounted(() => {
     choice.value = readStored()
     applyTheme(choice.value)
@@ -47,5 +48,5 @@ export function useTheme() {
     choice.value = nextChoice(choice.value)
   }
 
-  return { choice, resolved, cycle }
+  return { choice, cycle }
 }
