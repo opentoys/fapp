@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '../../api/client'
 import type { AppDetail, Channel, Version } from '../../api/types'
 
 const route = useRoute()
+const router = useRouter()
 const data = ref<AppDetail | null>(null)
 const channels = ref<Channel[]>([])
 const newChannelName = ref('')
@@ -88,6 +89,11 @@ function showSnack(msg: string) {
   snackbarOpen.value = true
 }
 
+function goUpload() {
+  if (!data.value) return
+  router.push(`/admin/upload?app_id=${data.value.app.id}`)
+}
+
 function fmtSize(n: number): string {
   if (n > 1024 * 1024 * 1024) return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB'
   if (n > 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB'
@@ -114,7 +120,12 @@ function accessLabel(mode: string, enabled: boolean): string {
 
 <template>
   <v-container class="pa-6" max-width="1200">
-    <h1 v-if="data" class="text-h4 mb-2">{{ data.app.name }}</h1>
+    <div v-if="data" class="d-flex align-center justify-space-between mb-2">
+      <h1 class="text-h4">{{ data.app.name }}</h1>
+      <v-btn color="primary" variant="flat" @click="goUpload">
+        Upload version
+      </v-btn>
+    </div>
 
     <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable>
       {{ error }}

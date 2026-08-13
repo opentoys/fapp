@@ -13,11 +13,17 @@ const { isAuthed, clearToken } = useAuth()
 const tabs = computed(() => {
   if (!isAuthed.value) return []
   return [
-    { label: 'Apps', to: '/' },
-    { label: 'Admin', to: '/admin' },
-    { label: 'Users', to: '/admin/users' },
-    { label: 'Upload', to: '/admin/upload' },
+    { label: 'Apps', to: '/admin', match: '/admin' },
+    { label: 'Users', to: '/admin/users', match: '/admin/users' },
   ]
+})
+
+// Pick the tab whose `match` prefix the current path sits under, so
+// /admin/app/1 and /admin/upload still light up the Apps tab.
+const activeTab = computed(() => {
+  const p = route.path
+  const hit = tabs.value.find((t) => p === t.match || p.startsWith(t.match + '/'))
+  return hit?.to ?? ''
 })
 
 const themeIcon = computed(() => {
@@ -39,7 +45,7 @@ function logout() {
     <v-app-bar color="primary" density="compact">
       <v-app-bar-title>Distribution</v-app-bar-title>
 
-      <v-tabs v-if="isAuthed" :model-value="route.path" align-tabs="center">
+      <v-tabs v-if="isAuthed" :model-value="activeTab" align-tabs="center">
         <v-tab
           v-for="t in tabs"
           :key="t.to"

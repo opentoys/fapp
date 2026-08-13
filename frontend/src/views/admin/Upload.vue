@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '../../api/client'
 import type { AppItem, Channel } from '../../api/types'
 
+const route = useRoute()
 const router = useRouter()
 
 const file = ref<File | null>(null)
-const appId = ref<number | null>(null)
+const initialAppId = Number(route.query.app_id)
+const appId = ref<number | null>(Number.isFinite(initialAppId) && initialAppId > 0 ? initialAppId : null)
 const channelId = ref<number | null>(null)
 const versionName = ref('')
 const versionCode = ref<number | null>(null)
