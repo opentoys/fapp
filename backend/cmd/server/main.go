@@ -9,7 +9,6 @@ import (
 
 	"disapp/internal/config"
 	"disapp/internal/db"
-	"disapp/internal/model"
 	"disapp/internal/server"
 	"disapp/internal/storage"
 	"disapp/static"
@@ -37,16 +36,11 @@ func main() {
 		log.Fatalf("open db: %v", err)
 	}
 
-	// The super-admin lives only in config.json — it is never written to
-	// the users table. If a stale row from an older version is still
-	// present, prune it so the DB reflects the new model.
+	// Super-admin lives in config.json only; never written to the users
+	// table. Dev convention: if the DB ever drifts out of sync with the
+	// model, blow it away with `rm -rf data/` rather than carrying
+	// migration code.
 	if cfg.Admin.Username != "" {
-		res := gdb.Where("username = ?", cfg.Admin.Username).Delete(&model.User{})
-		if res.Error != nil {
-			log.Printf("warn: prune stale admin row: %v", res.Error)
-		} else if res.RowsAffected > 0 {
-			log.Printf("pruned %d stale admin row(s) for %q", res.RowsAffected, cfg.Admin.Username)
-		}
 		log.Printf("super-admin: %s (auth handled by config, uid = -1)", cfg.Admin.Username)
 	} else {
 		log.Printf("no super-admin configured; admin endpoints will be unreachable")

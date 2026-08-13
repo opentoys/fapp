@@ -1,4 +1,4 @@
-.PHONY: build run frontend
+.PHONY: build run frontend reset
 
 frontend:
 	cd frontend && npm install && npm run build
@@ -10,3 +10,9 @@ build: frontend
 
 run: build
 	./bin/disapp
+
+# Dev-only: blow away the local SQLite DB and uploaded files. The server
+# will rebuild the schema from the model on next start. Use whenever the
+# schema changes or the local state gets weird.
+reset:
+	rm -rf data/
