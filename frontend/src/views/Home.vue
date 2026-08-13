@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api/client'
+import { useI18n } from '../composables/useI18n'
 import type { AppItem } from '../api/types'
 
+const { t } = useI18n()
 const apps = ref<AppItem[]>([])
 const error = ref('')
 
@@ -33,11 +35,15 @@ function accessColor(mode: string): string {
   if (mode === 'password' || mode === 'expiry') return 'warning'
   return 'grey'
 }
+
+function accessLabel(mode: string): string {
+  return t(`access.${mode}`)
+}
 </script>
 
 <template>
   <v-container class="pa-6" max-width="1200">
-    <h1 class="text-h4 mb-6">Apps</h1>
+    <h1 class="text-h4 mb-6">{{ t('home.title') }}</h1>
 
     <v-alert v-if="error" type="error" variant="tonal" class="mb-4">
       {{ error }}
@@ -47,7 +53,7 @@ function accessColor(mode: string): string {
       <v-col cols="12" sm="4">
         <v-card variant="tonal">
           <v-card-text>
-            <div class="text-overline">Apps</div>
+            <div class="text-overline">{{ t('home.stat.apps') }}</div>
             <div class="text-h4">{{ apps.length }}</div>
           </v-card-text>
         </v-card>
@@ -55,7 +61,7 @@ function accessColor(mode: string): string {
       <v-col cols="12" sm="4">
         <v-card variant="tonal">
           <v-card-text>
-            <div class="text-overline">Versions</div>
+            <div class="text-overline">{{ t('home.stat.versions') }}</div>
             <div class="text-h4">{{ totalVersions }}</div>
           </v-card-text>
         </v-card>
@@ -63,7 +69,7 @@ function accessColor(mode: string): string {
       <v-col cols="12" sm="4">
         <v-card variant="tonal" color="primary">
           <v-card-text>
-            <div class="text-overline">Downloads</div>
+            <div class="text-overline">{{ t('home.stat.downloads') }}</div>
             <div class="text-h4">{{ totalDownloads }}</div>
           </v-card-text>
         </v-card>
@@ -97,7 +103,7 @@ function accessColor(mode: string): string {
               size="small"
               variant="tonal"
             >
-              {{ a.latest_version.access_mode }}
+              {{ accessLabel(a.latest_version.access_mode) }}
             </v-chip>
             <p v-if="a.description" class="text-body-2 mt-2 mb-0">{{ a.description }}</p>
           </v-card-text>
@@ -106,7 +112,7 @@ function accessColor(mode: string): string {
     </v-row>
 
     <v-card v-else-if="!error" variant="tonal" class="text-center pa-8">
-      <v-card-text>No applications yet.</v-card-text>
+      <v-card-text>{{ t('home.empty') }}</v-card-text>
     </v-card>
   </v-container>
 </template>

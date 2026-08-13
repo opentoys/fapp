@@ -2,9 +2,11 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../../api/client'
+import { useI18n } from '../../composables/useI18n'
 import type { AppItem } from '../../api/types'
 
 const router = useRouter()
+const { t } = useI18n()
 const apps = ref<AppItem[]>([])
 const newName = ref('')
 const createError = ref('')
@@ -36,7 +38,7 @@ function closeCreate() {
 
 async function confirmCreate() {
   if (!newName.value.trim()) {
-    createError.value = 'Name is required.'
+    createError.value = t('admin.nameRequired')
     return
   }
   creating.value = true
@@ -69,7 +71,7 @@ async function confirmDelete() {
   try {
     await api.deleteApp(id)
     await load()
-    showSnack('App deleted')
+    showSnack(t('admin.appDeleted'))
   } catch (e) {
     showSnack((e as Error).message)
   }
@@ -88,17 +90,17 @@ function fmtDate(s: string): string {
 <template>
   <v-container class="pa-6" max-width="1200">
     <div class="d-flex align-center justify-space-between mb-6">
-      <h1 class="text-h4">Applications</h1>
+      <h1 class="text-h4">{{ t('admin.title') }}</h1>
       <v-btn color="primary" variant="flat" @click="openCreate">
-        New app
+        {{ t('admin.newApp') }}
       </v-btn>
     </div>
 
     <v-data-table
       :items="apps"
       :headers="[
-        { title: 'Name', key: 'name' },
-        { title: 'Created', key: 'created_at' },
+        { title: t('common.name'), key: 'name' },
+        { title: t('common.created'), key: 'created_at' },
         { title: '', key: 'actions', sortable: false, align: 'end' },
       ]"
       :items-per-page="-1"
@@ -118,18 +120,18 @@ function fmtDate(s: string): string {
           color="error"
           @click="askDelete(item)"
         >
-          Delete
+          {{ t('common.delete') }}
         </v-btn>
       </template>
     </v-data-table>
 
     <v-dialog v-model="createDialogOpen" max-width="480">
       <v-card>
-        <v-card-title>New app</v-card-title>
+        <v-card-title>{{ t('admin.newApp') }}</v-card-title>
         <v-card-text>
           <v-text-field
             v-model="newName"
-            label="Application name"
+            :label="t('admin.appName')"
             autofocus
             :error="!!createError"
             @keyup.enter="confirmCreate"
@@ -140,7 +142,7 @@ function fmtDate(s: string): string {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="closeCreate">Cancel</v-btn>
+          <v-btn @click="closeCreate">{{ t('common.cancel') }}</v-btn>
           <v-btn
             color="primary"
             variant="flat"
@@ -148,7 +150,7 @@ function fmtDate(s: string): string {
             :disabled="!newName.trim()"
             @click="confirmCreate"
           >
-            Create
+            {{ t('common.create') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -156,14 +158,14 @@ function fmtDate(s: string): string {
 
     <v-dialog v-model="deleteDialogOpen" max-width="400">
       <v-card>
-        <v-card-title>Confirm delete</v-card-title>
+        <v-card-title>{{ t('common.confirmDelete') }}</v-card-title>
         <v-card-text>
-          Delete <b>{{ deleteTarget?.name }}</b>? Associated versions and channels will be removed.
+          <span v-html="t('admin.confirmDeleteApp', { name: deleteTarget?.name ?? '' })" />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="cancelDelete">Cancel</v-btn>
-          <v-btn color="error" variant="flat" @click="confirmDelete">Delete</v-btn>
+          <v-btn @click="cancelDelete">{{ t('common.cancel') }}</v-btn>
+          <v-btn color="error" variant="flat" @click="confirmDelete">{{ t('common.delete') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

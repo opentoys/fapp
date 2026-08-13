@@ -3,10 +3,12 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import { useAuth } from '../composables/useAuth'
+import { useI18n } from '../composables/useI18n'
 
 const route = useRoute()
 const router = useRouter()
 const { setToken } = useAuth()
+const { t } = useI18n()
 
 const username = ref('')
 const password = ref('')
@@ -32,18 +34,18 @@ async function submit() {
 <template>
   <v-container class="d-flex align-center justify-center" style="min-height: calc(100vh - 64px);">
     <v-card max-width="400" width="100%">
-      <v-card-title>Sign in</v-card-title>
+      <v-card-title>{{ t('login.title') }}</v-card-title>
       <v-card-text>
         <v-form @submit.prevent="submit">
           <v-text-field
             v-model="username"
-            label="Username"
+            :label="t('common.username')"
             autocomplete="username"
             autofocus
           />
           <v-text-field
             v-model="password"
-            label="Password"
+            :label="t('common.password')"
             type="password"
             autocomplete="current-password"
             @keyup.enter="submit"
@@ -58,7 +60,7 @@ async function submit() {
             :loading="loading"
             type="submit"
           >
-            Sign in
+            {{ t('login.submit') }}
           </v-btn>
         </v-form>
       </v-card-text>

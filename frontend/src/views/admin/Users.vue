@@ -2,9 +2,11 @@
 import { onMounted, ref } from 'vue'
 import { api } from '../../api/client'
 import { useAuth } from '../../composables/useAuth'
+import { useI18n } from '../../composables/useI18n'
 import type { User } from '../../api/types'
 
 const { isAuthed } = useAuth()
+const { t } = useI18n()
 const users = ref<User[]>([])
 const newUsername = ref('')
 const newPassword = ref('')
@@ -38,7 +40,7 @@ function closeCreate() {
 
 async function confirmCreate() {
   if (!newUsername.value || !newPassword.value) {
-    error.value = 'Username and password are required.'
+    error.value = t('adminUsers.required')
     return
   }
   error.value = ''
@@ -46,7 +48,7 @@ async function confirmCreate() {
     await api.createUser({ username: newUsername.value, password: newPassword.value })
     closeCreate()
     await load()
-    showSnack('User created')
+    showSnack(t('adminUsers.userCreated'))
   } catch (e) {
     error.value = (e as Error).message
   }
@@ -69,7 +71,7 @@ async function confirmDelete() {
   try {
     await api.deleteUser(id)
     await load()
-    showSnack('User deleted')
+    showSnack(t('adminUsers.userDeleted'))
   } catch (e) {
     error.value = (e as Error).message
   }
@@ -88,14 +90,14 @@ function fmtDate(s: string): string {
 <template>
   <v-container class="pa-6" max-width="1000">
     <div class="d-flex align-center justify-space-between mb-6">
-      <h1 class="text-h4">Users</h1>
+      <h1 class="text-h4">{{ t('adminUsers.title') }}</h1>
       <v-btn
         v-if="isAuthed"
         color="primary"
         variant="flat"
         @click="openCreate"
       >
-        New user
+        {{ t('adminUsers.newUser') }}
       </v-btn>
     </div>
 
@@ -105,20 +107,16 @@ function fmtDate(s: string): string {
 
     <v-card variant="outlined" class="mb-4">
       <v-card-text>
-        <div class="text-overline mb-1">Super-admin</div>
-        <div class="text-caption text-medium-emphasis">
-          The super-admin is configured in <code>config.json</code> and is
-          not stored in the database. Actions performed by the super-admin
-          are recorded with operator id <code>-1</code>.
-        </div>
+        <div class="text-overline mb-1">{{ t('adminUsers.superAdminLabel') }}</div>
+        <div class="text-caption text-medium-emphasis" v-html="t('adminUsers.superAdminNote')" />
       </v-card-text>
     </v-card>
 
     <v-data-table
       :items="users"
       :headers="[
-        { title: 'Username', key: 'username' },
-        { title: 'Created', key: 'created_at' },
+        { title: t('common.username'), key: 'username' },
+        { title: t('common.created'), key: 'created_at' },
         { title: '', key: 'actions', sortable: false, align: 'end' },
       ]"
       :items-per-page="-1"
@@ -136,24 +134,24 @@ function fmtDate(s: string): string {
           color="error"
           @click="askDelete(item)"
         >
-          Delete
+          {{ t('common.delete') }}
         </v-btn>
       </template>
     </v-data-table>
 
     <v-dialog v-model="createDialogOpen" max-width="480">
       <v-card>
-        <v-card-title>New user</v-card-title>
+        <v-card-title>{{ t('adminUsers.newUser') }}</v-card-title>
         <v-card-text>
           <v-text-field
             v-model="newUsername"
-            label="Username"
+            :label="t('common.username')"
             autofocus
             :error="!!error"
           />
           <v-text-field
             v-model="newPassword"
-            label="Password"
+            :label="t('common.password')"
             type="password"
             :error="!!error"
             @keyup.enter="confirmCreate"
@@ -164,14 +162,14 @@ function fmtDate(s: string): string {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="closeCreate">Cancel</v-btn>
+          <v-btn @click="closeCreate">{{ t('common.cancel') }}</v-btn>
           <v-btn
             color="primary"
             variant="flat"
             :disabled="!newUsername || !newPassword"
             @click="confirmCreate"
           >
-            Create
+            {{ t('common.create') }}
           </v-btn>
         </v-card-actions>
       </v-card>
@@ -179,14 +177,14 @@ function fmtDate(s: string): string {
 
     <v-dialog v-model="dialogOpen" max-width="400">
       <v-card>
-        <v-card-title>Confirm delete</v-card-title>
+        <v-card-title>{{ t('common.confirmDelete') }}</v-card-title>
         <v-card-text>
-          Delete user <code>{{ deleteTarget?.username }}</code>?
+          <span v-html="t('adminUsers.confirmDeleteUser', { name: deleteTarget?.username ?? '' })" />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="cancelDelete">Cancel</v-btn>
-          <v-btn color="error" variant="flat" @click="confirmDelete">Delete</v-btn>
+          <v-btn @click="cancelDelete">{{ t('common.cancel') }}</v-btn>
+          <v-btn color="error" variant="flat" @click="confirmDelete">{{ t('common.delete') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
