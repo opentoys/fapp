@@ -38,16 +38,28 @@ func main() {
 		log.Fatalf("open db: %v", err)
 	}
 
-	// Auto-create default admin from env vars if no users exist.
-	if user, pass := os.Getenv("APP_ADMIN_USER"), os.Getenv("APP_ADMIN_PASS"); user != "" && pass != "" {
-		var c int64
-		gdb.Model(&model.User{}).Count(&c)
-		if c == 0 {
-			hash, salt := password.Hash(pass)
-			gdb.Create(&model.User{Username: user, PasswordHash: hash, Salt: salt})
-			log.Printf("created default admin %q", user)
-		}
+	// Auto-create / reset default admin on every startup.
+	// Dev convenience: password is reset to the env var (or default) so the
+	// platform is always reachable. Override APP_ADMIN_USER / APP_ADMIN_PASS
+	// before launching to pick your own credentials.
+	adminUser := os.Getenv("APP_ADMIN_USER")
+	if adminUser == "" {
+		adminUser = "admin"
 	}
+	adminPass := os.Getenv("APP_ADMIN_PASS")
+	if adminPass == "" {
+		adminPass = "admin123"
+	}
+	hash, salt := password.Hash(adminPass)
+	var existing model.User
+	if err := gdb.Where("username = ?", adminUser).First(&existing).Error; err == nil {
+		gdb.Model(&existing).Updates(map[string]any{"password_hash": hash, "salt": salt})
+		log.Printf("reset password for admin %q", adminUser)
+	} else {
+		gdb.Create(&model.User{Username: adminUser, PasswordHash: hash, Salt: salt})
+		log.Printf("created default admin %q", adminUser)
+	}
+	log.Printf("admin credentials: %s / %s", adminUser, adminPass)
 
 	var st storage.Storage
 	switch cfg.Storage.Backend {
