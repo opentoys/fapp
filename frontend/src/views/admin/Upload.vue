@@ -2,10 +2,12 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../../api/client'
+import { useI18n } from '../../composables/useI18n'
 import type { AppItem, Channel } from '../../api/types'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 const file = ref<File | null>(null)
 const initialAppId = Number(route.query.app_id)
@@ -58,7 +60,7 @@ function onFileChange(f: File | File[] | null) {
 
 async function submit() {
   if (!file.value || !appId.value || !versionName.value) {
-    error.value = 'File, app, and version name are required.'
+    error.value = t('upload.required')
     return
   }
   error.value = ''
@@ -90,7 +92,7 @@ async function submit() {
 
 <template>
   <v-container class="pa-6" max-width="720">
-    <h1 class="text-h4 mb-6">New Version</h1>
+    <h1 class="text-h4 mb-6">{{ t('upload.title') }}</h1>
 
     <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable>
       {{ error }}
@@ -101,7 +103,7 @@ async function submit() {
         <v-card-text>
           <v-file-input
             :model-value="file"
-            label="Choose installation package"
+            :label="t('upload.file')"
             accept=".apk,.aab,.ipa,.exe,.dmg"
             prepend-icon=""
             show-size
@@ -115,23 +117,23 @@ async function submit() {
           <v-select
             v-model="appId"
             :items="appItems"
-            label="Application"
+            :label="t('upload.app')"
           />
           <v-select
             v-model="channelId"
             :items="channelItems"
-            label="Channel"
+            :label="t('upload.channel')"
             :disabled="!appId"
             clearable
           />
           <v-row>
             <v-col cols="12" sm="6">
-              <v-text-field v-model="versionName" label="Version name" placeholder="1.0.0" />
+              <v-text-field v-model="versionName" :label="t('upload.versionName')" placeholder="1.0.0" />
             </v-col>
             <v-col cols="12" sm="6">
               <v-text-field
                 v-model.number="versionCode"
-                label="Version code"
+                :label="t('upload.versionCode')"
                 type="number"
                 placeholder="1"
               />
@@ -139,7 +141,7 @@ async function submit() {
           </v-row>
           <v-textarea
             v-model="changelog"
-            label="Changelog"
+            :label="t('upload.changelog')"
             rows="3"
             auto-grow
           />
@@ -148,29 +150,29 @@ async function submit() {
 
       <v-card variant="outlined" class="mb-4">
         <v-card-text>
-          <div class="text-overline mb-2">Access</div>
+          <div class="text-overline mb-2">{{ t('upload.access') }}</div>
           <v-radio-group v-model="accessMode">
-            <v-radio label="Public" value="public" />
-            <v-radio label="Password" value="password" />
-            <v-radio label="Expires" value="expiry" />
+            <v-radio :label="t('upload.accessPublic')" value="public" />
+            <v-radio :label="t('upload.accessPassword')" value="password" />
+            <v-radio :label="t('upload.accessExpiry')" value="expiry" />
           </v-radio-group>
           <v-text-field
             v-if="accessMode === 'password'"
             v-model="password"
-            label="Download password"
+            :label="t('upload.downloadPassword')"
             type="password"
           />
           <v-text-field
             v-if="accessMode === 'expiry'"
             v-model="expiresAt"
-            label="Expires at"
+            :label="t('upload.expiresAt')"
             type="datetime-local"
           />
         </v-card-text>
       </v-card>
 
       <div class="d-flex justify-end" style="gap: 8px;">
-        <v-btn @click="router.back()">Cancel</v-btn>
+        <v-btn @click="router.back()">{{ t('common.cancel') }}</v-btn>
         <v-btn
           color="primary"
           variant="flat"
@@ -178,7 +180,7 @@ async function submit() {
           :disabled="!file || !appId || !versionName"
           @click="submit"
         >
-          Upload
+          {{ t('upload.submit') }}
         </v-btn>
       </div>
     </v-form>

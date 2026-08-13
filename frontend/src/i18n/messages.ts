@@ -1,0 +1,231 @@
+// Translation tables for the UI. API responses are NOT translated —
+// backend error messages are passed through to the user as-is.
+export type Locale = 'en' | 'zh'
+
+export const messages: Record<Locale, Record<string, string>> = {
+  en: {
+    // App bar
+    'app.title': 'Distribution',
+    'app.signin': 'Sign in',
+    'app.logout': 'Logout',
+    'app.theme': 'Theme: {name}',
+
+    // Common
+    'common.cancel': 'Cancel',
+    'common.create': 'Create',
+    'common.delete': 'Delete',
+    'common.confirmDelete': 'Confirm delete',
+    'common.save': 'Save',
+    'common.continue': 'Continue',
+    'common.name': 'Name',
+    'common.username': 'Username',
+    'common.password': 'Password',
+    'common.created': 'Created',
+    'common.close': 'Close',
+
+    // Login
+    'login.title': 'Sign in',
+    'login.submit': 'Sign in',
+
+    // Public apps list (Home)
+    'home.title': 'Apps',
+    'home.stat.apps': 'Apps',
+    'home.stat.versions': 'Versions',
+    'home.stat.downloads': 'Downloads',
+    'home.empty': 'No applications yet.',
+
+    // Public app detail (AppDetail)
+    'detail.channels': 'Channels',
+    'detail.versions': 'Versions',
+    'detail.code': 'code',
+    'detail.download': 'Download',
+    'detail.passwordTitle': 'Password required',
+    'detail.passwordBody': 'This version is password protected.',
+    'detail.passwordContinue': 'Continue',
+    'detail.takenDown': 'taken down',
+    'detail.empty': 'No versions yet.',
+
+    // Access mode badges
+    'access.public': 'public',
+    'access.password': 'password',
+    'access.expiry': 'expiry',
+
+    // Admin apps list
+    'admin.title': 'Applications',
+    'admin.newApp': 'New app',
+    'admin.appName': 'Application name',
+    'admin.nameRequired': 'Name is required.',
+    'admin.confirmDeleteApp': 'Delete <b>{name}</b>? Associated versions and channels will be removed.',
+    'admin.appDeleted': 'App deleted',
+
+    // Admin app detail
+    'adminApp.upload': 'Upload version',
+    'adminApp.tabVersions': 'Versions',
+    'adminApp.tabChannels': 'Channels',
+    'adminApp.tabStats': 'Stats',
+    'adminApp.colVersion': 'Version',
+    'adminApp.colSize': 'Size',
+    'adminApp.colAccess': 'Access',
+    'adminApp.colDownloads': 'Downloads',
+    'adminApp.colStatus': 'Status',
+    'adminApp.takeDown': 'Take down',
+    'adminApp.reEnable': 'Re-enable',
+    'adminApp.statsBtn': 'Stats',
+    'adminApp.newChannelName': 'New channel name',
+    'adminApp.channelCreated': 'Channel created',
+    'adminApp.colId': 'ID',
+    'adminApp.statDownloads': 'Downloads',
+    'adminApp.statInstalls': 'Installs',
+    'adminApp.colTime': 'Time',
+    'adminApp.colIp': 'IP',
+    'adminApp.colUserAgent': 'User Agent',
+    'adminApp.statsEmpty': 'Click "Stats" next to a version in the Versions tab to view stats.',
+    'adminApp.statsClear': 'Clear',
+    'adminApp.confirmDeleteVersion': 'Delete version <code>{name}</code> and its storage file?',
+    'adminApp.versionDeleted': 'Version deleted',
+
+    // Admin users
+    'adminUsers.title': 'Users',
+    'adminUsers.newUser': 'New user',
+    'adminUsers.superAdminLabel': 'Super-admin',
+    'adminUsers.superAdminNote': 'The super-admin is configured in <code>config.json</code> and is not stored in the database. Actions performed by the super-admin are recorded with operator id <code>-1</code>.',
+    'adminUsers.confirmDeleteUser': 'Delete user <code>{name}</code>?',
+    'adminUsers.userCreated': 'User created',
+    'adminUsers.userDeleted': 'User deleted',
+    'adminUsers.required': 'Username and password are required.',
+
+    // Admin upload
+    'upload.title': 'New Version',
+    'upload.file': 'Choose installation package',
+    'upload.app': 'Application',
+    'upload.channel': 'Channel',
+    'upload.versionName': 'Version name',
+    'upload.versionCode': 'Version code',
+    'upload.changelog': 'Changelog',
+    'upload.access': 'Access',
+    'upload.accessPublic': 'Public',
+    'upload.accessPassword': 'Password',
+    'upload.accessExpiry': 'Expires',
+    'upload.downloadPassword': 'Download password',
+    'upload.expiresAt': 'Expires at',
+    'upload.submit': 'Upload',
+    'upload.required': 'File, app, and version name are required.',
+
+    // Language menu
+    'lang.en': 'English',
+    'lang.zh': '中文',
+  },
+
+  zh: {
+    // App bar
+    'app.title': '分发平台',
+    'app.signin': '登录',
+    'app.logout': '退出登录',
+    'app.theme': '主题: {name}',
+
+    // Common
+    'common.cancel': '取消',
+    'common.create': '创建',
+    'common.delete': '删除',
+    'common.confirmDelete': '确认删除',
+    'common.save': '保存',
+    'common.continue': '继续',
+    'common.name': '名称',
+    'common.username': '用户名',
+    'common.password': '密码',
+    'common.created': '创建时间',
+    'common.close': '关闭',
+
+    // Login
+    'login.title': '登录',
+    'login.submit': '登录',
+
+    // Public apps list (Home)
+    'home.title': '应用',
+    'home.stat.apps': '应用',
+    'home.stat.versions': '版本',
+    'home.stat.downloads': '下载',
+    'home.empty': '暂无应用。',
+
+    // Public app detail (AppDetail)
+    'detail.channels': '渠道',
+    'detail.versions': '版本',
+    'detail.code': '码',
+    'detail.download': '下载',
+    'detail.passwordTitle': '需要密码',
+    'detail.passwordBody': '此版本受密码保护。',
+    'detail.passwordContinue': '继续',
+    'detail.takenDown': '已下架',
+    'detail.empty': '暂无版本。',
+
+    // Access mode badges
+    'access.public': '公开',
+    'access.password': '密码',
+    'access.expiry': '限时',
+
+    // Admin apps list
+    'admin.title': '应用',
+    'admin.newApp': '新建应用',
+    'admin.appName': '应用名',
+    'admin.nameRequired': '名称不能为空。',
+    'admin.confirmDeleteApp': '删除 <b>{name}</b>？相关版本和渠道也会被删除。',
+    'admin.appDeleted': '应用已删除',
+
+    // Admin app detail
+    'adminApp.upload': '上传版本',
+    'adminApp.tabVersions': '版本',
+    'adminApp.tabChannels': '渠道',
+    'adminApp.tabStats': '统计',
+    'adminApp.colVersion': '版本',
+    'adminApp.colSize': '大小',
+    'adminApp.colAccess': '访问',
+    'adminApp.colDownloads': '下载',
+    'adminApp.colStatus': '状态',
+    'adminApp.takeDown': '下架',
+    'adminApp.reEnable': '重新启用',
+    'adminApp.statsBtn': '统计',
+    'adminApp.newChannelName': '新渠道名',
+    'adminApp.channelCreated': '渠道已创建',
+    'adminApp.colId': 'ID',
+    'adminApp.statDownloads': '下载',
+    'adminApp.statInstalls': '安装',
+    'adminApp.colTime': '时间',
+    'adminApp.colIp': 'IP',
+    'adminApp.colUserAgent': 'User Agent',
+    'adminApp.statsEmpty': '在 “版本” 标签页中点击某版本旁边的 “统计” 查看数据。',
+    'adminApp.statsClear': '清空',
+    'adminApp.confirmDeleteVersion': '删除版本 <code>{name}</code> 及其存储文件？',
+    'adminApp.versionDeleted': '版本已删除',
+
+    // Admin users
+    'adminUsers.title': '用户',
+    'adminUsers.newUser': '新建用户',
+    'adminUsers.superAdminLabel': '超管',
+    'adminUsers.superAdminNote': '超管账号配置在 <code>config.json</code> 中，不会写入数据库。超管执行的操作会以操作人 id <code>-1</code> 记录。',
+    'adminUsers.confirmDeleteUser': '删除用户 <code>{name}</code>？',
+    'adminUsers.userCreated': '用户已创建',
+    'adminUsers.userDeleted': '用户已删除',
+    'adminUsers.required': '用户名和密码不能为空。',
+
+    // Admin upload
+    'upload.title': '新版本',
+    'upload.file': '选择安装包',
+    'upload.app': '应用',
+    'upload.channel': '渠道',
+    'upload.versionName': '版本名',
+    'upload.versionCode': '版本号',
+    'upload.changelog': '更新日志',
+    'upload.access': '访问权限',
+    'upload.accessPublic': '公开',
+    'upload.accessPassword': '密码',
+    'upload.accessExpiry': '限时',
+    'upload.downloadPassword': '下载密码',
+    'upload.expiresAt': '过期时间',
+    'upload.submit': '上传',
+    'upload.required': '文件、应用和版本名必填。',
+
+    // Language menu
+    'lang.en': 'English',
+    'lang.zh': '中文',
+  },
+}

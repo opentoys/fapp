@@ -2,10 +2,12 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../../api/client'
+import { useI18n } from '../../composables/useI18n'
 import type { AppDetail, Channel, Version } from '../../api/types'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const data = ref<AppDetail | null>(null)
 const channels = ref<Channel[]>([])
 const newChannelName = ref('')
@@ -34,7 +36,7 @@ async function createChannel() {
     await api.createChannel(data.value.app.id, newChannelName.value)
     newChannelName.value = ''
     channels.value = await api.channels(data.value.app.id)
-    showSnack('Channel created')
+    showSnack(t('adminApp.channelCreated'))
   } catch (e) {
     error.value = (e as Error).message
   }
@@ -67,7 +69,7 @@ async function deleteVersion() {
   try {
     await api.deleteVersion(id, true)
     await load()
-    showSnack('Version deleted')
+    showSnack(t('adminApp.versionDeleted'))
   } catch (e) {
     error.value = (e as Error).message
   }
@@ -113,9 +115,29 @@ function accessColor(mode: string, enabled: boolean): string {
 }
 
 function accessLabel(mode: string, enabled: boolean): string {
-  if (!enabled) return 'taken down'
-  return mode
+  if (!enabled) return t('detail.takenDown')
+  return t(`access.${mode}`)
 }
+
+const versionHeaders = computed(() => [
+  { title: t('adminApp.colVersion'), key: 'version_name' },
+  { title: t('adminApp.colSize'), key: 'file_size' },
+  { title: t('adminApp.colAccess'), key: 'access_mode' },
+  { title: t('adminApp.colDownloads'), key: 'download_count' },
+  { title: t('adminApp.colStatus'), key: 'enabled' },
+  { title: '', key: 'actions', sortable: false, align: 'end' as const },
+])
+
+const channelHeaders = computed(() => [
+  { title: t('common.name'), key: 'name' },
+  { title: t('adminApp.colId'), key: 'id' },
+])
+
+const statsHeaders = computed(() => [
+  { title: t('adminApp.colTime'), key: 'created_at' },
+  { title: t('adminApp.colIp'), key: 'ip' },
+  { title: t('adminApp.colUserAgent'), key: 'user_agent' },
+])
 </script>
 
 <template>
@@ -123,7 +145,7 @@ function accessLabel(mode: string, enabled: boolean): string {
     <div v-if="data" class="d-flex align-center justify-space-between mb-2">
       <h1 class="text-h4">{{ data.app.name }}</h1>
       <v-btn color="primary" variant="flat" @click="goUpload">
-        Upload version
+        {{ t('adminApp.upload') }}
       </v-btn>
     </div>
 
@@ -132,9 +154,9 @@ function accessLabel(mode: string, enabled: boolean): string {
     </v-alert>
 
     <v-tabs v-model="tab" class="mt-4">
-      <v-tab value="versions">Versions</v-tab>
-      <v-tab value="channels">Channels</v-tab>
-      <v-tab value="stats">Stats</v-tab>
+      <v-tab value="versions">{{ t('adminApp.tabVersions') }}</v-tab>
+      <v-tab value="channels">{{ t('adminApp.tabChannels') }}</v-tab>
+      <v-tab value="stats">{{ t('adminApp.tabStats') }}</v-tab>
     </v-tabs>
 
     <v-divider />
@@ -143,20 +165,13 @@ function accessLabel(mode: string, enabled: boolean): string {
       <v-window-item value="versions">
         <v-data-table
           :items="versions"
-          :headers="[
-            { title: 'Version', key: 'version_name' },
-            { title: 'Size', key: 'file_size' },
-            { title: 'Access', key: 'access_mode' },
-            { title: 'Downloads', key: 'download_count' },
-            { title: 'Status', key: 'enabled' },
-            { title: '', key: 'actions', sortable: false, align: 'end' },
-          ]"
+          :headers="versionHeaders"
           :items-per-page="-1"
         >
           <template #item.version_name="{ item }">
             <code>{{ item.version_name }}</code>
-            <span class="text-caption text-medium-emphasis ml-2">code {{ item.version_code }}</span>
-            <v-btn variant="text" size="small" class="ms-2" @click="loadStats(item)">Stats</v-btn>
+            <span class="text-caption text-medium-emphasis ml-2">{{ t('detail.code') }} {{ item.version_code }}</span>
+            <v-btn variant="text" size="small" class="ms-2" @click="loadStats(item)">{{ t('adminApp.statsBtn') }}</v-btn>
           </template>
           <template #item.file_size="{ item }">
             <code class="text-caption">{{ fmtSize(item.file_size) }}</code>
@@ -175,7 +190,7 @@ function accessLabel(mode: string, enabled: boolean): string {
           </template>
           <template #item.enabled="{ item }">
             <v-btn variant="text" size="small" @click="toggleEnabled(item)">
-              {{ item.enabled ? 'Take down' : 'Re-enable' }}
+              {{ item.enabled ? t('adminApp.takeDown') : t('adminApp.reEnable') }}
             </v-btn>
           </template>
           <template #item.actions="{ item }">
@@ -185,7 +200,7 @@ function accessLabel(mode: string, enabled: boolean): string {
               color="error"
               @click="askDelete(item)"
             >
-              Delete
+              {{ t('common.delete') }}
             </v-btn>
           </template>
         </v-data-table>
@@ -195,21 +210,18 @@ function accessLabel(mode: string, enabled: boolean): string {
         <div class="d-flex align-start mb-6" style="gap: 8px; max-width: 500px;">
           <v-text-field
             v-model="newChannelName"
-            label="New channel name"
+            :label="t('adminApp.newChannelName')"
             density="comfortable"
             hide-details
             @keyup.enter="createChannel"
           />
           <v-btn color="primary" variant="flat" :disabled="!newChannelName" @click="createChannel">
-            Create
+            {{ t('common.create') }}
           </v-btn>
         </div>
         <v-data-table
           :items="channels"
-          :headers="[
-            { title: 'Name', key: 'name' },
-            { title: 'ID', key: 'id' },
-          ]"
+          :headers="channelHeaders"
           :items-per-page="-1"
         >
           <template #item.id="{ item }">
@@ -220,14 +232,14 @@ function accessLabel(mode: string, enabled: boolean): string {
 
       <v-window-item value="stats">
         <v-card v-if="!stats" variant="tonal" class="text-center pa-8">
-          <v-card-text>Click "Stats" next to a version in the Versions tab to view stats.</v-card-text>
+          <v-card-text>{{ t('adminApp.statsEmpty') }}</v-card-text>
         </v-card>
         <template v-else>
           <v-row class="mb-4">
             <v-col cols="6" md="3">
               <v-card variant="tonal" color="primary">
                 <v-card-text>
-                  <div class="text-overline">Downloads</div>
+                  <div class="text-overline">{{ t('adminApp.statDownloads') }}</div>
                   <div class="text-h4">{{ stats.download_count }}</div>
                 </v-card-text>
               </v-card>
@@ -235,7 +247,7 @@ function accessLabel(mode: string, enabled: boolean): string {
             <v-col cols="6" md="3">
               <v-card variant="tonal" color="primary">
                 <v-card-text>
-                  <div class="text-overline">Installs</div>
+                  <div class="text-overline">{{ t('adminApp.statInstalls') }}</div>
                   <div class="text-h4">{{ stats.install_count }}</div>
                 </v-card-text>
               </v-card>
@@ -243,11 +255,7 @@ function accessLabel(mode: string, enabled: boolean): string {
           </v-row>
           <v-data-table
             :items="stats.recent"
-            :headers="[
-              { title: 'Time', key: 'created_at' },
-              { title: 'IP', key: 'ip' },
-              { title: 'User Agent', key: 'user_agent' },
-            ]"
+            :headers="statsHeaders"
             :items-per-page="-1"
           >
             <template #item.created_at="{ item }">
@@ -260,22 +268,21 @@ function accessLabel(mode: string, enabled: boolean): string {
               <code class="text-caption" style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block;">{{ item.user_agent }}</code>
             </template>
           </v-data-table>
-          <v-btn class="mt-4" variant="text" @click="stats = null">Clear</v-btn>
+          <v-btn class="mt-4" variant="text" @click="stats = null">{{ t('adminApp.statsClear') }}</v-btn>
         </template>
       </v-window-item>
     </v-window>
 
     <v-dialog v-model="dialogOpen" max-width="400">
       <v-card>
-        <v-card-title>Confirm delete</v-card-title>
+        <v-card-title>{{ t('common.confirmDelete') }}</v-card-title>
         <v-card-text>
-          Delete version <code>{{ deleteTarget?.version_name }}</code>
-          and its storage file?
+          <span v-html="t('adminApp.confirmDeleteVersion', { name: deleteTarget?.version_name ?? '' })" />
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="cancelDelete">Cancel</v-btn>
-          <v-btn color="error" variant="flat" @click="deleteVersion">Delete</v-btn>
+          <v-btn @click="cancelDelete">{{ t('common.cancel') }}</v-btn>
+          <v-btn color="error" variant="flat" @click="deleteVersion">{{ t('common.delete') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>

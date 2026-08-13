@@ -2,9 +2,11 @@
 import { onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '../api/client'
+import { useI18n } from '../composables/useI18n'
 import type { AppDetail } from '../api/types'
 
 const route = useRoute()
+const { t } = useI18n()
 const data = ref<AppDetail | null>(null)
 const error = ref('')
 const passwordPrompt = ref<{ versionId: number; password: string } | null>(null)
@@ -48,8 +50,8 @@ function accessColor(mode: string, enabled: boolean): string {
 }
 
 function accessLabel(mode: string, enabled: boolean): string {
-  if (!enabled) return 'taken down'
-  return mode
+  if (!enabled) return t('detail.takenDown')
+  return t(`access.${mode}`)
 }
 
 async function download(v: { id: number; access_mode: string }) {
@@ -92,7 +94,7 @@ async function doDownload(versionId: number, password: string | undefined) {
           <p v-if="data.app.description" class="text-body-1 mb-4">{{ data.app.description }}</p>
 
           <div v-if="data.channels.length" class="mb-4">
-            <div class="text-overline mb-2">Channels</div>
+            <div class="text-overline mb-2">{{ t('detail.channels') }}</div>
             <v-chip
               v-for="c in data.channels"
               :key="c.id"
@@ -105,7 +107,7 @@ async function doDownload(versionId: number, password: string | undefined) {
         </v-col>
 
         <v-col cols="12" md="8">
-          <div class="text-overline mb-3">Versions</div>
+          <div class="text-overline mb-3">{{ t('detail.versions') }}</div>
 
           <v-card v-if="data.versions.length" variant="outlined">
             <v-list lines="three">
@@ -128,7 +130,7 @@ async function doDownload(versionId: number, password: string | undefined) {
                 <v-list-item-title>
                   <span class="text-h6">{{ v.version_name }}</span>
                   <span class="text-body-2 text-medium-emphasis ml-2">
-                    code {{ v.version_code }} · {{ fmtSize(v.file_size) }}
+                    {{ t('detail.code') }} {{ v.version_code }} · {{ fmtSize(v.file_size) }}
                   </span>
                 </v-list-item-title>
 
@@ -152,7 +154,7 @@ async function doDownload(versionId: number, password: string | undefined) {
                     :disabled="v.access_mode === 'expiry' && !!v.expires_at && new Date(v.expires_at) < new Date()"
                     @click="download(v)"
                   >
-                    Download
+                    {{ t('detail.download') }}
                   </v-btn>
                 </template>
               </v-list-item>
@@ -160,7 +162,7 @@ async function doDownload(versionId: number, password: string | undefined) {
           </v-card>
 
           <v-card v-else variant="tonal" class="text-center pa-8">
-            <v-card-text>No versions yet.</v-card-text>
+            <v-card-text>{{ t('detail.empty') }}</v-card-text>
           </v-card>
         </v-col>
       </v-row>
@@ -168,13 +170,13 @@ async function doDownload(versionId: number, password: string | undefined) {
 
     <v-dialog v-model="dialogOpen" max-width="400">
       <v-card>
-        <v-card-title>Password required</v-card-title>
+        <v-card-title>{{ t('detail.passwordTitle') }}</v-card-title>
         <v-card-text>
-          <p class="mb-3">This version is password protected.</p>
+          <p class="mb-3">{{ t('detail.passwordBody') }}</p>
           <v-text-field
             v-if="passwordPrompt"
             v-model="passwordPrompt.password"
-            label="Password"
+            :label="t('common.password')"
             type="password"
             autofocus
             @keyup.enter="submitPassword"
@@ -182,8 +184,8 @@ async function doDownload(versionId: number, password: string | undefined) {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn @click="closePasswordPrompt">Cancel</v-btn>
-          <v-btn color="primary" variant="flat" @click="submitPassword">Continue</v-btn>
+          <v-btn @click="closePasswordPrompt">{{ t('common.cancel') }}</v-btn>
+          <v-btn color="primary" variant="flat" @click="submitPassword">{{ t('detail.passwordContinue') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
