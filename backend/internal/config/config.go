@@ -12,6 +12,7 @@ type Config struct {
 	Database DatabaseConfig `json:"database"`
 	Storage  StorageConfig  `json:"storage"`
 	JWT      JWTConfig      `json:"jwt"`
+	Admin    AdminConfig    `json:"admin"`
 }
 
 type ServerConfig struct {
@@ -45,12 +46,18 @@ type JWTConfig struct {
 	Expire string `json:"expire"` // Go duration 字符串，如 "24h"
 }
 
+type AdminConfig struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 func Default() Config {
 	return Config{
 		Server:   ServerConfig{Addr: ":8080"},
 		Database: DatabaseConfig{DSN: "./data/app.db"},
 		Storage:  StorageConfig{Backend: "local", Local: LocalConfig{Dir: "./data/files"}},
 		JWT:      JWTConfig{Secret: "change-me", Expire: "24h"},
+		// Admin: 留空时启动不会自动创建任何管理员账号
 	}
 }
 

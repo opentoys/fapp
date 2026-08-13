@@ -38,28 +38,24 @@ func main() {
 		log.Fatalf("open db: %v", err)
 	}
 
-	// Auto-create / reset default admin on every startup.
-	// Dev convenience: password is reset to the env var (or default) so the
-	// platform is always reachable. Override APP_ADMIN_USER / APP_ADMIN_PASS
-	// before launching to pick your own credentials.
-	adminUser := os.Getenv("APP_ADMIN_USER")
-	if adminUser == "" {
-		adminUser = "admin"
-	}
-	adminPass := os.Getenv("APP_ADMIN_PASS")
-	if adminPass == "" {
-		adminPass = "admin123"
-	}
-	hash, salt := password.Hash(adminPass)
-	var existing model.User
-	if err := gdb.Where("username = ?", adminUser).First(&existing).Error; err == nil {
-		gdb.Model(&existing).Updates(map[string]any{"password_hash": hash, "salt": salt})
-		log.Printf("reset password for admin %q", adminUser)
+	// Optional: seed / reset the super-admin account from config.
+	// Both `admin.username` and `admin.password` must be set; otherwise the
+	// server starts with no admin user and you must insert one manually
+	// (e.g. via the CLI or an out-of-band DB write).
+	if cfg.Admin.Username != "" && cfg.Admin.Password != "" {
+		hash, salt := password.Hash(cfg.Admin.Password)
+		var existing model.User
+		if err := gdb.Where("username = ?", cfg.Admin.Username).First(&existing).Error; err == nil {
+			gdb.Model(&existing).Updates(map[string]any{"password_hash": hash, "salt": salt})
+			log.Printf("reset password for admin %q", cfg.Admin.Username)
+		} else {
+			gdb.Create(&model.User{Username: cfg.Admin.Username, PasswordHash: hash, Salt: salt})
+			log.Printf("created default admin %q", cfg.Admin.Username)
+		}
+		log.Printf("admin credentials: %s / %s", cfg.Admin.Username, cfg.Admin.Password)
 	} else {
-		gdb.Create(&model.User{Username: adminUser, PasswordHash: hash, Salt: salt})
-		log.Printf("created default admin %q", adminUser)
+		log.Printf("no admin configured; set admin.username and admin.password in config.json to enable login")
 	}
-	log.Printf("admin credentials: %s / %s", adminUser, adminPass)
 
 	var st storage.Storage
 	switch cfg.Storage.Backend {
