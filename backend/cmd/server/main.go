@@ -10,7 +10,6 @@ import (
 	"disapp/internal/config"
 	"disapp/internal/db"
 	"disapp/internal/model"
-	"disapp/internal/password"
 	"disapp/internal/server"
 	"disapp/internal/storage"
 	"disapp/static"
@@ -38,23 +37,19 @@ func main() {
 		log.Fatalf("open db: %v", err)
 	}
 
-	// Optional: seed / reset the super-admin account from config.
-	// Both `admin.username` and `admin.password` must be set; otherwise the
-	// server starts with no admin user and you must insert one manually
-	// (e.g. via the CLI or an out-of-band DB write).
-	if cfg.Admin.Username != "" && cfg.Admin.Password != "" {
-		hash, salt := password.Hash(cfg.Admin.Password)
-		var existing model.User
-		if err := gdb.Where("username = ?", cfg.Admin.Username).First(&existing).Error; err == nil {
-			gdb.Model(&existing).Updates(map[string]any{"password_hash": hash, "salt": salt})
-			log.Printf("reset password for admin %q", cfg.Admin.Username)
-		} else {
-			gdb.Create(&model.User{Username: cfg.Admin.Username, PasswordHash: hash, Salt: salt})
-			log.Printf("created default admin %q", cfg.Admin.Username)
+	// The super-admin lives only in config.json — it is never written to
+	// the users table. If a stale row from an older version is still
+	// present, prune it so the DB reflects the new model.
+	if cfg.Admin.Username != "" {
+		res := gdb.Where("username = ?", cfg.Admin.Username).Delete(&model.User{})
+		if res.Error != nil {
+			log.Printf("warn: prune stale admin row: %v", res.Error)
+		} else if res.RowsAffected > 0 {
+			log.Printf("pruned %d stale admin row(s) for %q", res.RowsAffected, cfg.Admin.Username)
 		}
-		log.Printf("admin credentials: %s / %s", cfg.Admin.Username, cfg.Admin.Password)
+		log.Printf("super-admin: %s (auth handled by config, uid = -1)", cfg.Admin.Username)
 	} else {
-		log.Printf("no admin configured; set admin.username and admin.password in config.json to enable login")
+		log.Printf("no super-admin configured; admin endpoints will be unreachable")
 	}
 
 	var st storage.Storage
