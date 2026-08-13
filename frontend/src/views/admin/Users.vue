@@ -1,32 +1,34 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import { api } from '../../api/client'
-import type { AppItem } from '../../api/types'
+import { useAuth } from '../../composables/useAuth'
+import type { User } from '../../api/types'
 
-const router = useRouter()
-const apps = ref<AppItem[]>([])
-const newName = ref('')
-const createError = ref('')
-const creating = ref(false)
+const { isAuthed } = useAuth()
+const users = ref<User[]>([])
+const newUsername = ref('')
+const newPassword = ref('')
+const error = ref('')
+const deleteTarget = ref<User | null>(null)
+const dialogOpen = ref(false)
 const createDialogOpen = ref(false)
-const deleteTarget = ref<AppItem | null>(null)
-const deleteDialogOpen = ref(false)
 const snackbar = ref('')
 const snackbarOpen = ref(false)
 
 onMounted(load)
+
 async function load() {
   try {
-    apps.value = await api.adminApps()
+    users.value = await api.adminUsers()
   } catch (e) {
-    showSnack((e as Error).message)
+    error.value = (e as Error).message
   }
 }
 
 function openCreate() {
-  newName.value = ''
-  createError.value = ''
+  newUsername.value = ''
+  newPassword.value = ''
+  error.value = ''
   createDialogOpen.value = true
 }
 
@@ -35,30 +37,28 @@ function closeCreate() {
 }
 
 async function confirmCreate() {
-  if (!newName.value.trim()) {
-    createError.value = 'Name is required.'
+  if (!newUsername.value || !newPassword.value) {
+    error.value = 'Username and password are required.'
     return
   }
-  creating.value = true
-  createError.value = ''
+  error.value = ''
   try {
-    const app = await api.createApp({ name: newName.value.trim() })
+    await api.createUser({ username: newUsername.value, password: newPassword.value })
     closeCreate()
-    router.push(`/admin/app/${app.id}`)
+    await load()
+    showSnack('User created')
   } catch (e) {
-    createError.value = (e as Error).message
-  } finally {
-    creating.value = false
+    error.value = (e as Error).message
   }
 }
 
-function askDelete(item: AppItem) {
-  deleteTarget.value = item
-  deleteDialogOpen.value = true
+function askDelete(u: User) {
+  deleteTarget.value = u
+  dialogOpen.value = true
 }
 
 function cancelDelete() {
-  deleteDialogOpen.value = false
+  dialogOpen.value = false
   deleteTarget.value = null
 }
 
@@ -67,11 +67,11 @@ async function confirmDelete() {
   const id = deleteTarget.value.id
   cancelDelete()
   try {
-    await api.deleteApp(id)
+    await api.deleteUser(id)
     await load()
-    showSnack('App deleted')
+    showSnack('User deleted')
   } catch (e) {
-    showSnack((e as Error).message)
+    error.value = (e as Error).message
   }
 }
 
@@ -86,27 +86,45 @@ function fmtDate(s: string): string {
 </script>
 
 <template>
-  <v-container class="pa-6" max-width="1200">
+  <v-container class="pa-6" max-width="1000">
     <div class="d-flex align-center justify-space-between mb-6">
-      <h1 class="text-h4">Applications</h1>
-      <v-btn color="primary" variant="flat" @click="openCreate">
-        New app
+      <h1 class="text-h4">Users</h1>
+      <v-btn
+        v-if="isAuthed"
+        color="primary"
+        variant="flat"
+        @click="openCreate"
+      >
+        New user
       </v-btn>
     </div>
 
+    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable>
+      {{ error }}
+    </v-alert>
+
+    <v-card variant="outlined" class="mb-4">
+      <v-card-text>
+        <div class="text-overline mb-1">Super-admin</div>
+        <div class="text-caption text-medium-emphasis">
+          The super-admin is configured in <code>config.json</code> and is
+          not stored in the database. Actions performed by the super-admin
+          are recorded with operator id <code>-1</code>.
+        </div>
+      </v-card-text>
+    </v-card>
+
     <v-data-table
-      :items="apps"
+      :items="users"
       :headers="[
-        { title: 'Name', key: 'name' },
+        { title: 'Username', key: 'username' },
         { title: 'Created', key: 'created_at' },
         { title: '', key: 'actions', sortable: false, align: 'end' },
       ]"
       :items-per-page="-1"
     >
-      <template #item.name="{ item }">
-        <router-link :to="`/admin/app/${item.id}`" class="text-primary font-weight-medium">
-          {{ item.name }}
-        </router-link>
+      <template #item.username="{ item }">
+        <code>{{ item.username }}</code>
       </template>
       <template #item.created_at="{ item }">
         <code class="text-caption">{{ fmtDate(item.created_at) }}</code>
@@ -125,17 +143,23 @@ function fmtDate(s: string): string {
 
     <v-dialog v-model="createDialogOpen" max-width="480">
       <v-card>
-        <v-card-title>New app</v-card-title>
+        <v-card-title>New user</v-card-title>
         <v-card-text>
           <v-text-field
-            v-model="newName"
-            label="Application name"
+            v-model="newUsername"
+            label="Username"
             autofocus
-            :error="!!createError"
+            :error="!!error"
+          />
+          <v-text-field
+            v-model="newPassword"
+            label="Password"
+            type="password"
+            :error="!!error"
             @keyup.enter="confirmCreate"
           />
-          <v-alert v-if="createError" type="error" variant="tonal" density="compact" class="mt-2">
-            {{ createError }}
+          <v-alert v-if="error" type="error" variant="tonal" density="compact" class="mt-2">
+            {{ error }}
           </v-alert>
         </v-card-text>
         <v-card-actions>
@@ -144,8 +168,7 @@ function fmtDate(s: string): string {
           <v-btn
             color="primary"
             variant="flat"
-            :loading="creating"
-            :disabled="!newName.trim()"
+            :disabled="!newUsername || !newPassword"
             @click="confirmCreate"
           >
             Create
@@ -154,11 +177,11 @@ function fmtDate(s: string): string {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="deleteDialogOpen" max-width="400">
+    <v-dialog v-model="dialogOpen" max-width="400">
       <v-card>
         <v-card-title>Confirm delete</v-card-title>
         <v-card-text>
-          Delete <b>{{ deleteTarget?.name }}</b>? Associated versions and channels will be removed.
+          Delete user <code>{{ deleteTarget?.username }}</code>?
         </v-card-text>
         <v-card-actions>
           <v-spacer />

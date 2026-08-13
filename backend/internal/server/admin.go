@@ -278,3 +278,89 @@ func storageBackendName(s *Server) string {
 	}
 	return s.Config.Storage.Backend
 }
+
+// UsersList returns all non-super-admin accounts.
+func (s *Server) UsersList(w http.ResponseWriter, r *http.Request) {
+	var users []model.User
+	if err := s.DB.Order("id asc").Find(&users).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "查询失败")
+		return
+	}
+	web.SendJson(w, users)
+}
+
+// CreateUser creates a new account. The super-admin is in config.json and
+// is never created here; if the requested username matches the configured
+// super-admin, refuse to avoid a confusing duplicate.
+func (s *Server) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		web.SendError(w, web.CodeBadRequest, "bad request")
+		return
+	}
+	if req.Username == "" || req.Password == "" {
+		web.SendError(w, web.CodeBadRequest, "用户名和密码不能为空")
+		return
+	}
+	if s.Config.Admin.Username != "" && req.Username == s.Config.Admin.Username {
+		web.SendError(w, web.CodeBadRequest, "该用户名为超管保留")
+		return
+	}
+	hash, salt := password.Hash(req.Password)
+	u := model.User{Username: req.Username, PasswordHash: hash, Salt: salt}
+	if err := s.DB.Create(&u).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "创建失败")
+		return
+	}
+	web.SendJson(w, u)
+}
+
+// UpdateUser resets a user's password.
+func (s *Server) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var u model.User
+	if err := s.DB.First(&u, id).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "用户不存在")
+		return
+	}
+	var req struct {
+		Password *string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		web.SendError(w, web.CodeBadRequest, "bad request")
+		return
+	}
+	if req.Password != nil && *req.Password != "" {
+		hash, salt := password.Hash(*req.Password)
+		u.PasswordHash, u.Salt = hash, salt
+	}
+	if err := s.DB.Save(&u).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "保存失败")
+		return
+	}
+	web.SendJson(w, u)
+}
+
+// DeleteUser removes a user. Refuses if it would be the configured
+// super-admin (shouldn't happen, since we never insert that name into the
+// table, but defend in depth).
+func (s *Server) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var u model.User
+	if err := s.DB.First(&u, id).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "用户不存在")
+		return
+	}
+	if s.Config.Admin.Username != "" && u.Username == s.Config.Admin.Username {
+		web.SendError(w, web.CodeBadRequest, "不能删除超管账号")
+		return
+	}
+	if err := s.DB.Delete(&model.User{}, id).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "删除失败")
+		return
+	}
+	web.SendJson(w, map[string]any{"ok": true})
+}

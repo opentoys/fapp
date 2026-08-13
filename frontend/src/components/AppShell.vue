@@ -2,19 +2,20 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from '../composables/useTheme'
+import { useAuth } from '../composables/useAuth'
 import { mdiWeatherSunny, mdiWeatherNight, mdiThemeLightDark, mdiLogout, mdiLogin } from '@mdi/js'
 
 const route = useRoute()
 const router = useRouter()
 const { choice, cycle } = useTheme()
-
-const isAuthed = computed(() => !!localStorage.getItem('token'))
+const { isAuthed, clearToken } = useAuth()
 
 const tabs = computed(() => {
   if (!isAuthed.value) return []
   return [
     { label: 'Apps', to: '/' },
     { label: 'Admin', to: '/admin' },
+    { label: 'Users', to: '/admin/users' },
     { label: 'Upload', to: '/admin/upload' },
   ]
 })
@@ -28,7 +29,7 @@ const themeIcon = computed(() => {
 const themeLabel = computed(() => `Theme: ${choice.value}`)
 
 function logout() {
-  localStorage.removeItem('token')
+  clearToken()
   router.push('/login')
 }
 </script>
