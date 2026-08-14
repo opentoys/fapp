@@ -137,6 +137,7 @@ function dataUriToBlob(uri: string): Blob {
 }
 
 async function submit() {
+  if (loading.value) return
   if (!file.value || !appId.value) {
     error.value = t('upload.required')
     return
@@ -208,18 +209,18 @@ async function submit() {
       <Card>
         <CardContent class="grid gap-4">
           <div class="grid gap-2">
-            <Label>{{ t('upload.app') }}</Label>
-            <AppSelect v-model="appId" :items="appItems" :placeholder="t('upload.app')" />
+            <Label for="upload-app">{{ t('upload.app') }}</Label>
+            <AppSelect id="upload-app" v-model="appId" :items="appItems" :placeholder="t('upload.app')" />
           </div>
 
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div class="grid gap-2">
-              <Label>{{ t('upload.releaseType') }}</Label>
-              <AppSelect v-model="releaseType" :items="releaseItems" />
+              <Label for="upload-release-type">{{ t('upload.releaseType') }}</Label>
+              <AppSelect id="upload-release-type" v-model="releaseType" :items="releaseItems" />
             </div>
             <div class="grid gap-2">
-              <Label>{{ t('upload.platform') }}</Label>
-              <AppSelect v-model="platform" :items="platformItems" :placeholder="t('upload.platform')" />
+              <Label for="upload-platform">{{ t('upload.platform') }}</Label>
+              <AppSelect id="upload-platform" v-model="platform" :items="platformItems" :placeholder="t('upload.platform')" />
             </div>
           </div>
 
@@ -236,20 +237,20 @@ async function submit() {
 
           <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div class="grid gap-2">
-              <Label>{{ t('upload.versionName') }}</Label>
-              <Input v-model="versionName" :placeholder="'1.0.0'" />
+              <Label for="upload-version-name">{{ t('upload.versionName') }}</Label>
+              <Input id="upload-version-name" v-model="versionName" :placeholder="'1.0.0'" />
             </div>
             <div class="grid gap-2">
-              <Label>{{ t('upload.versionCode') }}</Label>
-              <Input v-model.number="versionCode" type="number" :placeholder="'1'" />
+              <Label for="upload-version-code">{{ t('upload.versionCode') }}</Label>
+              <Input id="upload-version-code" v-model.number="versionCode" type="number" :placeholder="'1'" />
             </div>
           </div>
 
           <p class="text-muted-foreground text-xs">{{ t('upload.parseHint') }}</p>
 
           <div class="grid gap-2">
-            <Label>{{ t('upload.changelog') }}</Label>
-            <Textarea v-model="changelog" rows="3" />
+            <Label for="upload-changelog">{{ t('upload.changelog') }}</Label>
+            <Textarea id="upload-changelog" v-model="changelog" rows="3" />
           </div>
         </CardContent>
       </Card>

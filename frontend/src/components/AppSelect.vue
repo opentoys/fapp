@@ -14,6 +14,7 @@ const props = withDefaults(defineProps<{
   placeholder?: string
   class?: string
   disabled?: boolean
+  id?: string
 }>(), { placeholder: 'Select…' })
 
 const emit = defineEmits<{ 'update:modelValue': [value: string | number | null] }>()
@@ -34,6 +35,7 @@ function fromStr(s: string): string | number | null {
     @update:model-value="(s: string) => emit('update:modelValue', fromStr(s))"
   >
     <SelectTrigger
+      :id="props.id"
       :class="cn('border-input bg-transparent shadow-xs data-[placeholder]:text-muted-foreground flex h-10 w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50', props.class)"
     >
       <SelectValue :placeholder="props.placeholder" />
