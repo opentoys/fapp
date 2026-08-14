@@ -4,11 +4,16 @@ export interface User {
   created_at: string
 }
 
+export type AccessMode = 'public' | 'password' | 'expiry'
+
 export interface AppItem {
   id: number
   name: string
   icon: string
   description: string
+  screenshots: string[]
+  access_mode: AccessMode
+  expires_at: string | null
   created_at: string
   latest_version: Version | null
 }
@@ -33,8 +38,6 @@ export interface Version {
   icon_url: string
   sha256: string
   changelog: string
-  access_mode: 'public' | 'password' | 'expiry'
-  expires_at: string | null
   published: boolean
   enabled: boolean
   download_count: number
@@ -51,4 +54,11 @@ export interface ApiResp<T> {
   code: number
   msg: string
   data: T
+}
+
+export interface DownloadsTimeSeries {
+  dates: string[]
+  total: number[]
+  // Parallel to dates; null when no platform/version filter is active.
+  selected: number[] | null
 }

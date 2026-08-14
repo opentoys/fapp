@@ -38,7 +38,7 @@ cruft. The goal is to replace the entire UI layer with **Tailwind CSS + shadcn-u
 | `@mdi/js`, `@iconify/vue`, `@iconify-json/material-symbols` | `lucide-vue-next` |
 | `v-snackbar` | `vue-sonner` (shadcn Toaster) |
 
-New dependencies: `tailwindcss`, `@tailwindcss/vite`, `radix-vue`,
+New dependencies: `tailwindcss`, `@tailwindcss/vite`, `reka-ui`,
 `class-variance-authority`, `clsx`, `tailwind-merge`, `tailwind-variants`,
 `@vueuse/core`, `lucide-vue-next`, `vue-sonner`.
 
@@ -98,7 +98,7 @@ Plus `src/lib/utils.ts` exporting `cn()` (clsx + tailwind-merge).
 | `v-avatar` | `Avatar` (`AvatarImage`/`AvatarFallback`) | |
 | `v-menu` | `DropdownMenu` | user menu, language, theme |
 | `v-data-table` | `Table` primitives + `v-for` | users, versions, recent-logs |
-| `v-tabs` / `v-window` | `Tabs` (radix) | AdminApp overview/versions/stats |
+| `v-tabs` / `v-window` | `Tabs` (reka) | AdminApp overview/versions/stats |
 | `v-radio-group` | `RadioGroup` | access-mode (public/password/expiry) |
 | `v-progress-linear` | `Skeleton` / `Loader2` spinner | chart loading |
 | `v-file-input` | custom `FileUpload.vue` | hidden `<input type=file>` + styled trigger + optional drag-drop zone |
@@ -152,7 +152,7 @@ Plus `src/lib/utils.ts` exporting `cn()` (clsx + tailwind-merge).
 
 - Remove: `vuetify`, `vite-plugin-vuetify`, `sass`, `@mdi/js`, `@iconify/vue`,
   `@iconify-json/material-symbols`.
-- Add: `tailwindcss`, `@tailwindcss/vite`, `radix-vue`, `class-variance-authority`,
+- Add: `tailwindcss`, `@tailwindcss/vite`, `reka-ui`, `class-variance-authority`,
   `clsx`, `tailwind-merge`, `tailwind-variants`, `@vueuse/core`, `lucide-vue-next`,
   `vue-sonner`.
 
@@ -168,7 +168,7 @@ Plus `src/lib/utils.ts` exporting `cn()` (clsx + tailwind-merge).
 
 ## Risks / Notes
 
-- **Radix-vue version drift**: hand-written components pin to a known radix-vue API; verify
+- **reka-ui version drift**: hand-written components pin to a known reka-ui API; verify
   against the installed version (peer-dep) if behavior diverges.
 - **Table + Tabs + Select interplay**: all Radix-based; confirm focus rings and controlled
   `v-model` work as expected in vue-tsc.

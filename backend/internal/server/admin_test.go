@@ -109,6 +109,9 @@ func TestAdminAppsListAndDelete(t *testing.T) {
 	if len(res.Data) != 1 {
 		t.Fatalf("apps = %d", len(res.Data))
 	}
+	if res.Data[0].Screenshots == nil || len(res.Data[0].Screenshots) != 0 {
+		t.Fatalf("screenshots must serialize as an empty array, got %v", res.Data[0].Screenshots)
+	}
 
 	delReq := authReq(http.MethodDelete, "/api/v1/admin/apps/"+itoa(app.ID), token, nil)
 	delReq.SetPathValue("id", itoa(app.ID))
@@ -170,6 +173,139 @@ func TestAdminUploadAppIcon(t *testing.T) {
 	s.DeleteApp(httptest.NewRecorder(), delReq)
 	if _, err := s.Storage.Open(nil, key); err == nil {
 		t.Fatal("icon file should be deleted with the app")
+	}
+}
+
+func TestUpdateAppAccessPassword(t *testing.T) {
+	s := testServer(t)
+	app := model.App{Name: "a"}
+	s.DB.Create(&app)
+
+	// Set password scope; the credential must be hashed and stored.
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"access_mode":"password","password":"secret"}`))
+	req.SetPathValue("id", itoa(app.ID))
+	w := httptest.NewRecorder()
+	s.UpdateApp(w, req)
+	var res struct {
+		Code int `json:"code"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 0 {
+		t.Fatalf("res = %s", w.Body.String())
+	}
+	var reload model.App
+	s.DB.First(&reload, app.ID)
+	if reload.AccessMode != model.AccessPassword || reload.PasswordHash == "" {
+		t.Fatalf("reload = %+v", reload)
+	}
+
+	// Switching back to public clears the stored credential.
+	req2 := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"access_mode":"public"}`))
+	req2.SetPathValue("id", itoa(app.ID))
+	s.UpdateApp(httptest.NewRecorder(), req2)
+	s.DB.First(&reload, app.ID)
+	if reload.AccessMode != model.AccessPublic || reload.PasswordHash != "" || reload.Salt != "" {
+		t.Fatalf("reload after public = %+v", reload)
+	}
+}
+
+func TestAdminScreenshotUploadAndDelete(t *testing.T) {
+	s := testServer(t)
+	app := model.App{Name: "a"}
+	s.DB.Create(&app)
+
+	// Upload a screenshot.
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, _ := mw.CreateFormFile("screenshot", "shot.png")
+	fw.Write(pngData)
+	mw.Close()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/apps/"+itoa(app.ID)+"/screenshots", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.SetPathValue("id", itoa(app.ID))
+	w := httptest.NewRecorder()
+	s.UploadAppScreenshot(w, req)
+	var res struct {
+		Code int `json:"code"`
+		Data struct {
+			Screenshots []string `json:"screenshots"`
+		} `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 0 || len(res.Data.Screenshots) != 1 {
+		t.Fatalf("res = %s", w.Body.String())
+	}
+	url := res.Data.Screenshots[0]
+	key := strings.TrimPrefix(url, "/api/v1/files/")
+	if rc, err := s.Storage.Open(nil, key); err != nil {
+		t.Fatalf("screenshot not stored: %v", err)
+	} else {
+		got, _ := io.ReadAll(rc)
+		rc.Close()
+		if !bytes.Equal(got, pngData) {
+			t.Fatalf("screenshot bytes mismatch: got %d bytes", len(got))
+		}
+	}
+
+	// Deleting the app removes the screenshot file too.
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/apps/"+itoa(app.ID), nil)
+	delReq.SetPathValue("id", itoa(app.ID))
+	s.DeleteApp(httptest.NewRecorder(), delReq)
+	if _, err := s.Storage.Open(nil, key); err == nil {
+		t.Fatal("screenshot file should be deleted with the app")
+	}
+}
+
+func TestAdminDeleteAppScreenshot(t *testing.T) {
+	s := testServer(t)
+	app := model.App{Name: "a"}
+	s.DB.Create(&app)
+
+	// Upload two, delete one.
+	urls := []string{}
+	for i := 0; i < 2; i++ {
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		fw, _ := mw.CreateFormFile("screenshot", "shot.png")
+		fw.Write(pngData)
+		mw.Close()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/apps/"+itoa(app.ID)+"/screenshots", &buf)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		req.SetPathValue("id", itoa(app.ID))
+		w := httptest.NewRecorder()
+		s.UploadAppScreenshot(w, req)
+		var res struct {
+			Code int `json:"code"`
+			Data struct {
+				Screenshots []string `json:"screenshots"`
+			} `json:"data"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &res)
+		if res.Code != 0 {
+			t.Fatalf("res = %s", w.Body.String())
+		}
+		urls = res.Data.Screenshots
+	}
+	if len(urls) != 2 {
+		t.Fatalf("screenshots = %d", len(urls))
+	}
+
+	del := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/apps/"+itoa(app.ID)+"/screenshots?url="+urls[0], nil)
+	del.SetPathValue("id", itoa(app.ID))
+	w := httptest.NewRecorder()
+	s.DeleteAppScreenshot(w, del)
+	var res struct {
+		Code int `json:"code"`
+		Data struct {
+			Screenshots []string `json:"screenshots"`
+		} `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 0 || len(res.Data.Screenshots) != 1 || res.Data.Screenshots[0] != urls[1] {
+		t.Fatalf("res = %s", w.Body.String())
+	}
+	if _, err := s.Storage.Open(nil, strings.TrimPrefix(urls[0], "/api/v1/files/")); err == nil {
+		t.Fatal("deleted screenshot file should be gone")
 	}
 }
 

@@ -1,6 +1,9 @@
 .vscode/
 .claude/
 .agent/
+.agents/
+.superpowers/
+skills-lock.json
 bin/
 data/
 config.json

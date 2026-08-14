@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { mdiDownload } from '@mdi/js'
 import { api } from '../api/client'
 import { useI18n } from '../composables/useI18n'
+import { loadDownloadApp } from '../composables/useDownloadApp'
 import { detectUA } from '../utils/ua'
 import { PLATFORMS } from '../constants/platform'
 import VersionPanel from '../components/VersionPanel.vue'
@@ -62,21 +63,29 @@ function closePasswordPrompt() {
 }
 
 onMounted(load)
+// Reload when navigating between two /app/:name URLs (the route record is
+// reused, so onMounted alone would not re-run).
+watch(() => route.params.name, (name) => { if (name) load() })
+
 async function load() {
   try {
-    data.value = await api.appDetail(Number(route.params.id))
+    data.value = await loadDownloadApp(String(route.params.name))
   } catch (e) {
     error.value = (e as Error).message
   }
 }
 
-function isExpired(v: { access_mode: string; expires_at: string | null } | null): boolean {
-  return !!v && v.access_mode === 'expiry' && !!v.expires_at && new Date(v.expires_at) < new Date()
+// Access scope is set once at the app level; all versions share it.
+const appAccess = computed(() => data.value?.app.access_mode ?? 'public')
+const appExpiresAt = computed(() => data.value?.app.expires_at ?? null)
+
+function isExpired(): boolean {
+  return appAccess.value === 'expiry' && !!appExpiresAt.value && new Date(appExpiresAt.value) < new Date()
 }
 
 async function download(v: Version | null) {
   if (!v) return
-  if (v.access_mode === 'password') {
+  if (appAccess.value === 'password') {
     openPasswordPrompt(v.id)
     return
   }
@@ -123,6 +132,8 @@ async function doDownload(versionId: number, password: string | undefined) {
           :version="mobileVersion"
           :fallback-name="data.app.name"
           :fallback-icon="data.app.icon"
+          :access-mode="data.app.access_mode"
+          :expires-at="data.app.expires_at"
           :no-download="true"
           @download="download"
         />
@@ -141,6 +152,8 @@ async function doDownload(versionId: number, password: string | undefined) {
               :version="version"
               :fallback-name="data.app.name"
               :fallback-icon="data.app.icon"
+              :access-mode="data.app.access_mode"
+              :expires-at="data.app.expires_at"
               @download="download"
             />
           </v-card>
@@ -159,7 +172,7 @@ async function doDownload(versionId: number, password: string | undefined) {
         color="primary"
         size="large"
         variant="flat"
-        :disabled="isExpired(mobileVersion)"
+        :disabled="isExpired()"
         @click="download(mobileVersion)"
       >
         <v-icon start :icon="mdiDownload" />

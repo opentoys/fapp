@@ -10,6 +10,10 @@ const props = defineProps<{
   version: Version
   fallbackName: string
   fallbackIcon: string
+  // App-level access scope (set once on the app's Overview page). Download
+  // gating uses this instead of per-version fields.
+  accessMode?: string
+  expiresAt?: string | null
   // When true, the inline download button is omitted (e.g. the mobile hero,
   // which renders the download action as a floating bottom bar instead).
   noDownload?: boolean
@@ -42,8 +46,8 @@ const releaseColor = computed(() => {
   return 'primary'
 })
 
-function isExpired(v: { access_mode: string; expires_at: string | null } | null): boolean {
-  return !!v && v.access_mode === 'expiry' && !!v.expires_at && new Date(v.expires_at) < new Date()
+function isExpired(): boolean {
+  return props.accessMode === 'expiry' && !!props.expiresAt && new Date(props.expiresAt) < new Date()
 }
 
 function fmtSize(n: number): string {
@@ -123,7 +127,7 @@ function fmtSize(n: number): string {
         color="primary"
         size="large"
         variant="flat"
-        :disabled="isExpired(version)"
+        :disabled="isExpired()"
         @click="emit('download', version)"
       >
         <v-icon start :icon="mdiDownload" />
