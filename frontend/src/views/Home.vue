@@ -2,6 +2,10 @@
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api/client'
 import { useI18n } from '../composables/useI18n'
+import { Badge } from '../components/ui/badge'
+import { Card, CardContent } from '../components/ui/card'
+import { Alert } from '../components/ui/alert'
+import { Avatar } from '../components/ui/avatar'
 import type { AppItem } from '../api/types'
 
 const { t } = useI18n()
@@ -30,88 +34,64 @@ function fmtSize(n: number): string {
   return n + ' B'
 }
 
-function accessColor(mode: string): string {
+function accessVariant(mode: string): 'success' | 'warning' | 'secondary' {
   if (mode === 'public') return 'success'
   if (mode === 'password' || mode === 'expiry') return 'warning'
-  return 'grey'
-}
-
-function accessLabel(mode: string): string {
-  return t(`access.${mode}`)
+  return 'secondary'
 }
 </script>
 
 <template>
-  <v-container class="pa-6" max-width="1200">
-    <h1 class="text-h4 mb-6">{{ t('home.title') }}</h1>
+  <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+    <h1 class="text-2xl font-semibold tracking-tight mb-6">{{ t('home.title') }}</h1>
 
-    <v-alert v-if="error" type="error" variant="tonal" class="mb-4">
-      {{ error }}
-    </v-alert>
+    <Alert v-if="error" variant="destructive" class="mb-4">{{ error }}</Alert>
 
-    <v-row class="mb-6">
-      <v-col cols="12" sm="4">
-        <v-card variant="tonal">
-          <v-card-text>
-            <div class="text-overline">{{ t('home.stat.apps') }}</div>
-            <div class="text-h4">{{ apps.length }}</div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="4">
-        <v-card variant="tonal">
-          <v-card-text>
-            <div class="text-overline">{{ t('home.stat.versions') }}</div>
-            <div class="text-h4">{{ totalVersions }}</div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-      <v-col cols="12" sm="4">
-        <v-card variant="tonal" color="primary">
-          <v-card-text>
-            <div class="text-overline">{{ t('home.stat.downloads') }}</div>
-            <div class="text-h4">{{ totalDownloads }}</div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+    <div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <Card>
+        <CardContent class="!py-4">
+          <div class="text-muted-foreground text-xs uppercase tracking-wider">{{ t('home.stat.apps') }}</div>
+          <div class="text-3xl font-semibold">{{ apps.length }}</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent class="!py-4">
+          <div class="text-muted-foreground text-xs uppercase tracking-wider">{{ t('home.stat.versions') }}</div>
+          <div class="text-3xl font-semibold">{{ totalVersions }}</div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent class="!py-4">
+          <div class="text-muted-foreground text-xs uppercase tracking-wider">{{ t('home.stat.downloads') }}</div>
+          <div class="text-3xl font-semibold">{{ totalDownloads }}</div>
+        </CardContent>
+      </Card>
+    </div>
 
-    <v-row v-if="apps.length">
-      <v-col
+    <div v-if="apps.length" class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
+      <RouterLink
         v-for="a in apps"
         :key="a.id"
-        cols="12"
-        sm="6"
-        md="4"
+        :to="`/app/${encodeURIComponent(a.name)}`"
+        class="group rounded-xl border bg-card text-card-foreground p-5 shadow-sm transition-colors hover:bg-accent/50"
       >
-        <v-card :to="`/app/${encodeURIComponent(a.name)}`" hover>
-          <v-card-text>
-            <div class="d-flex align-center mb-2">
-              <v-avatar v-if="a.icon" :image="a.icon" size="40" class="mr-3" />
-              <v-avatar v-else color="primary" size="40" class="mr-3">
-                <span class="text-h6">{{ a.name.charAt(0).toUpperCase() }}</span>
-              </v-avatar>
-              <span class="text-h6">{{ a.name }}</span>
-            </div>
-            <div v-if="a.latest_version" class="text-body-2 text-medium-emphasis mb-1">
-              <code>{{ a.latest_version.version_name }}</code>
-              · {{ fmtSize(a.latest_version.file_size) }}
-            </div>
-            <v-chip
-              :color="accessColor(a.access_mode)"
-              size="small"
-              variant="tonal"
-            >
-              {{ accessLabel(a.access_mode) }}
-            </v-chip>
-            <p v-if="a.description" class="text-body-2 mt-2 mb-0">{{ a.description }}</p>
-          </v-card-text>
-        </v-card>
-      </v-col>
-    </v-row>
+        <div class="mb-3 flex items-center gap-3">
+          <Avatar :src="a.icon" :fallback="a.name.charAt(0).toUpperCase()" class="size-10" />
+          <span class="truncate font-semibold">{{ a.name }}</span>
+        </div>
+        <div v-if="a.latest_version" class="text-muted-foreground mb-1 text-sm">
+          <code>{{ a.latest_version.version_name }}</code>
+          · {{ fmtSize(a.latest_version.file_size) }}
+        </div>
+        <Badge :variant="accessVariant(a.access_mode)">
+          {{ t('access.' + a.access_mode) }}
+        </Badge>
+        <p v-if="a.description" class="text-muted-foreground mt-2 text-sm">{{ a.description }}</p>
+      </RouterLink>
+    </div>
 
-    <v-card v-else-if="!error" variant="tonal" class="text-center pa-8">
-      <v-card-text>{{ t('home.empty') }}</v-card-text>
-    </v-card>
-  </v-container>
+    <Card v-else-if="!error" class="text-center">
+      <CardContent class="py-12 text-muted-foreground">{{ t('home.empty') }}</CardContent>
+    </Card>
+  </div>
 </template>
