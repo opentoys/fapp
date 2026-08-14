@@ -32,9 +32,11 @@ func TestVerifyPassword(t *testing.T) {
 	setAppAccess(s, app, model.AccessPassword, "abc", nil)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
-		FileType: "apk", Published: true, Enabled: true, StorageKey: "1/3/a.apk",
+		FileType: "apk", StorageKey: "1/3/a.apk",
 	}
 	s.DB.Create(&v)
+	// Access checks only apply to the app's current version.
+	s.DB.Model(app).Update("current_version_id", v.ID)
 
 	body := bytes.NewBufferString(`{"password":"abc"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/versions/"+itoa(v.ID)+"/verify", body)
@@ -56,9 +58,10 @@ func TestDownloadWrongPassword(t *testing.T) {
 	setAppAccess(s, app, model.AccessPassword, "abc", nil)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
-		FileType: "apk", Published: true, Enabled: true, StorageKey: "1/3/a.apk",
+		FileType: "apk", StorageKey: "1/3/a.apk",
 	}
 	s.DB.Create(&v)
+	s.DB.Model(app).Update("current_version_id", v.ID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/versions/"+itoa(v.ID)+"/download?password=wrong", nil)
 	req.SetPathValue("id", itoa(v.ID))
@@ -80,9 +83,10 @@ func TestDownloadExpired(t *testing.T) {
 	setAppAccess(s, app, model.AccessExpiry, "", &past)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
-		FileType: "apk", Published: true, Enabled: true, StorageKey: "1/3/a.apk",
+		FileType: "apk", StorageKey: "1/3/a.apk",
 	}
 	s.DB.Create(&v)
+	s.DB.Model(app).Update("current_version_id", v.ID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/versions/"+itoa(v.ID)+"/download", nil)
 	req.SetPathValue("id", itoa(v.ID))
@@ -102,9 +106,10 @@ func TestDownloadCounts(t *testing.T) {
 	app := seedApp(t, s)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
-		FileType: "apk", Published: true, Enabled: true, StorageKey: "1/3/a.apk",
+		FileType: "apk", StorageKey: "1/3/a.apk",
 	}
 	s.DB.Create(&v)
+	s.DB.Model(app).Update("current_version_id", v.ID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/versions/"+itoa(v.ID)+"/download", nil)
 	req.SetPathValue("id", itoa(v.ID))
@@ -138,9 +143,10 @@ func TestInstallCounts(t *testing.T) {
 	app := seedApp(t, s)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
-		FileType: "apk", Published: true, Enabled: true, StorageKey: "1/3/a.apk",
+		FileType: "apk", StorageKey: "1/3/a.apk",
 	}
 	s.DB.Create(&v)
+	s.DB.Model(app).Update("current_version_id", v.ID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/versions/"+itoa(v.ID)+"/install", nil)
 	req.SetPathValue("id", itoa(v.ID))
@@ -153,6 +159,55 @@ func TestInstallCounts(t *testing.T) {
 	s.DB.First(&reload, v.ID)
 	if reload.InstallCount != 1 {
 		t.Fatalf("install_count = %d", reload.InstallCount)
+	}
+}
+
+// Only the app's current version is downloadable; a stale link to another
+// version must be rejected.
+func TestDownloadNonCurrentVersionForbidden(t *testing.T) {
+	s := testServer(t)
+	app := seedApp(t, s)
+	other := model.Version{
+		AppID: app.ID, VersionName: "0.9.0", VersionCode: 9, FileName: "old.apk",
+		FileType: "apk", StorageKey: "1/9/old.apk",
+	}
+	s.DB.Create(&other)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/versions/"+itoa(other.ID)+"/download", nil)
+	req.SetPathValue("id", itoa(other.ID))
+	w := httptest.NewRecorder()
+	s.Download(w, req)
+	var res struct {
+		Code int `json:"code"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 403 {
+		t.Fatalf("non-current version must be rejected, got code=%d body=%s", res.Code, w.Body.String())
+	}
+}
+
+// A download of the current version must be refused once the app is taken down.
+func TestDownloadUnpublishedAppNotFound(t *testing.T) {
+	s := testServer(t)
+	app := seedApp(t, s)
+	v := model.Version{
+		AppID: app.ID, VersionName: "1.0.0", VersionCode: 1, FileName: "a.apk",
+		FileType: "apk", StorageKey: "1/3/a.apk",
+	}
+	s.DB.Create(&v)
+	s.DB.Model(app).Update("current_version_id", v.ID)
+	s.DB.Model(app).Update("published", false)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/versions/"+itoa(v.ID)+"/download", nil)
+	req.SetPathValue("id", itoa(v.ID))
+	w := httptest.NewRecorder()
+	s.Download(w, req)
+	var res struct {
+		Code int `json:"code"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 404 {
+		t.Fatalf("taken-down app must be not-found, got code=%d body=%s", res.Code, w.Body.String())
 	}
 }
 

@@ -6,7 +6,6 @@ import { api } from '../api/client'
 import { useI18n } from '../composables/useI18n'
 import { loadDownloadApp } from '../composables/useDownloadApp'
 import { detectUA } from '../utils/ua'
-import { fmtDate } from '../utils/format'
 import { Alert } from '../components/ui/alert'
 import { Avatar } from '../components/ui/avatar'
 import { Badge } from '../components/ui/badge'
@@ -27,15 +26,8 @@ const error = ref('')
 const passwordPrompt = ref<{ versionId: number; password: string } | null>(null)
 const dialogOpen = ref(false)
 
-// Newest first by creation time.
-const versions = computed(() =>
-  [...(data.value?.versions ?? [])].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  )
-)
-
-// A single-platform app shows one latest version, then a list of the rest.
-const latest = computed(() => versions.value[0] ?? null)
+// The backend exposes only the app's single current version.
+const latest = computed(() => data.value?.versions[0] ?? null)
 
 function openPasswordPrompt(versionId: number) {
   passwordPrompt.value = { versionId, password: '' }
@@ -92,18 +84,6 @@ async function doDownload(versionId: number, password: string | undefined) {
   }
 }
 
-function releaseVariant(rt: string): 'default' | 'info' | 'warning' {
-  if (rt === 'beta') return 'info'
-  if (rt === 'canary') return 'warning'
-  return 'default'
-}
-
-function fmtSize(n: number): string {
-  if (n > 1024 * 1024 * 1024) return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB'
-  if (n > 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB'
-  if (n > 1024) return (n / 1024).toFixed(1) + ' KB'
-  return n + ' B'
-}
 </script>
 
 <template>
@@ -137,7 +117,7 @@ function fmtSize(n: number): string {
         />
       </div>
 
-      <!-- Desktop: latest version card + full version list -->
+      <!-- Desktop: current version card (the only publicly visible version) -->
       <template v-else-if="latest">
         <div class="max-w-[560px]">
           <Card class="p-5">
@@ -152,32 +132,6 @@ function fmtSize(n: number): string {
               />
             </CardContent>
           </Card>
-        </div>
-
-        <div v-if="versions.length > 1" class="mt-6">
-          <div class="mb-3 text-sm font-medium">{{ t('detail.versions') }}</div>
-          <div class="grid gap-2">
-            <Card v-for="v in versions.slice(1)" :key="v.id" class="p-4">
-              <div class="flex items-center justify-between gap-3">
-                <div class="flex min-w-0 items-center gap-3">
-                  <Avatar :src="v.icon_url || data.app.icon" :fallback="(v.version_name || '?').charAt(0).toUpperCase()" class="size-9" />
-                  <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-2">
-                      <span class="font-medium">{{ v.version_name }}</span>
-                      <Badge v-if="v.release_type" :variant="releaseVariant(v.release_type)" class="text-xs">
-                        {{ t('release.' + v.release_type) }}
-                      </Badge>
-                    </div>
-                    <div class="text-muted-foreground text-xs">{{ fmtSize(v.file_size) }} · {{ fmtDate(v.created_at) }}</div>
-                  </div>
-                </div>
-                <Button :disabled="isExpired()" @click="download(v)">
-                  <Download class="size-4" />
-                  {{ t('detail.download') }}
-                </Button>
-              </div>
-            </Card>
-          </div>
         </div>
       </template>
 

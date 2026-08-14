@@ -13,7 +13,6 @@ import { Avatar } from '../../components/ui/avatar'
 import { Badge } from '../../components/ui/badge'
 import { Card, CardContent, CardTitle } from '../../components/ui/card'
 import { Alert } from '../../components/ui/alert'
-import { Dialog } from '../../components/ui/dialog'
 import { AlertDialog } from '../../components/ui/alert-dialog'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
@@ -245,7 +244,7 @@ async function saveAccess() {
   if (accessSaving.value) return
   if (!data.value) return
   if (accessMode.value === 'password' && !accessPassword.value) {
-    accessError.value = t('adminApp.publishRequired')
+    accessError.value = t('adminApp.passwordRequired')
     return
   }
   accessError.value = ''
@@ -268,38 +267,23 @@ async function saveAccess() {
   }
 }
 
-// --- Publish dialog (visibility only; access is app-level in Overview) ---
-const publishDialogOpen = ref(false)
-const publishTarget = ref<Version | null>(null)
-const publishError = ref('')
-const publishLoading = ref(false)
+// --- Overview: publish / take down the whole app ---
+const publishSaving = ref(false)
 
-function openPublish(v: Version) {
-  publishTarget.value = v
-  publishError.value = ''
-  publishDialogOpen.value = true
-}
-
-function closePublish() {
-  publishTarget.value = null
-  publishDialogOpen.value = false
-}
-
-async function submitPublish() {
-  const v = publishTarget.value
-  if (!v) return
-  if (publishLoading.value) return
-  publishError.value = ''
-  publishLoading.value = true
+async function togglePublish() {
+  if (!data.value || publishSaving.value) return
+  publishSaving.value = true
+  const app = data.value.app
+  const next = !app.published
   try {
-    await api.updateVersion(v.id, { published: true, enabled: true })
-    closePublish()
+    await api.updateApp(app.id, { published: next })
     await load()
-    showSnack(t('adminApp.statusPublished'))
+    syncOverview()
+    showSnack(next ? t('adminApp.appPublished') : t('adminApp.appUnpublished'))
   } catch (e) {
-    publishError.value = (e as Error).message
+    error.value = (e as Error).message
   } finally {
-    publishLoading.value = false
+    publishSaving.value = false
   }
 }
 
@@ -352,45 +336,20 @@ async function deleteVersion() {
   }
 }
 
-// Draft → open publish dialog; published+enabled → take down;
-// published+disabled → re-enable.
-function onMainAction(v: Version) {
-  if (!v.published) { openPublish(v); return }
-  if (v.enabled) takeDown(v)
-  else reEnable(v)
+// The app's single current version; only it is publicly downloadable.
+function isCurrent(v: Version): boolean {
+  return !!data.value && data.value.app.current_version_id === v.id
 }
 
-async function takeDown(v: Version) {
+async function setCurrent(v: Version) {
+  if (!data.value) return
   try {
-    await api.updateVersion(v.id, { enabled: false })
+    await api.setCurrentVersion(data.value.app.id, v.id)
     await load()
+    showSnack(t('adminApp.currentVersionSaved'))
   } catch (e) {
     error.value = (e as Error).message
   }
-}
-
-async function reEnable(v: Version) {
-  try {
-    await api.updateVersion(v.id, { enabled: true })
-    await load()
-  } catch (e) {
-    error.value = (e as Error).message
-  }
-}
-
-function statusBadge(v: Version): 'secondary' | 'success' | 'destructive' {
-  if (!v.published) return 'secondary'
-  return v.enabled ? 'success' : 'destructive'
-}
-
-function statusLabel(v: Version): string {
-  if (!v.published) return t('adminApp.statusDraft')
-  return v.enabled ? t('adminApp.statusPublished') : t('adminApp.statusTakenDown')
-}
-
-function actionLabel(v: Version): string {
-  if (!v.published) return t('adminApp.publish')
-  return v.enabled ? t('adminApp.takeDown') : t('adminApp.rePublish')
 }
 
 // Newest first by creation time.
@@ -401,15 +360,7 @@ const versions = computed(() =>
 )
 
 // --- Version filters ---
-const statusFilter = ref<'all' | 'draft' | 'published' | 'taken_down'>('all')
 const releaseFilter = ref<'all' | ReleaseType>('all')
-
-const statusFilterItems = computed(() => [
-  { title: t('adminApp.filterAll'), value: 'all' },
-  { title: t('adminApp.statusDraft'), value: 'draft' },
-  { title: t('adminApp.statusPublished'), value: 'published' },
-  { title: t('adminApp.statusTakenDown'), value: 'taken_down' },
-])
 
 const releaseFilterItems = computed(() => [
   { title: t('adminApp.filterAll'), value: 'all' },
@@ -424,35 +375,15 @@ function archLabel(arch: string): string {
 
 const filteredVersions = computed(() =>
   versions.value.filter((v) => {
-    if (statusFilter.value === 'draft' && v.published) return false
-    if (statusFilter.value === 'published' && !(v.published && v.enabled)) return false
-    if (statusFilter.value === 'taken_down' && v.enabled) return false
     if (releaseFilter.value !== 'all' && v.release_type !== releaseFilter.value) return false
     return true
   })
 )
 
-// Effective download access for every version, set once at the app level.
-const appAccessMode = computed(() => data.value?.app.access_mode || 'public')
-
 function releaseBadge(rt: string): 'default' | 'info' | 'warning' {
   if (rt === 'beta') return 'info'
   if (rt === 'canary') return 'warning'
   return 'default'
-}
-
-function accessBadge(appAccess: string, v: Version): 'secondary' | 'success' | 'warning' | 'destructive' {
-  if (!v.published) return 'secondary'
-  if (!v.enabled) return 'destructive'
-  if (appAccess === 'public') return 'success'
-  if (appAccess === 'password' || appAccess === 'expiry') return 'warning'
-  return 'secondary'
-}
-
-function accessLabel(mode: string, published: boolean, enabled: boolean): string {
-  if (!published) return t('adminApp.statusDraft')
-  if (!enabled) return t('detail.takenDown')
-  return t(`access.${mode}`)
 }
 
 function showSnack(msg: string) {
@@ -576,6 +507,27 @@ function fmtSize(n: number): string {
           </div>
         </Card>
 
+        <!-- Publish status -->
+        <Card class="p-5 md:col-span-2">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle class="text-base mb-1">{{ t('adminApp.overviewPublish') }}</CardTitle>
+              <div class="text-muted-foreground flex items-center gap-2 text-sm">
+                <Badge :variant="data?.app.published ? 'success' : 'secondary'">
+                  {{ data?.app.published ? t('adminApp.appPublished') : t('adminApp.appUnpublished') }}
+                </Badge>
+                <span>{{ t('adminApp.publishHint') }}</span>
+              </div>
+            </div>
+            <Button v-if="!data?.app.published" :disabled="publishSaving" @click="togglePublish">
+              {{ t('adminApp.publishApp') }}
+            </Button>
+            <Button v-else variant="destructive" :disabled="publishSaving" @click="togglePublish">
+              {{ t('adminApp.takeDownApp') }}
+            </Button>
+          </div>
+        </Card>
+
         <!-- Screenshots -->
         <Card class="p-5 md:col-span-2">
           <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -597,9 +549,8 @@ function fmtSize(n: number): string {
 
       <TabsContent value="versions" class="mt-6">
         <div class="mb-4 flex flex-wrap items-center gap-3">
-          <AppSelect v-model="statusFilter" :items="statusFilterItems" class="w-40" />
           <AppSelect v-model="releaseFilter" :items="releaseFilterItems" class="w-40" />
-          <Button variant="ghost" size="sm" @click="statusFilter = 'all'; releaseFilter = 'all'">{{ t('adminApp.filterReset') }}</Button>
+          <Button variant="ghost" size="sm" @click="releaseFilter = 'all'">{{ t('adminApp.filterReset') }}</Button>
         </div>
 
         <Card>
@@ -613,9 +564,7 @@ function fmtSize(n: number): string {
                   <TableHead>{{ t('adminApp.colPlatform') }}</TableHead>
                   <TableHead>{{ t('adminApp.colRelease') }}</TableHead>
                   <TableHead>{{ t('adminApp.colSize') }}</TableHead>
-                  <TableHead>{{ t('adminApp.colAccess') }}</TableHead>
                   <TableHead>{{ t('adminApp.colDownloads') }}</TableHead>
-                  <TableHead>{{ t('adminApp.colStatus') }}</TableHead>
                   <TableHead class="text-right"> </TableHead>
                 </TableRow>
               </TableHeader>
@@ -625,6 +574,7 @@ function fmtSize(n: number): string {
                     <div class="flex items-center gap-2">
                       <Avatar :src="v.icon_url" :fallback="(v.app_name || v.version_name || '?').charAt(0).toUpperCase()" class="size-7" />
                       <code>{{ v.version_name }}</code>
+                      <Badge v-if="isCurrent(v)" variant="success">{{ t('adminApp.currentVersion') }}</Badge>
                       <span class="text-muted-foreground text-xs">{{ t('detail.code') }} {{ v.version_code }}</span>
                     </div>
                   </TableCell>
@@ -641,17 +591,14 @@ function fmtSize(n: number): string {
                     <Badge v-if="v.release_type" :variant="releaseBadge(v.release_type)">{{ t('release.' + v.release_type) }}</Badge>
                   </TableCell>
                   <TableCell><code class="text-xs">{{ fmtSize(v.file_size) }}</code></TableCell>
-                  <TableCell>
-                    <Badge :variant="accessBadge(appAccessMode, v)">{{ accessLabel(appAccessMode, v.published, v.enabled) }}</Badge>
-                  </TableCell>
                   <TableCell>{{ v.download_count }}</TableCell>
-                  <TableCell><Badge :variant="statusBadge(v)">{{ statusLabel(v) }}</Badge></TableCell>
                   <TableCell class="text-right">
-                    <Button variant="ghost" size="sm" :class="v.published && v.enabled ? '' : 'text-primary'" @click="onMainAction(v)">{{ actionLabel(v) }}</Button>
+                    <Button v-if="!isCurrent(v)" variant="ghost" size="sm" class="text-primary" @click="setCurrent(v)">{{ t('adminApp.setCurrentVersion') }}</Button>
+                    <Button v-else variant="ghost" size="sm" disabled>{{ t('adminApp.currentVersion') }}</Button>
                     <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive" @click="askDelete(v)">{{ t('common.delete') }}</Button>
                   </TableCell>
                 </TableRow>
-                <TableEmpty v-if="!filteredVersions.length" :colspan="10">{{ t('adminApp.statsEmpty') }}</TableEmpty>
+                <TableEmpty v-if="!filteredVersions.length" :colspan="8">{{ t('adminApp.versionsEmpty') }}</TableEmpty>
               </TableBody>
             </Table>
           </CardContent>
@@ -720,22 +667,6 @@ function fmtSize(n: number): string {
         </template>
       </TabsContent>
     </Tabs>
-
-    <!-- Publish dialog -->
-    <Dialog v-model:open="publishDialogOpen" :title="t('adminApp.publishTitle')" max-width="md">
-      <div class="grid gap-4">
-        <div class="text-sm">
-          <code>{{ publishTarget?.version_name }}</code>
-          <span class="text-muted-foreground"> · {{ t('detail.code') }} {{ publishTarget?.version_code }}</span>
-        </div>
-        <p class="text-muted-foreground text-sm">{{ t('adminApp.publishHint') }}</p>
-        <Alert v-if="publishError" variant="destructive">{{ publishError }}</Alert>
-        <div class="flex justify-end gap-2">
-          <Button variant="outline" @click="closePublish">{{ t('common.cancel') }}</Button>
-          <Button :disabled="publishLoading" @click="submitPublish">{{ t('adminApp.publish') }}</Button>
-        </div>
-      </div>
-    </Dialog>
 
     <!-- Delete version dialog -->
     <AlertDialog v-model:open="dialogOpen" :title="t('common.confirmDelete')" :description="t('adminApp.confirmDeleteVersion', { name: deleteTarget?.version_name ?? '' })">

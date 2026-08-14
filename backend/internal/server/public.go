@@ -17,28 +17,37 @@ type appSummary struct {
 	LatestVersion *model.Version `json:"latest_version"`
 }
 
-// Apps returns app list with latest enabled version summary.
+// Apps returns the published app list; each app's latest_version is its
+// current version (the single publicly downloadable version).
 func (s *Server) Apps(w http.ResponseWriter, r *http.Request) {
 	var apps []model.App
-	if err := s.DB.Order("id desc").Find(&apps).Error; err != nil {
+	if err := s.DB.Where("published = ?", true).Order("id desc").Find(&apps).Error; err != nil {
 		web.SendError(w, web.CodeInternal, "查询失败")
 		return
 	}
-	ids := make([]int64, 0, len(apps))
+	// Collect the current version of each app in one query.
+	versionIDs := make([]int64, 0, len(apps))
+	appCurrent := make(map[int64]int64, len(apps))
 	for _, a := range apps {
-		ids = append(ids, a.ID)
+		if a.CurrentVersionID > 0 {
+			appCurrent[a.ID] = a.CurrentVersionID
+			versionIDs = append(versionIDs, a.CurrentVersionID)
+		}
 	}
-	var versions []model.Version
-	if len(ids) > 0 {
-		s.DB.Where("app_id IN ? AND enabled = ? AND published = ?", ids, true, true).Order("version_code desc").Find(&versions)
+	versions := make(map[int64]model.Version)
+	if len(versionIDs) > 0 {
+		var rows []model.Version
+		s.DB.Where("id IN ?", versionIDs).Find(&rows)
+		for _, v := range rows {
+			versions[v.ID] = v
+		}
 	}
 	out := make([]appSummary, 0, len(apps))
 	for _, a := range apps {
 		sum := appSummary{App: a}
-		for _, v := range versions {
-			if v.AppID == a.ID {
+		if id, ok := appCurrent[a.ID]; ok {
+			if v, ok := versions[id]; ok {
 				sum.LatestVersion = &v
-				break
 			}
 		}
 		out = append(out, sum)
@@ -46,9 +55,10 @@ func (s *Server) Apps(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, out)
 }
 
-// AppDetail returns app detail: enabled versions (secret fields hidden via
-// json:"-"). The public share link is name-based (`/app/{name}`), so the path
-// segment resolves by name first and falls back to the numeric id.
+// AppDetail returns app detail. An unpublished app behaves as if it doesn't
+// exist (404). The public share link is name-based (`/app/{name}`), so the
+// path segment resolves by name first and falls back to the numeric id. Only
+// the app's current version is exposed (secret fields hidden via json:"-").
 func (s *Server) AppDetail(w http.ResponseWriter, r *http.Request) {
 	key := r.PathValue("id")
 	var app model.App
@@ -62,28 +72,37 @@ func (s *Server) AppDetail(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeNotFound, "应用不存在")
 		return
 	}
-	var versions []model.Version
-	s.DB.Where("app_id = ? AND enabled = ? AND published = ?", app.ID, true, true).
-		Order("version_code desc").Find(&versions)
-
+	if !app.Published {
+		web.SendError(w, web.CodeNotFound, "应用不存在")
+		return
+	}
+	versions := make([]model.Version, 0, 1)
+	if app.CurrentVersionID > 0 {
+		var v model.Version
+		if err := s.DB.First(&v, app.CurrentVersionID).Error; err == nil {
+			versions = append(versions, v)
+		}
+	}
 	web.SendJson(w, map[string]any{
 		"app":      app,
 		"versions": versions,
 	})
 }
 
-// checkAccess enforces the app-level access permission on a published and
-// enabled version. The password/expiry scope lives on the app, not per version.
+// checkAccess enforces that the version is publicly downloadable and then the
+// app-level access permission. A version is public only when its app is
+// published and the version is the app's current version. The password/expiry
+// scope lives on the app, not per version.
 func (s *Server) checkAccess(v *model.Version, pwd string) error {
-	if !v.Published {
-		return &webErr{web.CodeForbidden, "该版本未上架"}
-	}
-	if !v.Enabled {
-		return &webErr{web.CodeForbidden, "该版本已下架"}
-	}
 	var app model.App
 	if err := s.DB.First(&app, v.AppID).Error; err != nil {
 		return &webErr{web.CodeNotFound, "应用不存在"}
+	}
+	if !app.Published {
+		return &webErr{web.CodeNotFound, "应用不存在"}
+	}
+	if app.CurrentVersionID != v.ID {
+		return &webErr{web.CodeForbidden, "该版本不可下载"}
 	}
 	switch app.AccessMode {
 	case model.AccessPassword:

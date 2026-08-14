@@ -10,8 +10,8 @@ import (
 	"disapp/internal/model"
 )
 
-// seedDownloads creates an app with two published versions and download logs
-// spread over a few days, returning the app and the two versions.
+// seedDownloads creates an app with two versions and download logs spread
+// over a few days, returning the app and the two versions.
 func seedDownloads(t *testing.T, s *Server) (*model.App, *model.Version, *model.Version) {
 	t.Helper()
 	app := model.App{Name: "统计测试"}

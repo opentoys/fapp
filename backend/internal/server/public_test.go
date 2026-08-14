@@ -11,37 +11,35 @@ import (
 
 func seedApp(t *testing.T, s *Server) *model.App {
 	t.Helper()
-	app := model.App{Name: "测试应用", Description: "desc"}
+	app := model.App{Name: "测试应用", Description: "desc", Published: true}
 	if err := s.DB.Create(&app).Error; err != nil {
 		t.Fatal(err)
 	}
-	v := model.Version{
+	current := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 1,
 		FileName: "app.apk", FileType: "apk", FileSize: 100,
-		Published: true, Enabled: true, StorageKey: "1/2/app.apk", StorageBackend: "local",
+		StorageKey: "1/2/app.apk", StorageBackend: "local",
 	}
-	if err := s.DB.Create(&v).Error; err != nil {
+	if err := s.DB.Create(&current).Error; err != nil {
 		t.Fatal(err)
 	}
-	disabled := model.Version{
+	old := model.Version{
 		AppID: app.ID, VersionName: "0.9.0", VersionCode: 0,
 		FileName: "old.apk", FileType: "apk",
-		Published: true, Enabled: true,
 	}
-	if err := s.DB.Create(&disabled).Error; err != nil {
+	if err := s.DB.Create(&old).Error; err != nil {
 		t.Fatal(err)
 	}
-	// GORM default:true overrides Enabled=false on Create, so update after.
-	s.DB.Model(&disabled).Update("enabled", false)
-	// A draft (published=false, enabled=true) must stay hidden publicly.
-	draft := model.Version{
+	newer := model.Version{
 		AppID: app.ID, VersionName: "2.0.0", VersionCode: 2,
 		FileName: "new.apk", FileType: "apk",
-		Published: false, Enabled: true, StorageKey: "1/4/new.apk", StorageBackend: "local",
+		StorageKey: "1/4/new.apk", StorageBackend: "local",
 	}
-	if err := s.DB.Create(&draft).Error; err != nil {
+	if err := s.DB.Create(&newer).Error; err != nil {
 		t.Fatal(err)
 	}
+	// 1.0.0 is the current version; 0.9.0 and 2.0.0 stay hidden publicly.
+	s.DB.Model(&app).Update("current_version_id", current.ID)
 	return &app
 }
 
@@ -56,8 +54,8 @@ func TestPublicApps(t *testing.T) {
 	var res struct {
 		Code int `json:"code"`
 		Data []struct {
-			Name           string `json:"name"`
-			LatestVersion  *struct {
+			Name          string `json:"name"`
+			LatestVersion *struct {
 				VersionName string `json:"version_name"`
 			} `json:"latest_version"`
 		} `json:"data"`
@@ -71,7 +69,26 @@ func TestPublicApps(t *testing.T) {
 	}
 }
 
-func TestPublicAppDetailHidesDisabledAndSecret(t *testing.T) {
+// An unpublished app must be hidden from the public list.
+func TestPublicAppsHideUnpublished(t *testing.T) {
+	s := testServer(t)
+	app := seedApp(t, s)
+	s.DB.Model(app).Update("published", false)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/apps", nil)
+	w := httptest.NewRecorder()
+	s.Apps(w, req)
+	var res struct {
+		Code int   `json:"code"`
+		Data []any `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 0 || len(res.Data) != 0 {
+		t.Fatalf("unpublished app should be hidden, got %s", w.Body.String())
+	}
+}
+
+func TestPublicAppDetailShowsOnlyCurrent(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
 
@@ -90,11 +107,52 @@ func TestPublicAppDetailHidesDisabledAndSecret(t *testing.T) {
 	if res.Code != 0 {
 		t.Fatalf("res = %s", w.Body.String())
 	}
-	if len(res.Data.Versions) != 1 {
-		t.Fatalf("should only show enabled version, got %d", len(res.Data.Versions))
+	if len(res.Data.Versions) != 1 || res.Data.Versions[0].VersionName != "1.0.0" {
+		t.Fatalf("should only show the current version, got %d", len(res.Data.Versions))
 	}
 	if res.Data.Versions[0].StorageKey != "" {
 		t.Fatal("secret fields leaked")
+	}
+}
+
+func TestPublicAppUnpublishedNotFound(t *testing.T) {
+	s := testServer(t)
+	app := seedApp(t, s)
+	s.DB.Model(app).Update("published", false)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/apps/"+itoa(app.ID), nil)
+	req.SetPathValue("id", itoa(app.ID))
+	w := httptest.NewRecorder()
+	s.AppDetail(w, req)
+	var res struct {
+		Code int `json:"code"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 404 {
+		t.Fatalf("unpublished app must return not-found, got code=%d body=%s", res.Code, w.Body.String())
+	}
+}
+
+// Published but with no current version → detail shows an empty version list.
+func TestPublicAppDetailNoCurrentVersion(t *testing.T) {
+	s := testServer(t)
+	app := seedApp(t, s)
+	// Remove the current version pointer; app stays published.
+	s.DB.Model(app).Update("current_version_id", 0)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/apps/"+itoa(app.ID), nil)
+	req.SetPathValue("id", itoa(app.ID))
+	w := httptest.NewRecorder()
+	s.AppDetail(w, req)
+	var res struct {
+		Code int `json:"code"`
+		Data struct {
+			Versions []model.Version `json:"versions"`
+		} `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 0 || len(res.Data.Versions) != 0 {
+		t.Fatalf("no-current version must yield an empty array, got %s", w.Body.String())
 	}
 }
 

@@ -62,18 +62,20 @@ func (l JSONList) MarshalJSON() ([]byte, error) {
 // App carries its own access permission (public/password/expiry), applied to
 // every version on download. Screenshots are URLs of uploaded images.
 type App struct {
-	ID           int64      `gorm:"primaryKey" json:"id"`
-	Name         string     `gorm:"size:128" json:"name"`
-	Platform     string     `gorm:"size:16;uniqueIndex:idx_app_platform_package" json:"platform"`    // ios / android，创建时确定，不可修改
-	PackageName  *string    `gorm:"size:128;uniqueIndex:idx_app_platform_package" json:"package_name"` // Android package / iOS bundle id（appid），同一平台下唯一；nil 表示未解析/手动创建，SQLite 视 NULL 为互不相同
-	Icon         string     `gorm:"size:512" json:"icon"`
-	Description  string     `gorm:"type:text" json:"description"`
-	Screenshots  JSONList   `gorm:"type:text" json:"screenshots"`
-	AccessMode   string     `gorm:"size:16" json:"access_mode"`
-	PasswordHash string     `json:"-"`
-	Salt         string     `json:"-"`
-	ExpiresAt    *time.Time `json:"expires_at"`
-	CreatedAt    time.Time  `json:"created_at"`
+	ID               int64      `gorm:"primaryKey" json:"id"`
+	Name             string     `gorm:"size:128" json:"name"`
+	Platform         string     `gorm:"size:16;uniqueIndex:idx_app_platform_package" json:"platform"`    // ios / android，创建时确定，不可修改
+	PackageName      *string    `gorm:"size:128;uniqueIndex:idx_app_platform_package" json:"package_name"` // Android package / iOS bundle id（appid），同一平台下唯一；nil 表示未解析/手动创建，SQLite 视 NULL 为互不相同
+	Icon             string     `gorm:"size:512" json:"icon"`
+	Description      string     `gorm:"type:text" json:"description"`
+	Screenshots      JSONList   `gorm:"type:text" json:"screenshots"`
+	AccessMode       string     `gorm:"size:16" json:"access_mode"`
+	PasswordHash     string     `json:"-"`
+	Salt             string     `json:"-"`
+	ExpiresAt        *time.Time `json:"expires_at"`
+	Published        bool       `gorm:"default:false" json:"published"` // 应用级上下架：未上架时公开页返回"应用不存在"
+	CurrentVersionID int64      `json:"current_version_id"`             // 当前版本 id，0 = 未设置；仅该版本对外可见
+	CreatedAt        time.Time  `json:"created_at"`
 }
 
 // ReleaseType values.
@@ -101,8 +103,6 @@ type Version struct {
 	StorageBackend string     `gorm:"size:16" json:"-"`
 	SHA256         string     `gorm:"size:64" json:"sha256"`
 	Changelog      string     `gorm:"type:text" json:"changelog"`
-	Published      bool       `gorm:"default:false" json:"published"`
-	Enabled        bool       `gorm:"default:true" json:"enabled"`
 	DownloadCount  int64      `json:"download_count"`
 	InstallCount   int64      `json:"install_count"`
 	CreatedAt      time.Time  `json:"created_at"`
