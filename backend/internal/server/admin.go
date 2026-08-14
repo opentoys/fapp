@@ -51,10 +51,11 @@ func (s *Server) AppDetailAdmin(w http.ResponseWriter, r *http.Request) {
 // CreateApp creates a new app.
 func (s *Server) CreateApp(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name        string `json:"name"`
-		Platform    string `json:"platform"`
-		Icon        string `json:"icon"`
-		Description string `json:"description"`
+		Name        string  `json:"name"`
+		Platform    string  `json:"platform"`
+		Icon        string  `json:"icon"`
+		Description string  `json:"description"`
+		PackageName *string `json:"package_name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		web.SendError(w, web.CodeBadRequest, "bad request")
@@ -69,8 +70,31 @@ func (s *Server) CreateApp(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeBadRequest, "平台必须为 ios 或 android")
 		return
 	}
-	app := model.App{Name: req.Name, Platform: req.Platform, Icon: req.Icon, Description: req.Description}
+	// appid = Android package / iOS bundle id. NULL when unknown so that
+	// manually-created apps without a package don't collide. Same platform +
+	// same appid must be unique (enforced below and by a DB unique index).
+	var pkg *string
+	if req.PackageName != nil {
+		p := strings.TrimSpace(*req.PackageName)
+		if p != "" {
+			pkg = &p
+		}
+	}
+	if pkg != nil {
+		var n int64
+		s.DB.Model(&model.App{}).Where("platform = ? AND package_name = ?", req.Platform, *pkg).Count(&n)
+		if n > 0 {
+			web.SendError(w, web.CodeBadRequest, "该平台下已存在相同包名（appid）的应用")
+			return
+		}
+	}
+	app := model.App{Name: req.Name, Platform: req.Platform, PackageName: pkg, Icon: req.Icon, Description: req.Description}
 	if err := s.DB.Create(&app).Error; err != nil {
+		// Belt-and-suspenders for a concurrent duplicate create.
+		if strings.Contains(err.Error(), "UNIQUE") {
+			web.SendError(w, web.CodeBadRequest, "该平台下已存在相同包名（appid）的应用")
+			return
+		}
 		web.SendError(w, web.CodeInternal, "创建失败")
 		return
 	}

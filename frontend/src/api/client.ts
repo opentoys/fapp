@@ -45,7 +45,7 @@ export const api = {
 
   adminApps: () => client.get<ApiResp<AppItem[]>>('/admin/apps').then((r) => r.data.data),
   adminAppDetail: (id: number) => client.get<ApiResp<AppDetail>>(`/admin/apps/${id}`).then((r) => r.data.data),
-  createApp: (data: { name: string; description?: string; platform: Platform; icon?: string }) =>
+  createApp: (data: { name: string; description?: string; platform: Platform; icon?: string; package_name?: string }) =>
     client.post<ApiResp<AppItem>>('/admin/apps', data).then((r) => r.data.data),
   updateApp: (id: number, data: Partial<AppItem> & { password?: string }) =>
     client.put<ApiResp<AppItem>>(`/admin/apps/${id}`, data),

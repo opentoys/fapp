@@ -64,7 +64,8 @@ func (l JSONList) MarshalJSON() ([]byte, error) {
 type App struct {
 	ID           int64      `gorm:"primaryKey" json:"id"`
 	Name         string     `gorm:"size:128" json:"name"`
-	Platform     string     `gorm:"size:16" json:"platform"` // ios / android，创建时确定，不可修改
+	Platform     string     `gorm:"size:16;uniqueIndex:idx_app_platform_package" json:"platform"`    // ios / android，创建时确定，不可修改
+	PackageName  *string    `gorm:"size:128;uniqueIndex:idx_app_platform_package" json:"package_name"` // Android package / iOS bundle id（appid），同一平台下唯一；nil 表示未解析/手动创建，SQLite 视 NULL 为互不相同
 	Icon         string     `gorm:"size:512" json:"icon"`
 	Description  string     `gorm:"type:text" json:"description"`
 	Screenshots  JSONList   `gorm:"type:text" json:"screenshots"`

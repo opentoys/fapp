@@ -10,6 +10,7 @@ export interface AppItem {
   id: number
   name: string
   platform: Platform
+  package_name: string | null
   icon: string
   description: string
   screenshots: string[]
