@@ -142,7 +142,7 @@ async function doDownload(versionId: number, password: string | undefined) {
       <!-- Desktop / unknown UA: one card per platform -->
       <div v-else-if="platformList.length" class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Card v-for="{ platform, version } in platformList" :key="platform" class="p-5">
-          <CardContent class="!p-0">
+          <CardContent class="p-0!">
             <VersionPanel
               :version="version"
               :fallback-name="data.app.name"
