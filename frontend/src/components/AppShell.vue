@@ -163,7 +163,7 @@ function onLangSelect(i: number) {
               ...(!isSuperAdmin ? [{ label: t('app.changePassword'), value: '' }] : []),
               { label: t('app.logout'), value: '', danger: true },
             ]"
-            @select="(i: number) => { if (!isSuperAdmin && i === 2) openPwDialog(); if (i === (isSuperAdmin ? 1 : 3)) logoutDialog = true }"
+            @select="(i: number) => { if (!isSuperAdmin && i === 2) openPwDialog(); if (i === (isSuperAdmin ? 2 : 3)) logoutDialog = true }"
           >
             <template #trigger>
               <Button variant="ghost" size="sm" class="gap-1.5">
