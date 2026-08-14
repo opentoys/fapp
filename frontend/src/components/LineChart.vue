@@ -114,23 +114,23 @@ const tooltipPos = computed(() => {
 <template>
   <div
     ref="container"
-    class="line-chart"
+    class="relative w-full select-none"
     :style="{ height: height + 'px' }"
     @mousemove="onMove"
     @mouseleave="onLeave"
   >
-    <div v-if="n === 0" class="d-flex align-center justify-center h-100 text-medium-emphasis">
+    <div v-if="n === 0" class="flex h-full items-center justify-center text-muted-foreground">
       {{ emptyText }}
     </div>
     <svg v-else-if="width > 0" :width="width" :height="height">
       <!-- Horizontal gridlines + y labels -->
       <g v-for="(g, i) in gridlines" :key="'g' + i">
-        <line :x1="PAD.left" :x2="width - PAD.right" :y1="g.y" :y2="g.y" class="chart-grid" />
-        <text :x="PAD.left - 6" :y="g.y + 3" class="chart-axis-label" text-anchor="end">{{ g.label }}</text>
+        <line :x1="PAD.left" :x2="width - PAD.right" :y1="g.y" :y2="g.y" class="stroke-foreground/15" />
+        <text :x="PAD.left - 6" :y="g.y + 3" class="fill-foreground/60 text-[11px]" text-anchor="end">{{ g.label }}</text>
       </g>
       <!-- X labels -->
       <g v-for="t in xTicks" :key="'x' + t.i">
-        <text :x="x(t.i)" :y="height - 6" class="chart-axis-label" text-anchor="middle">{{ t.label }}</text>
+        <text :x="x(t.i)" :y="height - 6" class="fill-foreground/60 text-[11px]" text-anchor="middle">{{ t.label }}</text>
       </g>
       <!-- Series lines -->
       <polyline
@@ -145,14 +145,14 @@ const tooltipPos = computed(() => {
       />
       <!-- Hover guide + dots -->
       <g v-if="hover !== null">
-        <line :x1="x(hover)" :x2="x(hover)" :y1="PAD.top" :y2="PAD.top + plotH" class="chart-guide" />
+        <line :x1="x(hover)" :x2="x(hover)" :y1="PAD.top" :y2="PAD.top + plotH" class="stroke-foreground/35" stroke-dasharray="3 3" />
         <circle
           v-for="(s, si) in series"
           :key="'d' + si"
           :cx="x(hover)"
           :cy="y(s.values[hover] ?? 0)"
           r="3.5"
-          stroke="rgb(var(--v-theme-surface))"
+          class="stroke-background"
           stroke-width="1.5"
           :style="{ fill: s.color }"
         />
@@ -160,68 +160,17 @@ const tooltipPos = computed(() => {
     </svg>
 
     <!-- Tooltip -->
-    <div v-if="hover !== null" class="chart-tooltip" :style="{ left: tooltipPos.left + 'px', top: tooltipPos.top + 'px' }">
-      <div class="chart-tooltip-title">{{ dates[hover] }}</div>
-      <div v-for="(s, si) in series" :key="'t' + si" class="chart-tooltip-row">
-        <span class="chart-tooltip-dot" :style="{ background: s.color }" />
-        <span class="chart-tooltip-name">{{ s.name }}</span>
+    <div
+      v-if="hover !== null"
+      class="pointer-events-none absolute z-5 w-[140px] rounded-md bg-background p-1.5 text-xs text-foreground shadow-lg"
+      :style="{ left: tooltipPos.left + 'px', top: tooltipPos.top + 'px' }"
+    >
+      <div class="mb-1 font-semibold">{{ dates[hover] }}</div>
+      <div v-for="(s, si) in series" :key="'t' + si" class="mt-0.5 flex items-center gap-1.5">
+        <span class="size-2 shrink-0 rounded-full" :style="{ background: s.color }" />
+        <span class="flex-1 truncate">{{ s.name }}</span>
         <b>{{ s.values[hover] ?? 0 }}</b>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.line-chart {
-  position: relative;
-  width: 100%;
-  user-select: none;
-}
-.chart-grid {
-  stroke: rgba(var(--v-theme-on-surface), 0.12);
-  stroke-width: 1;
-}
-.chart-guide {
-  stroke: rgba(var(--v-theme-on-surface), 0.35);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-}
-.chart-axis-label {
-  font-size: 11px;
-  fill: rgba(var(--v-theme-on-surface), 0.6);
-}
-.chart-tooltip {
-  position: absolute;
-  width: 140px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: rgb(var(--v-theme-surface));
-  color: rgb(var(--v-theme-on-surface));
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
-  pointer-events: none;
-  font-size: 12px;
-  z-index: 5;
-}
-.chart-tooltip-title {
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-.chart-tooltip-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 2px;
-}
-.chart-tooltip-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.chart-tooltip-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-</style>
