@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"database/sql/driver"
+	"encoding/json"
+	"time"
+)
 
 const (
 	AccessPublic   = "public"
@@ -16,12 +20,58 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
+// JSONList is a []string stored as a JSON text column. It serializes as a
+// JSON array in API responses.
+type JSONList []string
+
+func (l JSONList) Value() (driver.Value, error) {
+	b, err := json.Marshal(l)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+func (l *JSONList) Scan(v any) error {
+	switch t := v.(type) {
+	case []byte:
+		*l = nil
+		if len(t) > 0 {
+			return json.Unmarshal(t, l)
+		}
+	case string:
+		*l = nil
+		if t != "" {
+			return json.Unmarshal([]byte(t), l)
+		}
+	default:
+		*l = nil
+	}
+	return nil
+}
+
+// MarshalJSON emits an empty list (not null) so the frontend can always treat
+// screenshots as an array.
+func (l JSONList) MarshalJSON() ([]byte, error) {
+	if l == nil {
+		return []byte("[]"), nil
+	}
+	return json.Marshal([]string(l))
+}
+
+// App carries its own access permission (public/password/expiry), applied to
+// every version on download. Screenshots are URLs of uploaded images.
 type App struct {
-	ID          int64     `gorm:"primaryKey" json:"id"`
-	Name        string    `gorm:"size:128" json:"name"`
-	Icon        string    `gorm:"size:512" json:"icon"`
-	Description string    `gorm:"type:text" json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID           int64      `gorm:"primaryKey" json:"id"`
+	Name         string     `gorm:"size:128" json:"name"`
+	Icon         string     `gorm:"size:512" json:"icon"`
+	Description  string     `gorm:"type:text" json:"description"`
+	Screenshots  JSONList   `gorm:"type:text" json:"screenshots"`
+	AccessMode   string     `gorm:"size:16" json:"access_mode"`
+	PasswordHash string     `json:"-"`
+	Salt         string     `json:"-"`
+	ExpiresAt    *time.Time `json:"expires_at"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 // ReleaseType values.
@@ -49,10 +99,6 @@ type Version struct {
 	StorageBackend string     `gorm:"size:16" json:"-"`
 	SHA256         string     `gorm:"size:64" json:"sha256"`
 	Changelog      string     `gorm:"type:text" json:"changelog"`
-	AccessMode     string     `gorm:"size:16" json:"access_mode"`
-	PasswordHash   string     `json:"-"`
-	Salt           string     `json:"-"`
-	ExpiresAt      *time.Time `json:"expires_at"`
 	Published      bool       `gorm:"default:false" json:"published"`
 	Enabled        bool       `gorm:"default:true" json:"enabled"`
 	DownloadCount  int64      `json:"download_count"`

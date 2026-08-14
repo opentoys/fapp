@@ -84,7 +84,7 @@ function accessLabel(mode: string): string {
         sm="6"
         md="4"
       >
-        <v-card :to="`/app/${a.id}`" hover>
+        <v-card :to="`/app/${encodeURIComponent(a.name)}`" hover>
           <v-card-text>
             <div class="d-flex align-center mb-2">
               <v-avatar v-if="a.icon" :image="a.icon" size="40" class="mr-3" />
@@ -98,12 +98,11 @@ function accessLabel(mode: string): string {
               · {{ fmtSize(a.latest_version.file_size) }}
             </div>
             <v-chip
-              v-if="a.latest_version"
-              :color="accessColor(a.latest_version.access_mode)"
+              :color="accessColor(a.access_mode)"
               size="small"
               variant="tonal"
             >
-              {{ accessLabel(a.latest_version.access_mode) }}
+              {{ accessLabel(a.access_mode) }}
             </v-chip>
             <p v-if="a.description" class="text-body-2 mt-2 mb-0">{{ a.description }}</p>
           </v-card-text>

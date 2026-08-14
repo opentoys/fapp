@@ -134,14 +134,15 @@ func TestUploadVersionIgnoresAccessFields(t *testing.T) {
 	}
 
 	// Access fields from the multipart body must be ignored; the upload is
-	// a draft and the access scope is only applied at publish time.
+	// a draft and the access scope is configured at the app level.
 	var v model.Version
 	s.DB.Last(&v)
 	if v.Published {
 		t.Fatalf("upload must not publish, got published = %v", v.Published)
 	}
-	if v.PasswordHash != "" || v.AccessMode != "" {
-		t.Fatalf("upload must not set access fields, got %+v", v)
+	s.DB.First(&app, v.AppID)
+	if app.AccessMode != "" {
+		t.Fatalf("upload must not touch app access, got %+v", app)
 	}
 }
 
@@ -152,7 +153,9 @@ func TestPublishVersion(t *testing.T) {
 	}
 	s.DB.Create(&v)
 
-	body := `{"published":true,"enabled":true,"access_mode":"password","password":"secret","expires_at":null}`
+	// Publishing flips visibility only; access scope is app-level and is set
+	// on the app's Overview page, never per version.
+	body := `{"published":true,"enabled":true}`
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/versions/"+itoa(v.ID), strings.NewReader(body))
 	req.SetPathValue("id", itoa(v.ID))
 	w := httptest.NewRecorder()
@@ -163,38 +166,32 @@ func TestPublishVersion(t *testing.T) {
 
 	var reload model.Version
 	s.DB.First(&reload, v.ID)
-	if !reload.Published || !reload.Enabled || reload.AccessMode != model.AccessPassword {
+	if !reload.Published || !reload.Enabled {
 		t.Fatalf("reload = %+v", reload)
-	}
-	if reload.PasswordHash == "" {
-		t.Fatal("password hash missing after publish")
 	}
 }
 
-func TestPublishVersionNormalizesExpiryTZ(t *testing.T) {
+func TestUpdateAppNormalizesExpiryTZ(t *testing.T) {
 	s := testServer(t)
-	v := model.Version{
-		AppID: 1, VersionName: "1.0", VersionCode: 1, AccessMode: model.AccessPublic,
-		StorageKey: "1/2/a.apk",
-	}
-	s.DB.Create(&v)
+	app := model.App{Name: "a"}
+	s.DB.Create(&app)
 
 	// The client sends an absolute instant in UTC; the server should store it
 	// with the server's default timezone offset (not UTC) so the frontend shows
 	// server-local wall-clock time.
-	body := `{"published":true,"access_mode":"expiry","expires_at":"2026-08-20T02:00:00Z"}`
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/versions/"+itoa(v.ID), strings.NewReader(body))
-	req.SetPathValue("id", itoa(v.ID))
+	body := `{"access_mode":"expiry","expires_at":"2026-08-20T02:00:00Z"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(body))
+	req.SetPathValue("id", itoa(app.ID))
 	w := httptest.NewRecorder()
-	s.UpdateVersion(w, req)
+	s.UpdateApp(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("code = %d, body = %s", w.Code, w.Body.String())
 	}
 
-	var reload model.Version
-	s.DB.First(&reload, v.ID)
-	if reload.ExpiresAt == nil {
-		t.Fatal("expires_at not set")
+	var reload model.App
+	s.DB.First(&reload, app.ID)
+	if reload.AccessMode != model.AccessExpiry || reload.ExpiresAt == nil {
+		t.Fatalf("reload = %+v", reload)
 	}
 	// Same absolute instant the client sent.
 	want, _ := time.Parse(time.RFC3339, "2026-08-20T02:00:00Z")
@@ -212,7 +209,7 @@ func TestPublishVersionNormalizesExpiryTZ(t *testing.T) {
 func TestUpdateVersionToggleDisabled(t *testing.T) {
 	s := testServer(t)
 	v := model.Version{
-		AppID: 1, VersionName: "1.0", VersionCode: 1, AccessMode: model.AccessPublic,
+		AppID: 1, VersionName: "1.0", VersionCode: 1,
 		Enabled: true, StorageKey: "1/2/a.apk",
 	}
 	s.DB.Create(&v)
@@ -234,7 +231,7 @@ func TestUpdateVersionToggleDisabled(t *testing.T) {
 func TestDeleteVersion(t *testing.T) {
 	s := testServer(t)
 	v := model.Version{
-		AppID: 1, VersionName: "1.0", VersionCode: 1, AccessMode: model.AccessPublic,
+		AppID: 1, VersionName: "1.0", VersionCode: 1,
 		Enabled: true, StorageKey: "1/2/a.apk",
 	}
 	s.DB.Create(&v)
@@ -370,7 +367,7 @@ func TestUploadVersionRequiresVersionName(t *testing.T) {
 func TestVersionStats(t *testing.T) {
 	s := testServer(t)
 	v := model.Version{
-		AppID: 1, VersionName: "1.0", VersionCode: 1, AccessMode: model.AccessPublic,
+		AppID: 1, VersionName: "1.0", VersionCode: 1,
 		Enabled: true, StorageKey: "1/2/a.apk", DownloadCount: 3, InstallCount: 1,
 	}
 	s.DB.Create(&v)

@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -79,9 +80,12 @@ func (s *Server) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Name        *string `json:"name"`
-		Icon        *string `json:"icon"`
-		Description *string `json:"description"`
+		Name        *string    `json:"name"`
+		Icon        *string    `json:"icon"`
+		Description *string    `json:"description"`
+		AccessMode  *string    `json:"access_mode"`
+		Password    *string    `json:"password"`
+		ExpiresAt   *time.Time `json:"expires_at"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		web.SendError(w, web.CodeBadRequest, "bad request")
@@ -96,7 +100,27 @@ func (s *Server) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	if req.Description != nil {
 		app.Description = *req.Description
 	}
-	s.DB.Save(&app)
+	if req.AccessMode != nil {
+		app.AccessMode = *req.AccessMode
+		// A non-password scope no longer needs a stored credential.
+		if app.AccessMode != model.AccessPassword {
+			app.PasswordHash, app.Salt = "", ""
+		}
+	}
+	if req.Password != nil && *req.Password != "" {
+		h, salt := password.Hash(*req.Password)
+		app.PasswordHash, app.Salt = h, salt
+	}
+	if req.ExpiresAt != nil {
+		// Normalize client-provided expiry to the server's default timezone so
+		// it is stored/displayed as server-local wall-clock time.
+		at := req.ExpiresAt.In(time.Local)
+		app.ExpiresAt = &at
+	}
+	if err := s.DB.Save(&app).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "保存失败")
+		return
+	}
 	web.SendJson(w, app)
 }
 
@@ -108,9 +132,14 @@ func (s *Server) DeleteApp(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeNotFound, "应用不存在")
 		return
 	}
-	// Best-effort cleanup of the app-level icon file.
+	// Best-effort cleanup of the app-level icon and screenshot files.
 	if key := strings.TrimPrefix(app.Icon, "/api/v1/files/"); key != app.Icon {
 		s.Storage.Delete(r.Context(), key)
+	}
+	for _, url := range app.Screenshots {
+		if key := strings.TrimPrefix(url, "/api/v1/files/"); key != url {
+			s.Storage.Delete(r.Context(), key)
+		}
 	}
 	if err := s.DB.Delete(&model.App{}, id).Error; err != nil {
 		web.SendError(w, web.CodeInternal, "删除失败")
@@ -162,6 +191,68 @@ func isImageUpload(contentType, filename string) bool {
 		return true
 	}
 	return false
+}
+
+// UploadAppScreenshot stores one app screenshot (multipart file "screenshot")
+// under {app_id}/0/shot-<nano>.ext and appends its URL to App.Screenshots.
+func (s *Server) UploadAppScreenshot(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var app model.App
+	if err := s.DB.First(&app, id).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "应用不存在")
+		return
+	}
+	file, header, err := r.FormFile("screenshot")
+	if err != nil {
+		web.SendError(w, web.CodeBadRequest, "缺少截图文件")
+		return
+	}
+	defer file.Close()
+	if !isImageUpload(header.Header.Get("Content-Type"), header.Filename) {
+		web.SendError(w, web.CodeBadRequest, "仅支持图片文件")
+		return
+	}
+	key := storage.Key(app.ID, 0, fmt.Sprintf("shot-%d%s", time.Now().UnixNano(), filepath.Ext(header.Filename)))
+	if _, err := s.Storage.Save(r.Context(), key, file); err != nil {
+		web.SendError(w, web.CodeInternal, "存储失败")
+		return
+	}
+	app.Screenshots = append(app.Screenshots, "/api/v1/files/"+key)
+	if err := s.DB.Model(&app).Update("screenshots", app.Screenshots).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "保存失败")
+		return
+	}
+	web.SendJson(w, app)
+}
+
+// DeleteAppScreenshot removes a screenshot by its exposed URL and deletes the
+// underlying storage file.
+func (s *Server) DeleteAppScreenshot(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var app model.App
+	if err := s.DB.First(&app, id).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "应用不存在")
+		return
+	}
+	url := r.URL.Query().Get("url")
+	key := strings.TrimPrefix(url, "/api/v1/files/")
+	if key == url || key == "" {
+		web.SendError(w, web.CodeBadRequest, "无效的截图地址")
+		return
+	}
+	kept := app.Screenshots[:0]
+	for _, u := range app.Screenshots {
+		if u != url {
+			kept = append(kept, u)
+		}
+	}
+	app.Screenshots = kept
+	s.Storage.Delete(r.Context(), key)
+	if err := s.DB.Model(&app).Update("screenshots", app.Screenshots).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "保存失败")
+		return
+	}
+	web.SendJson(w, app)
 }
 
 // UploadVersion handles multipart file upload for a new version.
@@ -244,7 +335,8 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, v)
 }
 
-// UpdateVersion updates version info (changelog, access mode, enabled, etc).
+// UpdateVersion updates version info (changelog, published, enabled). Access
+// scope is app-level and edited on the app's Overview page, not per version.
 func (s *Server) UpdateVersion(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var v model.Version
@@ -253,12 +345,9 @@ func (s *Server) UpdateVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Changelog  *string    `json:"changelog"`
-		Published  *bool      `json:"published"`
-		AccessMode *string    `json:"access_mode"`
-		Password   *string    `json:"password"`
-		ExpiresAt  *time.Time `json:"expires_at"`
-		Enabled    *bool      `json:"enabled"`
+		Changelog *string `json:"changelog"`
+		Published *bool   `json:"published"`
+		Enabled   *bool   `json:"enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		web.SendError(w, web.CodeBadRequest, "bad request")
@@ -269,19 +358,6 @@ func (s *Server) UpdateVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Published != nil {
 		v.Published = *req.Published
-	}
-	if req.AccessMode != nil {
-		v.AccessMode = *req.AccessMode
-	}
-	if req.Password != nil && *req.Password != "" {
-		h, salt := password.Hash(*req.Password)
-		v.PasswordHash, v.Salt = h, salt
-	}
-	if req.ExpiresAt != nil {
-		// Normalize client-provided expiry to the server's default timezone so
-		// it is stored/displayed as server-local wall-clock time.
-		at := req.ExpiresAt.In(time.Local)
-		v.ExpiresAt = &at
 	}
 	if req.Enabled != nil {
 		v.Enabled = *req.Enabled

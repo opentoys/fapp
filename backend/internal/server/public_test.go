@@ -17,7 +17,7 @@ func seedApp(t *testing.T, s *Server) *model.App {
 	}
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 1,
-		FileName: "app.apk", FileType: "apk", FileSize: 100, AccessMode: model.AccessPublic,
+		FileName: "app.apk", FileType: "apk", FileSize: 100,
 		Published: true, Enabled: true, StorageKey: "1/2/app.apk", StorageBackend: "local",
 	}
 	if err := s.DB.Create(&v).Error; err != nil {
@@ -25,7 +25,7 @@ func seedApp(t *testing.T, s *Server) *model.App {
 	}
 	disabled := model.Version{
 		AppID: app.ID, VersionName: "0.9.0", VersionCode: 0,
-		FileName: "old.apk", FileType: "apk", AccessMode: model.AccessPublic,
+		FileName: "old.apk", FileType: "apk",
 		Published: true, Enabled: true,
 	}
 	if err := s.DB.Create(&disabled).Error; err != nil {
@@ -36,7 +36,7 @@ func seedApp(t *testing.T, s *Server) *model.App {
 	// A draft (published=false, enabled=true) must stay hidden publicly.
 	draft := model.Version{
 		AppID: app.ID, VersionName: "2.0.0", VersionCode: 2,
-		FileName: "new.apk", FileType: "apk", AccessMode: model.AccessPublic,
+		FileName: "new.apk", FileType: "apk",
 		Published: false, Enabled: true, StorageKey: "1/4/new.apk", StorageBackend: "local",
 	}
 	if err := s.DB.Create(&draft).Error; err != nil {
@@ -93,8 +93,32 @@ func TestPublicAppDetailHidesDisabledAndSecret(t *testing.T) {
 	if len(res.Data.Versions) != 1 {
 		t.Fatalf("should only show enabled version, got %d", len(res.Data.Versions))
 	}
-	if res.Data.Versions[0].StorageKey != "" || res.Data.Versions[0].PasswordHash != "" {
+	if res.Data.Versions[0].StorageKey != "" {
 		t.Fatal("secret fields leaked")
+	}
+}
+
+func TestPublicAppDetailResolvesByName(t *testing.T) {
+	s := testServer(t)
+	app := seedApp(t, s)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/apps/"+app.Name, nil)
+	req.SetPathValue("id", app.Name)
+	w := httptest.NewRecorder()
+	s.AppDetail(w, req)
+
+	var res struct {
+		Code int `json:"code"`
+		Data struct {
+			App struct {
+				ID   int64  `json:"id"`
+				Name string `json:"name"`
+			} `json:"app"`
+		} `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 0 || res.Data.App.ID != app.ID || res.Data.App.Name != app.Name {
+		t.Fatalf("res = %s", w.Body.String())
 	}
 }
 

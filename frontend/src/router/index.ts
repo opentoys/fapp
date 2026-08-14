@@ -4,7 +4,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', component: () => import('../views/Home.vue') },
-    { path: '/app/:id', component: () => import('../views/AppDetail.vue') },
+    { path: '/app/:name', component: () => import('../views/AppDetail.vue') },
     { path: '/login', component: () => import('../views/Login.vue') },
     {
       path: '/admin',

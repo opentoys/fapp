@@ -46,20 +46,24 @@ func (s *Server) Apps(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, out)
 }
 
-// AppDetail returns app detail: channels + enabled versions (secret fields hidden via json:"-").
+// AppDetail returns app detail: enabled versions (secret fields hidden via
+// json:"-"). The public share link is name-based (`/app/{name}`), so the path
+// segment resolves by name first and falls back to the numeric id.
 func (s *Server) AppDetail(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		web.SendError(w, web.CodeBadRequest, "bad id")
-		return
-	}
+	key := r.PathValue("id")
 	var app model.App
-	if err := s.DB.First(&app, id).Error; err != nil {
+	err := s.DB.Where("name = ?", key).First(&app).Error
+	if err != nil {
+		if n, perr := strconv.ParseInt(key, 10, 64); perr == nil {
+			err = s.DB.First(&app, n).Error
+		}
+	}
+	if err != nil {
 		web.SendError(w, web.CodeNotFound, "应用不存在")
 		return
 	}
 	var versions []model.Version
-	s.DB.Where("app_id = ? AND enabled = ? AND published = ?", id, true, true).
+	s.DB.Where("app_id = ? AND enabled = ? AND published = ?", app.ID, true, true).
 		Order("version_code desc").Find(&versions)
 
 	web.SendJson(w, map[string]any{
@@ -68,6 +72,8 @@ func (s *Server) AppDetail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// checkAccess enforces the app-level access permission on a published and
+// enabled version. The password/expiry scope lives on the app, not per version.
 func (s *Server) checkAccess(v *model.Version, pwd string) error {
 	if !v.Published {
 		return &webErr{web.CodeForbidden, "该版本未上架"}
@@ -75,13 +81,17 @@ func (s *Server) checkAccess(v *model.Version, pwd string) error {
 	if !v.Enabled {
 		return &webErr{web.CodeForbidden, "该版本已下架"}
 	}
-	switch v.AccessMode {
+	var app model.App
+	if err := s.DB.First(&app, v.AppID).Error; err != nil {
+		return &webErr{web.CodeNotFound, "应用不存在"}
+	}
+	switch app.AccessMode {
 	case model.AccessPassword:
-		if !password.Verify(pwd, v.PasswordHash, v.Salt) {
+		if !password.Verify(pwd, app.PasswordHash, app.Salt) {
 			return &webErr{web.CodeUnauthorized, "密码错误"}
 		}
 	case model.AccessExpiry:
-		if v.ExpiresAt != nil && time.Now().After(*v.ExpiresAt) {
+		if app.ExpiresAt != nil && time.Now().After(*app.ExpiresAt) {
 			return &webErr{web.CodeForbidden, "下载链接已过期"}
 		}
 	}

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useTheme } from '../composables/useTheme'
 import { useAuth } from '../composables/useAuth'
 import { useI18n } from '../composables/useI18n'
+import { useDownloadApp } from '../composables/useDownloadApp'
 import { api } from '../api/client'
 import {
   mdiWeatherSunny, mdiWeatherNight, mdiThemeLightDark,
@@ -18,9 +19,12 @@ const router = useRouter()
 const { choice, setChoice } = useTheme()
 const { isAuthed, isSuperAdmin, username, clearToken } = useAuth()
 const { t, locale, setLocale } = useI18n()
+const { app } = useDownloadApp()
 
-// The public download page hides the sign-in entry point.
+// The public download page hides the sign-in entry point and shows the
+// currently-viewed app (icon + name) in place of the app title.
 const isDownloadPage = computed(() => route.path.startsWith('/app/'))
+const currentDownloadApp = computed(() => (isDownloadPage.value ? app.value : null))
 
 const tabs = computed(() => {
   if (!isAuthed.value) return []
@@ -105,7 +109,14 @@ function logout() {
 <template>
   <v-app>
     <v-app-bar color="primary" density="compact">
-      <v-app-bar-title>{{ t('app.title') }}</v-app-bar-title>
+      <v-app-bar-title v-if="!currentDownloadApp">{{ t('app.title') }}</v-app-bar-title>
+      <v-app-bar-title v-else class="d-flex align-center" style="gap: 8px;">
+        <v-avatar v-if="currentDownloadApp.icon" :image="currentDownloadApp.icon" size="28" />
+        <v-avatar v-else color="rgba(255,255,255,0.2)" size="28">
+          <span class="text-subtitle-2">{{ currentDownloadApp.name.charAt(0).toUpperCase() }}</span>
+        </v-avatar>
+        <span class="font-weight-medium text-truncate">{{ currentDownloadApp.name }}</span>
+      </v-app-bar-title>
 
       <v-tabs v-if="isAuthed" :model-value="activeTab" align-tabs="center">
         <v-tab v-for="tab in tabs" :key="tab.to" :value="tab.to" :to="tab.to">
