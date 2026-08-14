@@ -22,7 +22,7 @@ function readStored(): ThemeChoice {
 }
 
 // Module-level state so all callers share the same value.
-const choice = ref<ThemeChoice>(readStored())
+export const choice = ref<ThemeChoice>(readStored())
 
 // Apply immediately (avoid a flash before mount), then keep listening to the OS.
 applyTheme(choice.value)
