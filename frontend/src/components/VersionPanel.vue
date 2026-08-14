@@ -1,21 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { mdiDownload } from '@mdi/js'
+import { Download } from 'lucide-vue-next'
 import { useI18n } from '../composables/useI18n'
 import { detectUA } from '../utils/ua'
 import { fmtDate } from '../utils/format'
+import { Badge } from './ui/badge'
+import { Avatar } from './ui/avatar'
+import { Button } from './ui/button'
 import type { Architecture, Version } from '../api/types'
 
 const props = defineProps<{
   version: Version
   fallbackName: string
   fallbackIcon: string
-  // App-level access scope (set once on the app's Overview page). Download
-  // gating uses this instead of per-version fields.
   accessMode?: string
   expiresAt?: string | null
-  // When true, the inline download button is omitted (e.g. the mobile hero,
-  // which renders the download action as a floating bottom bar instead).
   noDownload?: boolean
 }>()
 
@@ -40,11 +39,12 @@ function defaultArch(): Architecture {
 
 const icon = computed(() => props.version.icon_url || props.fallbackIcon)
 const appName = computed(() => props.version.app_name || props.fallbackName)
-const releaseColor = computed(() => {
-  if (props.version.release_type === 'beta') return 'info'
-  if (props.version.release_type === 'canary') return 'warning'
-  return 'primary'
-})
+
+function releaseVariant(rt: string): 'default' | 'info' | 'warning' {
+  if (rt === 'beta') return 'info'
+  if (rt === 'canary') return 'warning'
+  return 'default'
+}
 
 function isExpired(): boolean {
   return props.accessMode === 'expiry' && !!props.expiresAt && new Date(props.expiresAt) < new Date()
@@ -59,80 +59,63 @@ function fmtSize(n: number): string {
 </script>
 
 <template>
-  <div class="d-flex flex-column" style="gap: 12px;">
-    <!-- Icon + release tag -->
-    <div class="d-flex align-center" style="gap: 12px;">
-      <v-avatar v-if="icon" :image="icon" size="56" />
-      <v-avatar v-else color="primary" size="56">
-        <span class="text-h5">{{ appName.charAt(0).toUpperCase() }}</span>
-      </v-avatar>
-      <v-chip size="small" :color="releaseColor" variant="tonal">
+  <div class="flex flex-col gap-3">
+    <div class="flex items-center gap-3">
+      <Avatar :src="icon" :fallback="appName.charAt(0).toUpperCase()" class="size-14" />
+      <Badge :variant="releaseVariant(version.release_type)">
         {{ t('release.' + version.release_type) }}
-      </v-chip>
+      </Badge>
     </div>
 
-    <!-- App name + package -->
     <div>
-      <div class="text-h6 font-weight-medium">{{ appName }}</div>
-      <div v-if="version.package_name" class="text-caption text-medium-emphasis">
+      <div class="font-semibold">{{ appName }}</div>
+      <div v-if="version.package_name" class="text-muted-foreground text-xs">
         <code>{{ version.package_name }}</code>
       </div>
     </div>
 
-    <!-- Platform + version name (build code) -->
-    <div class="d-flex align-center" style="gap: 8px;">
-      <v-chip v-if="version.platform" size="x-small" variant="outlined">
+    <div class="flex items-center gap-2">
+      <Badge v-if="version.platform" variant="outline" class="text-xs">
         {{ t('platform.' + version.platform) }}
-      </v-chip>
-      <span class="text-body-1 font-weight-medium">
+      </Badge>
+      <span class="font-medium">
         {{ version.version_name }}
-        <span v-if="version.version_code" class="text-body-2 text-medium-emphasis">
+        <span v-if="version.version_code" class="text-muted-foreground text-sm">
           ({{ version.version_code }})
         </span>
       </span>
     </div>
 
-    <!-- Clickable architecture chips -->
-    <div class="d-flex align-center" style="gap: 6px;">
-      <span class="text-caption text-medium-emphasis">{{ t('detail.arch') }}:</span>
+    <div class="flex items-center gap-1.5">
+      <span class="text-muted-foreground text-xs">{{ t('detail.arch') }}:</span>
       <template v-if="archList.length">
-        <v-chip
+        <Badge
           v-for="a in archList"
           :key="a"
-          size="small"
-          :color="currentArch === a ? 'primary' : undefined"
-          variant="tonal"
+          variant="outline"
+          :class="currentArch === a ? 'border-primary text-primary' : 'cursor-pointer hover:bg-accent'"
           @click="archChoice = a"
         >
           {{ t('arch.' + a) }}
-        </v-chip>
+        </Badge>
       </template>
-      <span v-else class="text-caption text-medium-emphasis">—</span>
+      <span v-else class="text-muted-foreground text-xs">—</span>
     </div>
 
-    <!-- Size · time -->
-    <div class="text-body-2 text-medium-emphasis">
+    <div class="text-muted-foreground text-sm">
       {{ fmtSize(version.file_size) }} · {{ fmtDate(version.created_at) }}
     </div>
 
-    <!-- Changelog -->
     <div v-if="version.changelog">
-      <div class="text-body-2 font-weight-medium">{{ t('detail.changelog') }}:</div>
-      <div class="text-body-2" style="white-space: pre-wrap;">{{ version.changelog }}</div>
+      <div class="text-sm font-medium">{{ t('detail.changelog') }}:</div>
+      <div class="text-sm whitespace-pre-wrap">{{ version.changelog }}</div>
     </div>
 
-    <!-- Download -->
     <div v-if="!noDownload">
-      <v-btn
-        color="primary"
-        size="large"
-        variant="flat"
-        :disabled="isExpired()"
-        @click="emit('download', version)"
-      >
-        <v-icon start :icon="mdiDownload" />
+      <Button size="lg" :disabled="isExpired()" @click="emit('download', version)">
+        <Download class="size-4" />
         {{ t('detail.download') }}
-      </v-btn>
+      </Button>
     </div>
   </div>
 </template>

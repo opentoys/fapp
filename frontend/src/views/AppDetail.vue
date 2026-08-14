@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { mdiDownload } from '@mdi/js'
+import { Download } from 'lucide-vue-next'
 import { api } from '../api/client'
 import { useI18n } from '../composables/useI18n'
 import { loadDownloadApp } from '../composables/useDownloadApp'
 import { detectUA } from '../utils/ua'
 import { PLATFORMS } from '../constants/platform'
+import { Alert } from '../components/ui/alert'
+import { Avatar } from '../components/ui/avatar'
+import { Button } from '../components/ui/button'
+import { Card, CardContent } from '../components/ui/card'
+import { Dialog } from '../components/ui/dialog'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
 import VersionPanel from '../components/VersionPanel.vue'
 import type { AppDetail, Platform, Version } from '../api/types'
 
@@ -45,9 +52,6 @@ const platformList = computed(() => {
   return result
 })
 
-// Mobile (android/ios): show that platform's latest version as a no-card hero
-// instead of the per-platform grid. If the app has no version for the detected
-// platform, fall back to the newest version so mobile styles always apply.
 const mobileVersion = computed(() => {
   if (detected.isDesktop || !detected.platform) return null
   return byPlatform.value.get(detected.platform) ?? versions.value[0] ?? null
@@ -63,8 +67,6 @@ function closePasswordPrompt() {
 }
 
 onMounted(load)
-// Reload when navigating between two /app/:name URLs (the route record is
-// reused, so onMounted alone would not re-run).
 watch(() => route.params.name, (name) => { if (name) load() })
 
 async function load() {
@@ -75,7 +77,6 @@ async function load() {
   }
 }
 
-// Access scope is set once at the app level; all versions share it.
 const appAccess = computed(() => data.value?.app.access_mode ?? 'public')
 const appExpiresAt = computed(() => data.value?.app.expires_at ?? null)
 
@@ -111,23 +112,20 @@ async function doDownload(versionId: number, password: string | undefined) {
 </script>
 
 <template>
-  <v-container class="pa-6" max-width="1200">
-    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable>
+  <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+    <Alert v-if="error" variant="destructive" class="mb-4">
       {{ error }}
-    </v-alert>
+    </Alert>
 
     <template v-if="data">
-      <div class="d-flex align-center mb-2" style="gap: 12px;">
-        <v-avatar v-if="data.app.icon" :image="data.app.icon" size="40" />
-        <v-avatar v-else color="primary" size="40">
-          <span class="text-h6">{{ data.app.name.charAt(0).toUpperCase() }}</span>
-        </v-avatar>
-        <h1 class="text-h4 mb-0">{{ data.app.name }}</h1>
+      <div class="mb-2 flex items-center gap-3">
+        <Avatar :src="data.app.icon" :fallback="data.app.name.charAt(0).toUpperCase()" class="size-10" />
+        <h1 class="text-2xl font-semibold tracking-tight">{{ data.app.name }}</h1>
       </div>
-      <p v-if="data.app.description" class="text-body-1 mb-6">{{ data.app.description }}</p>
+      <p v-if="data.app.description" class="text-muted-foreground mb-6 text-sm">{{ data.app.description }}</p>
 
       <!-- Mobile: detected platform's latest version, no card wrapper -->
-      <div v-if="mobileVersion" style="max-width: 560px;" class="pb-18">
+      <div v-if="mobileVersion" class="max-w-[560px] pb-24">
         <VersionPanel
           :version="mobileVersion"
           :fallback-name="data.app.name"
@@ -140,14 +138,9 @@ async function doDownload(versionId: number, password: string | undefined) {
       </div>
 
       <!-- Desktop / unknown UA: one card per platform -->
-      <v-row v-else-if="platformList.length">
-        <v-col
-          v-for="{ platform, version } in platformList"
-          :key="platform"
-          cols="12"
-          md="6"
-        >
-          <v-card :variant="detected.isDesktop ? 'outlined' : 'flat'" class="pa-4 h-100">
+      <div v-else-if="platformList.length" class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card v-for="{ platform, version } in platformList" :key="platform" class="p-5">
+          <CardContent class="!p-0">
             <VersionPanel
               :version="version"
               :fallback-name="data.app.name"
@@ -156,69 +149,41 @@ async function doDownload(versionId: number, password: string | undefined) {
               :expires-at="data.app.expires_at"
               @download="download"
             />
-          </v-card>
-        </v-col>
-      </v-row>
+          </CardContent>
+        </Card>
+      </div>
 
-      <v-card v-else-if="!error" variant="tonal" class="text-center pa-8">
-        <v-card-text>{{ t('detail.empty') }}</v-card-text>
-      </v-card>
+      <Card v-else-if="!error" class="text-center">
+        <CardContent class="py-12 text-muted-foreground">{{ t('detail.empty') }}</CardContent>
+      </Card>
     </template>
 
-    <!-- Floating download button: 80% width, pinned to the viewport bottom on
-         the mobile hero view. -->
-    <div v-if="mobileVersion && !error" class="download-fab">
-      <v-btn
-        color="primary"
-        size="large"
-        variant="flat"
-        :disabled="isExpired()"
-        @click="download(mobileVersion)"
-      >
-        <v-icon start :icon="mdiDownload" />
+    <!-- Floating download button: 80% width, pinned to the viewport bottom -->
+    <div v-if="mobileVersion && !error" class="fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 bg-gradient-to-t from-background to-transparent">
+      <Button size="lg" class="w-4/5" :disabled="isExpired()" @click="download(mobileVersion)">
+        <Download class="size-4" />
         {{ t('detail.download') }}
-      </v-btn>
+      </Button>
     </div>
 
-    <v-dialog v-model="dialogOpen" max-width="400">
-      <v-card>
-        <v-card-title>{{ t('detail.passwordTitle') }}</v-card-title>
-        <v-card-text>
-          <p class="mb-3">{{ t('detail.passwordBody') }}</p>
-          <v-text-field
+    <Dialog v-model:open="dialogOpen" :title="t('detail.passwordTitle')" max-width="md">
+      <div class="grid gap-4">
+        <p class="text-muted-foreground text-sm">{{ t('detail.passwordBody') }}</p>
+        <div class="grid gap-2">
+          <Label>{{ t('common.password') }}</Label>
+          <Input
             v-if="passwordPrompt"
             v-model="passwordPrompt.password"
-            :label="t('common.password')"
             type="password"
             autofocus
             @keyup.enter="submitPassword"
           />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="closePasswordPrompt">{{ t('common.cancel') }}</v-btn>
-          <v-btn color="primary" variant="flat" @click="submitPassword">{{ t('detail.passwordContinue') }}</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </v-container>
+        </div>
+        <div class="flex justify-end gap-2">
+          <Button variant="outline" @click="closePasswordPrompt">{{ t('common.cancel') }}</Button>
+          <Button @click="submitPassword">{{ t('detail.passwordContinue') }}</Button>
+        </div>
+      </div>
+    </Dialog>
+  </div>
 </template>
-
-<style scoped>
-.download-fab {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  justify-content: center;
-  padding: 12px 0;
-  padding-bottom: calc(12px + env(safe-area-inset-bottom));
-  /* Fade so content scrolling underneath stays legible behind the button. */
-  background: linear-gradient(to top, rgb(var(--v-theme-surface)) 55%, transparent);
-  z-index: 100;
-}
-.download-fab .v-btn {
-  width: 80%;
-}
-</style>
