@@ -1,16 +1,23 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import {
+  Globe, LogIn, Moon, Sun, SunMoon, ChevronDown, UserRound,
+} from 'lucide-vue-next'
 import { useTheme } from '../composables/useTheme'
 import { useAuth } from '../composables/useAuth'
 import { useI18n } from '../composables/useI18n'
 import { useDownloadApp } from '../composables/useDownloadApp'
 import { api } from '../api/client'
-import {
-  mdiWeatherSunny, mdiWeatherNight, mdiThemeLightDark,
-  mdiLogin, mdiLogout, mdiTranslate, mdiAccountCircle,
-  mdiMenuDown, mdiLock,
-} from '@mdi/js'
+import { Button } from './ui/button'
+import { Avatar } from './ui/avatar'
+import { DropdownMenu } from './ui/dropdown-menu'
+import { Dialog } from './ui/dialog'
+import { AlertDialog } from './ui/alert-dialog'
+import { Alert } from './ui/alert'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Sonner } from './ui/sonner'
 import type { ThemeChoice } from '../composables/useTheme'
 import type { Locale } from '../i18n/messages'
 
@@ -21,8 +28,6 @@ const { isAuthed, isSuperAdmin, username, clearToken } = useAuth()
 const { t, locale, setLocale } = useI18n()
 const { app } = useDownloadApp()
 
-// The public download page hides the sign-in entry point and shows the
-// currently-viewed app (icon + name) in place of the app title.
 const isDownloadPage = computed(() => route.path.startsWith('/app/'))
 const currentDownloadApp = computed(() => (isDownloadPage.value ? app.value : null))
 
@@ -39,32 +44,11 @@ const tabs = computed(() => {
 
 const activeTab = computed(() => {
   const p = route.path
-  const hit = tabs.value.find((t) => p === t.match || p.startsWith(t.match + '/'))
+  const hit = tabs.value.find((tab) => p === tab.match || p.startsWith(tab.match + '/'))
   return hit?.to ?? ''
 })
 
-const themeIcon = computed(() => {
-  if (choice.value === 'system') return mdiThemeLightDark
-  if (choice.value === 'light') return mdiWeatherSunny
-  return mdiWeatherNight
-})
-
-const themeLabel = computed(() => {
-  if (choice.value === 'system') return t('app.themeSystem')
-  if (choice.value === 'light') return t('app.themeLight')
-  return t('app.themeDark')
-})
-
-const themeItems = computed(() => [
-  { title: t('app.themeLight'), value: 'light' as ThemeChoice, icon: mdiWeatherSunny },
-  { title: t('app.themeDark'), value: 'dark' as ThemeChoice, icon: mdiWeatherNight },
-  { title: t('app.themeSystem'), value: 'system' as ThemeChoice, icon: mdiThemeLightDark },
-])
-
-const langItems = computed(() => [
-  { title: t('lang.en'), value: 'en' as Locale },
-  { title: t('lang.zh'), value: 'zh' as Locale },
-])
+const sonnerTheme = computed<ThemeChoice>(() => choice.value)
 
 // --- Password change dialog ---
 const pwDialog = ref(false)
@@ -104,156 +88,126 @@ function logout() {
   clearToken()
   router.push('/login')
 }
+
+function onThemeSelect(i: number) {
+  const order: ThemeChoice[] = ['light', 'dark', 'system']
+  setChoice(order[i])
+}
+
+function onLangSelect(i: number) {
+  const order: Locale[] = ['en', 'zh']
+  setLocale(order[i])
+}
 </script>
 
 <template>
-  <v-app>
-    <v-app-bar color="primary" density="compact">
-      <v-app-bar-title v-if="!currentDownloadApp">{{ t('app.title') }}</v-app-bar-title>
-      <v-app-bar-title v-else class="d-flex align-center" style="gap: 8px;">
-        <v-avatar v-if="currentDownloadApp.icon" :image="currentDownloadApp.icon" size="28" />
-        <v-avatar v-else color="rgba(255,255,255,0.2)" size="28">
-          <span class="text-subtitle-2">{{ currentDownloadApp.name.charAt(0).toUpperCase() }}</span>
-        </v-avatar>
-        <span class="font-weight-medium text-truncate">{{ currentDownloadApp.name }}</span>
-      </v-app-bar-title>
-
-      <v-tabs v-if="isAuthed" :model-value="activeTab" align-tabs="center">
-        <v-tab v-for="tab in tabs" :key="tab.to" :value="tab.to" :to="tab.to">
-          {{ tab.label }}
-        </v-tab>
-      </v-tabs>
-
-      <v-spacer />
-
-      <!-- Language switcher -->
-      <v-menu>
-        <template #activator="{ props }">
-          <v-btn variant="text" v-bind="props">
-            <v-icon :icon="mdiTranslate" />
-          </v-btn>
+  <div class="flex min-h-screen flex-col">
+    <header class="border-b bg-background/95 sticky top-0 z-40 backdrop-blur">
+      <div class="flex h-14 items-center gap-3 px-4 sm:px-6">
+        <template v-if="currentDownloadApp">
+          <Avatar :src="currentDownloadApp.icon" :fallback="currentDownloadApp.name.charAt(0).toUpperCase()" class="size-7" />
+          <span class="truncate text-sm font-semibold">{{ currentDownloadApp.name }}</span>
         </template>
-        <v-list density="compact" :selected="[locale]">
-          <v-list-item
-            v-for="item in langItems"
-            :key="item.value"
-            :value="item.value"
-            @click="setLocale(item.value)"
+        <template v-else>
+          <span class="text-sm font-semibold">{{ t('app.title') }}</span>
+        </template>
+
+        <nav v-if="isAuthed" class="mx-auto hidden items-center gap-1 sm:flex">
+          <Button
+            v-for="tab in tabs"
+            :key="tab.to"
+            as-child
+            variant="ghost"
+            size="sm"
+            :class="activeTab === tab.to ? 'bg-accent text-accent-foreground' : ''"
           >
-            <v-list-item-title>{{ item.title }}</v-list-item-title>
-          </v-list-item>
-        </v-list>
-      </v-menu>
+            <RouterLink :to="tab.to">{{ tab.label }}</RouterLink>
+          </Button>
+        </nav>
 
-      <!-- Theme dropdown -->
-      <v-menu>
-        <template #activator="{ props }">
-          <v-btn :title="themeLabel" variant="text" v-bind="props">
-            <v-icon :icon="themeIcon" />
-          </v-btn>
-        </template>
-        <v-list density="compact" :selected="[choice]">
-          <v-list-item
-            v-for="item in themeItems"
-            :key="item.value"
-            :value="item.value"
-            @click="setChoice(item.value)"
+        <div class="ml-auto flex items-center gap-1">
+          <!-- Language -->
+          <DropdownMenu :items="[{ label: 'English', value: 'en' }, { label: '中文', value: 'zh' }]" :selected="locale" @select="onLangSelect">
+            <template #trigger>
+              <Button variant="ghost" size="icon" :title="t('lang.en')">
+                <Globe class="size-4" />
+              </Button>
+            </template>
+          </DropdownMenu>
+
+          <!-- Theme -->
+          <DropdownMenu :items="[{ label: t('app.themeLight'), value: 'light' }, { label: t('app.themeDark'), value: 'dark' }, { label: t('app.themeSystem'), value: 'system' }]" :selected="choice" @select="onThemeSelect">
+            <template #trigger>
+              <Button variant="ghost" size="icon">
+                <Sun v-if="choice === 'light'" class="size-4" />
+                <Moon v-else-if="choice === 'dark'" class="size-4" />
+                <SunMoon v-else class="size-4" />
+              </Button>
+            </template>
+          </DropdownMenu>
+
+          <!-- Sign in -->
+          <Button v-if="!isAuthed && route.path !== '/login' && !isDownloadPage" as-child variant="ghost" size="sm">
+            <RouterLink to="/login">
+              <LogIn class="size-4" />
+              {{ t('app.signin') }}
+            </RouterLink>
+          </Button>
+
+          <!-- User menu -->
+          <DropdownMenu
+            v-if="isAuthed"
+            :items="[
+              { label: username ?? '', value: username ?? '' },
+              { label: '', divider: true },
+              ...(!isSuperAdmin ? [{ label: t('app.changePassword'), value: '' }] : []),
+              { label: t('app.logout'), value: '', danger: true },
+            ]"
+            @select="(i: number) => { if (!isSuperAdmin && i === 2) openPwDialog(); if (i === (isSuperAdmin ? 1 : 3)) logoutDialog = true }"
           >
-            <template #prepend>
-              <v-icon :icon="item.icon" size="small" />
+            <template #trigger>
+              <Button variant="ghost" size="sm" class="gap-1.5">
+                <UserRound class="size-4" />
+                {{ username }}
+                <ChevronDown class="size-3 opacity-50" />
+              </Button>
             </template>
-            <v-list-item-title>{{ item.title }}</v-list-item-title>
-          </v-list-item>
-        </v-list>
-      </v-menu>
+          </DropdownMenu>
+        </div>
+      </div>
+    </header>
 
-      <!-- Sign in button -->
-      <v-btn
-        v-if="!isAuthed && route.path !== '/login' && !isDownloadPage"
-        to="/login"
-        variant="text"
-      >
-        <v-icon :icon="mdiLogin" />
-        {{ t('app.signin') }}
-      </v-btn>
-
-      <!-- User menu -->
-      <v-menu v-if="isAuthed">
-        <template #activator="{ props }">
-          <v-btn variant="text" v-bind="props">
-            <v-icon :icon="mdiAccountCircle" />
-            {{ username }}
-            <v-icon :icon="mdiMenuDown" />
-          </v-btn>
-        </template>
-        <v-list density="compact">
-          <v-list-item v-if="!isSuperAdmin" @click="openPwDialog">
-            <template #prepend>
-              <v-icon :icon="mdiLock" size="small" />
-            </template>
-            <v-list-item-title>{{ t('app.changePassword') }}</v-list-item-title>
-          </v-list-item>
-          <v-list-item @click="logoutDialog = true">
-            <template #prepend>
-              <v-icon :icon="mdiLogout" size="small" />
-            </template>
-            <v-list-item-title>{{ t('app.logout') }}</v-list-item-title>
-          </v-list-item>
-        </v-list>
-      </v-menu>
-    </v-app-bar>
-
-    <v-main>
+    <main class="flex-1">
       <router-view />
-    </v-main>
+    </main>
+
+    <Sonner :theme="sonnerTheme" />
 
     <!-- Password change dialog -->
-    <v-dialog v-model="pwDialog" max-width="400">
-      <v-card>
-        <v-card-title>{{ t('app.changePassword') }}</v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="oldPassword"
-            :label="t('app.oldPassword')"
-            type="password"
-            autofocus
-          />
-          <v-text-field
-            v-model="newPassword"
-            :label="t('app.newPassword')"
-            type="password"
-            @keyup.enter="submitPassword"
-          />
-          <v-alert v-if="pwError" type="error" variant="tonal" density="compact" class="mt-2">
-            {{ pwError }}
-          </v-alert>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="pwDialog = false">{{ t('common.cancel') }}</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
-            :loading="pwLoading"
-            :disabled="!oldPassword || !newPassword"
-            @click="submitPassword"
-          >
-            {{ t('common.save') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <Dialog v-model:open="pwDialog" :title="t('app.changePassword')" max-width="md">
+      <div class="grid gap-4">
+        <div class="grid gap-2">
+          <Label>{{ t('app.oldPassword') }}</Label>
+          <Input v-model="oldPassword" type="password" />
+        </div>
+        <div class="grid gap-2">
+          <Label>{{ t('app.newPassword') }}</Label>
+          <Input v-model="newPassword" type="password" @keyup.enter="submitPassword" />
+        </div>
+        <Alert v-if="pwError" variant="destructive">{{ pwError }}</Alert>
+        <div class="flex justify-end gap-2">
+          <Button variant="outline" @click="pwDialog = false">{{ t('common.cancel') }}</Button>
+          <Button :disabled="pwLoading" @click="submitPassword">{{ t('common.save') }}</Button>
+        </div>
+      </div>
+    </Dialog>
 
-    <!-- Logout confirmation dialog -->
-    <v-dialog v-model="logoutDialog" max-width="400">
-      <v-card>
-        <v-card-title>{{ t('app.confirmLogout') }}</v-card-title>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="logoutDialog = false">{{ t('common.cancel') }}</v-btn>
-          <v-btn color="error" variant="flat" @click="logout">{{ t('app.logout') }}</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </v-app>
+    <!-- Logout confirmation -->
+    <AlertDialog v-model:open="logoutDialog" :title="t('app.confirmLogout')">
+      <template #footer>
+        <Button variant="outline" @click="logoutDialog = false">{{ t('common.cancel') }}</Button>
+        <Button variant="destructive" @click="logout">{{ t('app.logout') }}</Button>
+      </template>
+    </AlertDialog>
+  </div>
 </template>
