@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { X } from 'lucide-vue-next'
-import { DialogContent, DialogOverlay, DialogPortal, DialogRoot, DialogTitle } from 'reka-ui'
+import { DialogContent, DialogOverlay, DialogPortal, DialogRoot, DialogTitle, DialogTrigger } from 'reka-ui'
 import { cn } from '../../../lib/utils'
 
 const props = withDefaults(defineProps<{ title?: string; class?: string; maxWidth?: string }>(), {
@@ -14,7 +14,9 @@ const open = defineModel<boolean>('open', { default: false })
 
 <template>
   <DialogRoot v-model:open="open">
-    <slot name="trigger" />
+    <DialogTrigger v-if="$slots.trigger" as-child>
+      <slot name="trigger" />
+    </DialogTrigger>
     <DialogPortal>
       <DialogOverlay class="bg-black/80 fixed inset-0 z-50" />
       <DialogContent
