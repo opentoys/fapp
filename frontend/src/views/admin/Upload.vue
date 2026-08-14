@@ -4,6 +4,16 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '../../api/client'
 import { useI18n } from '../../composables/useI18n'
 import { ARCH_BY_PLATFORM, PLATFORMS, detectPlatformFromName } from '../../constants/platform'
+import { Alert } from '../../components/ui/alert'
+import { Avatar } from '../../components/ui/avatar'
+import { Button } from '../../components/ui/button'
+import { Card, CardContent } from '../../components/ui/card'
+import { Checkbox } from '../../components/ui/checkbox'
+import { Input } from '../../components/ui/input'
+import { Label } from '../../components/ui/label'
+import { Textarea } from '../../components/ui/textarea'
+import AppSelect from '../../components/AppSelect.vue'
+import FileUpload from '../../components/FileUpload.vue'
 import type { AppItem, Architecture, Platform, ReleaseType } from '../../api/types'
 
 const route = useRoute()
@@ -22,7 +32,6 @@ const changelog = ref('')
 const error = ref('')
 const loading = ref(false)
 
-// Parsed metadata (browser-side, via window.AppInfoParser).
 const parsing = ref(false)
 const parseError = ref('')
 const parsed = ref<{
@@ -56,26 +65,19 @@ const platformItems = computed(() =>
   PLATFORMS.map((p) => ({ title: t('platform.' + p), value: p }))
 )
 
-const archItems = computed(() =>
-  (platform.value ? ARCH_BY_PLATFORM[platform.value] : []).map((a) => ({
-    title: t('arch.' + a),
-    value: a,
-  }))
+const archOptions = computed(() =>
+  platform.value ? ARCH_BY_PLATFORM[platform.value] : []
 )
 
-// Architecture options depend on the platform; clear stale selections on change.
-watch(platform, () => {
-  arch.value = []
-})
+watch(platform, () => { arch.value = [] })
 
-// Normalize the two result shapes into a single shape.
-//  - APK: { package, versionName, versionCode, application.label, icon }
-//  - IPA: { CFBundleIdentifier, CFBundleShortVersionString, CFBundleVersion,
-//           CFBundleDisplayName/CFBundleName, icon }
+function toggleArch(a: Architecture, checked: boolean) {
+  arch.value = checked ? [...arch.value, a] : arch.value.filter((x) => x !== a)
+}
+
 function normalizeResult(res: AppInfoParserResult, ext: string) {
   if (ext === 'apk') {
     let appName = res.appName || ''
-    // Unresolved resource references (e.g. @string/app_name) are useless.
     if (appName.startsWith('@') || appName.startsWith('resourceId:')) appName = ''
     return {
       platform: 'android' as Platform,
@@ -102,7 +104,6 @@ async function parseApp(f: File, ext: string) {
   try {
     const info = normalizeResult(await new window.AppInfoParser(f).parse(), ext)
     parsed.value = info
-    // Auto-fill the editable fields; the user can override before upload.
     versionName.value = info.versionName
     versionCode.value = info.versionCode || null
     platform.value = info.platform
@@ -113,16 +114,16 @@ async function parseApp(f: File, ext: string) {
   }
 }
 
-function onFileChange(f: File | File[] | null) {
-  if (Array.isArray(f)) file.value = f[0] ?? null
-  else file.value = f
+function onFile(f: File | File[]) {
+  const resolved = Array.isArray(f) ? f[0] : f
+  file.value = resolved
   parsed.value = null
   parseError.value = ''
-  if (!file.value) return
-  const ext = (file.value.name.split('.').pop() ?? '').toLowerCase()
-  if (!platform.value) platform.value = detectPlatformFromName(file.value.name)
+  if (!resolved) return
+  const ext = (resolved.name.split('.').pop() ?? '').toLowerCase()
+  if (!platform.value) platform.value = detectPlatformFromName(resolved.name)
   if (ext === 'apk' || ext === 'ipa') {
-    parseApp(file.value, ext)
+    parseApp(resolved, ext)
   }
 }
 
@@ -176,138 +177,91 @@ async function submit() {
 </script>
 
 <template>
-  <v-container class="pa-6" max-width="720">
-    <h1 class="text-h4 mb-6">{{ t('upload.title') }}</h1>
+  <div class="mx-auto max-w-2xl px-4 py-8 sm:px-6">
+    <h1 class="text-2xl font-semibold tracking-tight mb-6">{{ t('upload.title') }}</h1>
 
-    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable>
-      {{ error }}
-    </v-alert>
+    <Alert v-if="error" variant="destructive" class="mb-4">{{ error }}</Alert>
 
-    <v-form @submit.prevent="submit">
-      <v-card variant="outlined" class="mb-4">
-        <v-card-text>
-          <v-file-input
-            :model-value="file"
+    <form class="grid gap-4" @submit.prevent="submit">
+      <Card>
+        <CardContent class="grid gap-4">
+          <FileUpload
             :label="t('upload.file')"
             accept=".apk,.aab,.ipa,.exe,.dmg"
-            prepend-icon=""
-            show-size
-            :loading="parsing"
-            @update:model-value="onFileChange"
+            drop-zone
+            :disabled="parsing"
+            @change="onFile"
           />
+          <Alert v-if="parsing" variant="info">{{ t('upload.parsing') }}</Alert>
+          <Alert v-else-if="parseError" variant="warning">{{ t('upload.parseFailed') }}</Alert>
 
-          <v-alert
-            v-if="parsing"
-            type="info"
-            variant="tonal"
-            density="compact"
-            class="mt-2"
-          >
-            {{ t('upload.parsing') }}
-          </v-alert>
-          <v-alert
-            v-else-if="parseError"
-            type="warning"
-            variant="tonal"
-            density="compact"
-            class="mt-2"
-          >
-            {{ t('upload.parseFailed') }}
-          </v-alert>
-
-          <v-card v-if="parsed" variant="tonal" class="mt-3 pa-3">
-            <div class="d-flex align-center" style="gap: 12px;">
-              <v-avatar v-if="parsed.iconDataUri" :image="parsed.iconDataUri" size="40" />
-              <v-avatar v-else color="primary" size="40">
-                <span class="text-h6">{{ (parsed.appName || '?').charAt(0).toUpperCase() }}</span>
-              </v-avatar>
-              <div class="text-body-2" style="min-width: 0;">
-                <div v-if="parsed.appName" class="font-weight-medium">{{ parsed.appName }}</div>
-                <code v-if="parsed.package" class="text-caption">{{ parsed.package }}</code>
-              </div>
+          <div v-if="parsed" class="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
+            <Avatar :src="parsed.iconDataUri" :fallback="(parsed.appName || '?').charAt(0).toUpperCase()" class="size-10" />
+            <div class="min-w-0 text-sm">
+              <div v-if="parsed.appName" class="font-medium">{{ parsed.appName }}</div>
+              <code v-if="parsed.package" class="text-muted-foreground text-xs">{{ parsed.package }}</code>
             </div>
-          </v-card>
-        </v-card-text>
-      </v-card>
-
-      <v-card variant="outlined" class="mb-4">
-        <v-card-text>
-          <v-select
-            v-model="appId"
-            :items="appItems"
-            :label="t('upload.app')"
-          />
-          <v-row>
-            <v-col cols="12" sm="6">
-              <v-select
-                v-model="releaseType"
-                :items="releaseItems"
-                :label="t('upload.releaseType')"
-              />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-select
-                v-model="platform"
-                :items="platformItems"
-                :label="t('upload.platform')"
-                clearable
-              />
-            </v-col>
-          </v-row>
-          <v-row>
-            <v-col cols="12">
-              <v-select
-                v-model="arch"
-                :items="archItems"
-                :label="t('upload.arch')"
-                multiple
-                chips
-                clearable
-                :disabled="!platform"
-              />
-            </v-col>
-          </v-row>
-          <v-row>
-            <v-col cols="12" sm="6">
-              <v-text-field v-model="versionName" :label="t('upload.versionName')" placeholder="1.0.0" />
-            </v-col>
-            <v-col cols="12" sm="6">
-              <v-text-field
-                v-model.number="versionCode"
-                :label="t('upload.versionCode')"
-                type="number"
-                placeholder="1"
-              />
-            </v-col>
-          </v-row>
-          <div class="text-caption text-medium-emphasis mt-1">
-            {{ t('upload.parseHint') }}
           </div>
-          <v-textarea
-            v-model="changelog"
-            :label="t('upload.changelog')"
-            rows="3"
-            auto-grow
-          />
-        </v-card-text>
-      </v-card>
+        </CardContent>
+      </Card>
 
-      <v-alert type="info" variant="tonal" class="mb-4">
-        {{ t('upload.publishHint') }}
-      </v-alert>
+      <Card>
+        <CardContent class="grid gap-4">
+          <div class="grid gap-2">
+            <Label>{{ t('upload.app') }}</Label>
+            <AppSelect v-model="appId" :items="appItems" :placeholder="t('upload.app')" />
+          </div>
 
-      <div class="d-flex justify-end" style="gap: 8px;">
-        <v-btn @click="router.back()">{{ t('common.cancel') }}</v-btn>
-        <v-btn
-          color="primary"
-          variant="flat"
-          :loading="loading"
-          :disabled="!file || !appId"
-          @click="submit"
-        >
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="grid gap-2">
+              <Label>{{ t('upload.releaseType') }}</Label>
+              <AppSelect v-model="releaseType" :items="releaseItems" />
+            </div>
+            <div class="grid gap-2">
+              <Label>{{ t('upload.platform') }}</Label>
+              <AppSelect v-model="platform" :items="platformItems" :placeholder="t('upload.platform')" />
+            </div>
+          </div>
+
+          <div class="grid gap-2">
+            <Label>{{ t('upload.arch') }}</Label>
+            <div v-if="archOptions.length" class="flex flex-wrap gap-4">
+              <label v-for="a in archOptions" :key="a" class="flex cursor-pointer items-center gap-2 text-sm">
+                <Checkbox :model-value="arch.includes(a)" @update:model-value="(c) => toggleArch(a, !!c)" />
+                {{ t('arch.' + a) }}
+              </label>
+            </div>
+            <p v-else class="text-muted-foreground text-sm">—</p>
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="grid gap-2">
+              <Label>{{ t('upload.versionName') }}</Label>
+              <Input v-model="versionName" :placeholder="'1.0.0'" />
+            </div>
+            <div class="grid gap-2">
+              <Label>{{ t('upload.versionCode') }}</Label>
+              <Input v-model.number="versionCode" type="number" :placeholder="'1'" />
+            </div>
+          </div>
+
+          <p class="text-muted-foreground text-xs">{{ t('upload.parseHint') }}</p>
+
+          <div class="grid gap-2">
+            <Label>{{ t('upload.changelog') }}</Label>
+            <Textarea v-model="changelog" rows="3" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Alert variant="info">{{ t('upload.publishHint') }}</Alert>
+
+      <div class="flex justify-end gap-2">
+        <Button variant="outline" @click="router.back()">{{ t('common.cancel') }}</Button>
+        <Button type="submit" :disabled="!file || !appId || loading">
           {{ t('upload.submit') }}
-        </v-btn>
+        </Button>
       </div>
-    </v-form>
-  </v-container>
+    </form>
+  </div>
 </template>
