@@ -25,6 +25,7 @@ const newUsername = ref('')
 const newPassword = ref('')
 const createError = ref('')
 const createDialogOpen = ref(false)
+const creating = ref(false)
 
 const editTarget = ref<User | null>(null)
 const editDialogOpen = ref(false)
@@ -41,6 +42,7 @@ onMounted(load)
 async function load() {
   try {
     users.value = await api.adminUsers()
+    error.value = ''
   } catch (e) {
     error.value = (e as Error).message
   }
@@ -54,11 +56,13 @@ function openCreate() {
 }
 
 async function confirmCreate() {
+  if (creating.value) return
   if (!newUsername.value || !newPassword.value) {
     createError.value = t('adminUsers.required')
     return
   }
   createError.value = ''
+  creating.value = true
   try {
     await api.createUser({ username: newUsername.value, password: newPassword.value })
     createDialogOpen.value = false
@@ -66,6 +70,8 @@ async function confirmCreate() {
     toast(t('adminUsers.userCreated'))
   } catch (e) {
     createError.value = (e as Error).message
+  } finally {
+    creating.value = false
   }
 }
 
@@ -78,6 +84,7 @@ function openEdit(u: User) {
 }
 
 async function confirmEdit() {
+  if (editLoading.value) return
   if (!editTarget.value) return
   if (!editUsername.value.trim()) {
     editError.value = t('adminUsers.required')
@@ -112,6 +119,7 @@ function askDelete(u: User) {
 async function confirmDelete() {
   if (!deleteTarget.value) return
   const id = deleteTarget.value.id
+  deleteTarget.value = null
   deleteDialogOpen.value = false
   try {
     await api.deleteUser(id)
@@ -169,17 +177,17 @@ async function confirmDelete() {
     <Dialog v-model:open="createDialogOpen" :title="t('adminUsers.newUser')" max-width="md">
       <div class="grid gap-4">
         <div class="grid gap-2">
-          <Label>{{ t('common.username') }}</Label>
-          <Input v-model="newUsername" autofocus />
+          <Label for="users-create-username">{{ t('common.username') }}</Label>
+          <Input id="users-create-username" v-model="newUsername" autofocus />
         </div>
         <div class="grid gap-2">
-          <Label>{{ t('common.password') }}</Label>
-          <Input v-model="newPassword" type="password" @keyup.enter="confirmCreate" />
+          <Label for="users-create-password">{{ t('common.password') }}</Label>
+          <Input id="users-create-password" v-model="newPassword" type="password" @keyup.enter="confirmCreate" />
         </div>
         <Alert v-if="createError" variant="destructive">{{ createError }}</Alert>
         <div class="flex justify-end gap-2">
           <Button variant="outline" @click="createDialogOpen = false">{{ t('common.cancel') }}</Button>
-          <Button :disabled="!newUsername || !newPassword" @click="confirmCreate">{{ t('common.create') }}</Button>
+          <Button :disabled="!newUsername || !newPassword || creating" @click="confirmCreate">{{ t('common.create') }}</Button>
         </div>
       </div>
     </Dialog>
@@ -187,17 +195,17 @@ async function confirmDelete() {
     <Dialog v-model:open="editDialogOpen" :title="t('adminUsers.editUser')" max-width="md">
       <div class="grid gap-4">
         <div class="grid gap-2">
-          <Label>{{ t('common.username') }}</Label>
-          <Input v-model="editUsername" autofocus />
+          <Label for="users-edit-username">{{ t('common.username') }}</Label>
+          <Input id="users-edit-username" v-model="editUsername" autofocus />
         </div>
         <div class="grid gap-2">
-          <Label>{{ t('adminUsers.newPassword') }}</Label>
-          <Input v-model="editPassword" type="password" @keyup.enter="confirmEdit" />
+          <Label for="users-edit-password">{{ t('adminUsers.newPassword') }}</Label>
+          <Input id="users-edit-password" v-model="editPassword" type="password" @keyup.enter="confirmEdit" />
         </div>
         <Alert v-if="editError" variant="destructive">{{ editError }}</Alert>
         <div class="flex justify-end gap-2">
           <Button variant="outline" @click="editDialogOpen = false">{{ t('common.cancel') }}</Button>
-          <Button :disabled="!editUsername.trim()" @click="confirmEdit">{{ t('common.save') }}</Button>
+          <Button :disabled="!editUsername.trim() || editLoading" @click="confirmEdit">{{ t('common.save') }}</Button>
         </div>
       </div>
     </Dialog>
