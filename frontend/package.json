@@ -9,9 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@iconify-json/material-symbols": "^1.2.88",
-    "@iconify/vue": "^5.0.1",
-    "@mdi/js": "^7.4.47",
     "@tailwindcss/vite": "^4.3.3",
     "@vueuse/core": "^14.4.0",
     "app-info-parser": "^1.1.6",
@@ -27,17 +24,14 @@
     "ua-parser-js": "^2.0.10",
     "vue": "^3.5.40",
     "vue-router": "^5.2.0",
-    "vue-sonner": "^2.0.9",
-    "vuetify": "^3.7.0"
+    "vue-sonner": "^2.0.9"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/tsconfig": "^0.9.1",
-    "sass": "^1.80.0",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
-    "vite-plugin-vuetify": "^2.0.4",
     "vue-tsc": "^3.3.8"
   }
 }
