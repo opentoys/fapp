@@ -151,7 +151,7 @@ async function confirmDelete() {
     </Card>
 
     <Card>
-      <CardContent class="!p-0">
+      <CardContent class="p-0!">
         <Table>
           <TableHeader>
             <TableRow>

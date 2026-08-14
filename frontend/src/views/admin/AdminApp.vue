@@ -190,6 +190,7 @@ function onInfoIconChange(f: File | File[] | null) {
 }
 
 async function saveInfo() {
+  if (infoSaving.value) return
   if (!data.value) return
   if (!infoName.value.trim()) {
     infoError.value = t('admin.nameRequired')
@@ -243,6 +244,7 @@ async function deleteScreenshot(url: string) {
 }
 
 async function saveAccess() {
+  if (accessSaving.value) return
   if (!data.value) return
   if (accessMode.value === 'password' && !accessPassword.value) {
     accessError.value = t('adminApp.publishRequired')
@@ -288,6 +290,7 @@ function closePublish() {
 async function submitPublish() {
   const v = publishTarget.value
   if (!v) return
+  if (publishLoading.value) return
   publishError.value = ''
   publishLoading.value = true
   try {
@@ -307,6 +310,7 @@ async function load() {
   const id = Number(route.params.id)
   try {
     data.value = await api.adminAppDetail(id)
+    error.value = ''
     syncOverview()
   } catch (e) {
     error.value = (e as Error).message
@@ -513,16 +517,16 @@ function fmtSize(n: number): string {
           </div>
           <div class="grid gap-3">
             <div class="grid gap-2">
-              <Label>{{ t('admin.appName') }}</Label>
-              <Input v-model="infoName" />
+              <Label for="info-name">{{ t('admin.appName') }}</Label>
+              <Input id="info-name" v-model="infoName" />
             </div>
             <div class="grid gap-2">
-              <Label>{{ t('adminApp.appDescription') }}</Label>
-              <Textarea v-model="infoDescription" rows="2" />
+              <Label for="info-description">{{ t('adminApp.appDescription') }}</Label>
+              <Textarea id="info-description" v-model="infoDescription" rows="2" />
             </div>
             <Alert v-if="infoError" variant="destructive">{{ infoError }}</Alert>
             <div class="flex justify-end">
-              <Button :disabled="!infoName.trim()" @click="saveInfo">{{ t('common.save') }}</Button>
+              <Button :disabled="!infoName.trim() || infoSaving" @click="saveInfo">{{ t('common.save') }}</Button>
             </div>
           </div>
         </Card>
@@ -554,16 +558,16 @@ function fmtSize(n: number): string {
             </div>
           </RadioGroup>
           <div v-if="accessMode === 'password'" class="mt-3 grid gap-2">
-            <Label>{{ t('upload.downloadPassword') }}</Label>
-            <Input v-model="accessPassword" type="password" />
+            <Label for="access-password">{{ t('upload.downloadPassword') }}</Label>
+            <Input id="access-password" v-model="accessPassword" type="password" />
           </div>
           <div v-if="accessMode === 'expiry'" class="mt-3 grid gap-2">
-            <Label>{{ t('upload.expiresAt') }}</Label>
-            <Input v-model="accessExpiresAt" type="datetime-local" />
+            <Label for="access-expires-at">{{ t('upload.expiresAt') }}</Label>
+            <Input id="access-expires-at" v-model="accessExpiresAt" type="datetime-local" />
           </div>
           <Alert v-if="accessError" variant="destructive" class="mt-2">{{ accessError }}</Alert>
           <div class="mt-3 flex justify-end">
-            <Button @click="saveAccess">{{ t('common.save') }}</Button>
+            <Button :disabled="accessSaving" @click="saveAccess">{{ t('common.save') }}</Button>
           </div>
         </Card>
 
@@ -595,7 +599,7 @@ function fmtSize(n: number): string {
         </div>
 
         <Card>
-          <CardContent class="!p-0">
+          <CardContent class="p-0!">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -643,7 +647,7 @@ function fmtSize(n: number): string {
                     <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive" @click="askDelete(v)">{{ t('common.delete') }}</Button>
                   </TableCell>
                 </TableRow>
-                <TableEmpty v-if="!filteredVersions.length">{{ t('adminApp.statsEmpty') }}</TableEmpty>
+                <TableEmpty v-if="!filteredVersions.length" :colspan="10">{{ t('adminApp.statsEmpty') }}</TableEmpty>
               </TableBody>
             </Table>
           </CardContent>
@@ -690,7 +694,7 @@ function fmtSize(n: number): string {
             </Card>
           </div>
           <Card>
-            <CardContent class="!p-0">
+            <CardContent class="p-0!">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -725,7 +729,7 @@ function fmtSize(n: number): string {
         <Alert v-if="publishError" variant="destructive">{{ publishError }}</Alert>
         <div class="flex justify-end gap-2">
           <Button variant="outline" @click="closePublish">{{ t('common.cancel') }}</Button>
-          <Button @click="submitPublish">{{ t('adminApp.publish') }}</Button>
+          <Button :disabled="publishLoading" @click="submitPublish">{{ t('adminApp.publish') }}</Button>
         </div>
       </div>
     </Dialog>
