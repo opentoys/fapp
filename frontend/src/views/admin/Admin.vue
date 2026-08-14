@@ -1,21 +1,35 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { toast } from 'vue-sonner'
+import { Plus } from 'lucide-vue-next'
 import { api } from '../../api/client'
 import { useI18n } from '../../composables/useI18n'
 import { fmtDate } from '../../utils/format'
+import { Button } from '../../components/ui/button'
+import { Avatar } from '../../components/ui/avatar'
+import { Card, CardContent, CardFooter } from '../../components/ui/card'
+import { Alert } from '../../components/ui/alert'
+import { Dialog } from '../../components/ui/dialog'
+import { AlertDialog } from '../../components/ui/alert-dialog'
+import { Input } from '../../components/ui/input'
+import { Label } from '../../components/ui/label'
+import { Separator } from '../../components/ui/separator'
+import FileUpload from '../../components/FileUpload.vue'
 import type { AppItem } from '../../api/types'
 
 const router = useRouter()
 const { t } = useI18n()
 const apps = ref<AppItem[]>([])
 const error = ref('')
+
 const newName = ref('')
 const createIcon = ref<File | null>(null)
 const createIconPreview = ref('')
 const createError = ref('')
 const creating = ref(false)
 const createDialogOpen = ref(false)
+
 const editTarget = ref<AppItem | null>(null)
 const editDialogOpen = ref(false)
 const editName = ref('')
@@ -23,10 +37,9 @@ const editIcon = ref<File | null>(null)
 const editIconPreview = ref('')
 const editError = ref('')
 const editing = ref(false)
+
 const deleteTarget = ref<AppItem | null>(null)
 const deleteDialogOpen = ref(false)
-const snackbar = ref('')
-const snackbarOpen = ref(false)
 
 onMounted(load)
 async function load() {
@@ -46,14 +59,10 @@ function openCreate() {
   createDialogOpen.value = true
 }
 
-function onCreateIconChange(f: File | File[] | null) {
-  const file = Array.isArray(f) ? f[0] ?? null : f
-  createIcon.value = file
-  createIconPreview.value = file ? URL.createObjectURL(file) : ''
-}
-
-function closeCreate() {
-  createDialogOpen.value = false
+function onCreateIcon(file: File | File[]) {
+  const f = Array.isArray(file) ? file[0] : file
+  createIcon.value = f
+  createIconPreview.value = URL.createObjectURL(f)
 }
 
 async function confirmCreate() {
@@ -65,44 +74,19 @@ async function confirmCreate() {
   createError.value = ''
   try {
     const app = await api.createApp({ name: newName.value.trim() })
-    // Best-effort: set the icon after creating the app; a failure to upload
-    // the icon should not block app creation.
     if (createIcon.value) {
       try {
         await api.uploadAppIcon(app.id, createIcon.value)
       } catch (e) {
-        showSnack((e as Error).message)
+        toast((e as Error).message)
       }
     }
-    closeCreate()
+    createDialogOpen.value = false
     router.push(`/admin/app/${app.id}`)
   } catch (e) {
     createError.value = (e as Error).message
   } finally {
     creating.value = false
-  }
-}
-
-function askDelete(item: AppItem) {
-  deleteTarget.value = item
-  deleteDialogOpen.value = true
-}
-
-function cancelDelete() {
-  deleteDialogOpen.value = false
-  deleteTarget.value = null
-}
-
-async function confirmDelete() {
-  if (!deleteTarget.value) return
-  const id = deleteTarget.value.id
-  cancelDelete()
-  try {
-    await api.deleteApp(id)
-    await load()
-    showSnack(t('admin.appDeleted'))
-  } catch (e) {
-    showSnack((e as Error).message)
   }
 }
 
@@ -115,17 +99,10 @@ function openEdit(a: AppItem) {
   editDialogOpen.value = true
 }
 
-function closeEdit() {
-  editDialogOpen.value = false
-  editTarget.value = null
-}
-
-function onEditIconChange(f: File | File[] | null) {
-  const file = Array.isArray(f) ? f[0] ?? null : f
-  editIcon.value = file
-  editIconPreview.value = file
-    ? URL.createObjectURL(file)
-    : editTarget.value?.icon || ''
+function onEditIcon(file: File | File[]) {
+  const f = Array.isArray(file) ? file[0] : file
+  editIcon.value = f
+  editIconPreview.value = URL.createObjectURL(f)
 }
 
 async function confirmEdit() {
@@ -141,8 +118,8 @@ async function confirmEdit() {
     await api.updateApp(id, { name: editName.value.trim() })
     if (editIcon.value) await api.uploadAppIcon(id, editIcon.value)
     await load()
-    closeEdit()
-    showSnack(t('admin.appUpdated'))
+    editDialogOpen.value = false
+    toast(t('admin.appUpdated'))
   } catch (e) {
     editError.value = (e as Error).message
   } finally {
@@ -150,191 +127,109 @@ async function confirmEdit() {
   }
 }
 
-function showSnack(msg: string) {
-  snackbar.value = msg
-  snackbarOpen.value = true
+function askDelete(item: AppItem) {
+  deleteTarget.value = item
+  deleteDialogOpen.value = true
 }
 
+async function confirmDelete() {
+  if (!deleteTarget.value) return
+  const id = deleteTarget.value.id
+  deleteDialogOpen.value = false
+  try {
+    await api.deleteApp(id)
+    await load()
+    toast(t('admin.appDeleted'))
+  } catch (e) {
+    toast((e as Error).message)
+  }
+}
 </script>
 
 <template>
-  <v-container class="pa-6" max-width="1200">
-    <div class="d-flex align-center justify-space-between mb-6">
-      <h1 class="text-h4">{{ t('admin.title') }}</h1>
-      <v-btn color="primary" variant="flat" @click="openCreate">
+  <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+    <div class="mb-6 flex items-center justify-between">
+      <h1 class="text-2xl font-semibold tracking-tight">{{ t('admin.title') }}</h1>
+      <Button @click="openCreate">
+        <Plus class="size-4" />
         {{ t('admin.newApp') }}
-      </v-btn>
+      </Button>
     </div>
 
-    <v-row v-if="apps.length">
-      <v-col
-        v-for="a in apps"
-        :key="a.id"
-        cols="12"
-        sm="6"
-        md="4"
-        lg="3"
-      >
-        <v-card hover class="d-flex flex-column h-100">
-          <!-- The content area is the click target for opening the detail;
-               the action buttons below sit OUTSIDE it, so they never conflict
-               with the navigation click. -->
-          <div
-            class="flex-grow-1"
-            style="cursor: pointer;"
-            @click="router.push(`/admin/app/${a.id}`)"
-          >
-            <v-card-text>
-              <div class="d-flex align-center mb-2" style="gap: 12px;">
-                <v-avatar v-if="a.icon" :image="a.icon" size="48" />
-                <v-avatar v-else color="primary" size="48">
-                  <span class="text-h6">{{ a.name.charAt(0).toUpperCase() }}</span>
-                </v-avatar>
-                <span class="text-h6 text-truncate">{{ a.name }}</span>
-              </div>
-              <p v-if="a.description" class="text-body-2 text-medium-emphasis mb-0">
-                {{ a.description }}
-              </p>
-            </v-card-text>
+    <Alert v-if="error" variant="destructive" class="mb-4">{{ error }}</Alert>
+
+    <div v-if="apps.length" class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      <Card v-for="a in apps" :key="a.id" class="gap-0">
+        <div class="flex flex-1 cursor-pointer flex-col gap-3 p-5" @click="router.push(`/admin/app/${a.id}`)">
+          <div class="flex items-center gap-3">
+            <Avatar :src="a.icon" :fallback="a.name.charAt(0).toUpperCase()" class="size-12" />
+            <span class="truncate font-semibold">{{ a.name }}</span>
           </div>
-          <v-divider />
-          <v-card-actions>
-            <span class="text-caption text-medium-emphasis ml-2">
-              {{ fmtDate(a.created_at) }}
-            </span>
-            <v-spacer />
-            <v-btn variant="text" size="small" @click="openEdit(a)">
-              {{ t('common.edit') }}
-            </v-btn>
-            <v-btn
-              variant="text"
-              size="small"
-              color="error"
-              @click="askDelete(a)"
-            >
-              {{ t('common.delete') }}
-            </v-btn>
-          </v-card-actions>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <v-alert v-if="error" type="error" variant="tonal" class="mb-4">
-      {{ error }}
-    </v-alert>
-
-    <v-card v-else-if="!apps.length" variant="tonal" class="text-center pa-8">
-      <v-card-text>{{ t('admin.empty') }}</v-card-text>
-    </v-card>
-
-    <v-dialog v-model="createDialogOpen" max-width="480">
-      <v-card>
-        <v-card-title>{{ t('admin.newApp') }}</v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="newName"
-            :label="t('admin.appName')"
-            autofocus
-            :error="!!createError"
-            @keyup.enter="confirmCreate"
-          />
-          <div class="d-flex align-center" style="gap: 12px;">
-            <v-avatar v-if="createIconPreview" :image="createIconPreview" size="48" />
-            <v-avatar v-else color="primary" size="48">
-              <v-icon>mdi-image-outline</v-icon>
-            </v-avatar>
-            <v-file-input
-              :model-value="createIcon"
-              :label="t('admin.appIcon')"
-              accept="image/*"
-              density="compact"
-              hide-details
-              class="flex-grow-1"
-              @update:model-value="onCreateIconChange"
-            />
+          <p v-if="a.description" class="text-muted-foreground text-sm">{{ a.description }}</p>
+        </div>
+        <Separator />
+        <CardFooter class="justify-between py-3">
+          <span class="text-muted-foreground text-xs">{{ fmtDate(a.created_at) }}</span>
+          <div class="flex gap-1">
+            <Button variant="ghost" size="sm" @click="openEdit(a)">{{ t('common.edit') }}</Button>
+            <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive" @click="askDelete(a)">{{ t('common.delete') }}</Button>
           </div>
-          <v-alert v-if="createError" type="error" variant="tonal" density="compact" class="mt-2">
-            {{ createError }}
-          </v-alert>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="closeCreate">{{ t('common.cancel') }}</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
-            :loading="creating"
-            :disabled="!newName.trim()"
-            @click="confirmCreate"
-          >
-            {{ t('common.create') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+        </CardFooter>
+      </Card>
+    </div>
 
-    <v-dialog v-model="editDialogOpen" max-width="480">
-      <v-card>
-        <v-card-title>{{ t('admin.editApp') }}</v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="editName"
-            :label="t('admin.appName')"
-            autofocus
-            :error="!!editError"
-            @keyup.enter="confirmEdit"
-          />
-          <div class="d-flex align-center" style="gap: 12px;">
-            <v-avatar v-if="editIconPreview" :image="editIconPreview" size="48" />
-            <v-avatar v-else color="primary" size="48">
-              <v-icon>mdi-image-outline</v-icon>
-            </v-avatar>
-            <v-file-input
-              :model-value="editIcon"
-              :label="t('admin.appIcon')"
-              accept="image/*"
-              density="compact"
-              hide-details
-              class="flex-grow-1"
-              @update:model-value="onEditIconChange"
-            />
+    <Card v-else-if="!error" class="text-center">
+      <CardContent class="py-12 text-muted-foreground">{{ t('admin.empty') }}</CardContent>
+    </Card>
+
+    <!-- Create dialog -->
+    <Dialog v-model:open="createDialogOpen" :title="t('admin.newApp')" max-width="md">
+      <div class="grid gap-4">
+        <div class="grid gap-2">
+          <Label>{{ t('admin.appName') }}</Label>
+          <Input v-model="newName" autofocus @keyup.enter="confirmCreate" />
+        </div>
+        <div class="flex items-center gap-3">
+          <Avatar :src="createIconPreview" :fallback="(newName || '?').charAt(0).toUpperCase()" class="size-12" />
+          <div class="flex-1">
+            <FileUpload :label="t('admin.appIcon')" accept="image/*" @change="onCreateIcon" />
           </div>
-          <v-alert v-if="editError" type="error" variant="tonal" density="compact" class="mt-2">
-            {{ editError }}
-          </v-alert>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="closeEdit">{{ t('common.cancel') }}</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
-            :loading="editing"
-            :disabled="!editName.trim()"
-            @click="confirmEdit"
-          >
-            {{ t('common.save') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+        </div>
+        <Alert v-if="createError" variant="destructive">{{ createError }}</Alert>
+        <div class="flex justify-end gap-2">
+          <Button variant="outline" @click="createDialogOpen = false">{{ t('common.cancel') }}</Button>
+          <Button :disabled="!newName.trim()" @click="confirmCreate">{{ t('common.create') }}</Button>
+        </div>
+      </div>
+    </Dialog>
 
-    <v-dialog v-model="deleteDialogOpen" max-width="400">
-      <v-card>
-        <v-card-title>{{ t('common.confirmDelete') }}</v-card-title>
-        <v-card-text>
-          <span v-html="t('admin.confirmDeleteApp', { name: deleteTarget?.name ?? '' })" />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="cancelDelete">{{ t('common.cancel') }}</v-btn>
-          <v-btn color="error" variant="flat" @click="confirmDelete">{{ t('common.delete') }}</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <!-- Edit dialog -->
+    <Dialog v-model:open="editDialogOpen" :title="t('admin.editApp')" max-width="md">
+      <div class="grid gap-4">
+        <div class="grid gap-2">
+          <Label>{{ t('admin.appName') }}</Label>
+          <Input v-model="editName" autofocus @keyup.enter="confirmEdit" />
+        </div>
+        <div class="flex items-center gap-3">
+          <Avatar :src="editIconPreview" :fallback="(editName || '?').charAt(0).toUpperCase()" class="size-12" />
+          <div class="flex-1">
+            <FileUpload :label="t('admin.appIcon')" accept="image/*" @change="onEditIcon" />
+          </div>
+        </div>
+        <Alert v-if="editError" variant="destructive">{{ editError }}</Alert>
+        <div class="flex justify-end gap-2">
+          <Button variant="outline" @click="editDialogOpen = false">{{ t('common.cancel') }}</Button>
+          <Button :disabled="!editName.trim()" @click="confirmEdit">{{ t('common.save') }}</Button>
+        </div>
+      </div>
+    </Dialog>
 
-    <v-snackbar v-model="snackbarOpen" :timeout="2000">
-      {{ snackbar }}
-    </v-snackbar>
-  </v-container>
+    <!-- Delete dialog -->
+    <AlertDialog v-model:open="deleteDialogOpen" :title="t('common.confirmDelete')" :description="t('admin.confirmDeleteApp', { name: deleteTarget?.name ?? '' })">
+      <template #footer>
+        <Button variant="outline" @click="deleteDialogOpen = false">{{ t('common.cancel') }}</Button>
+        <Button variant="destructive" @click="confirmDelete">{{ t('common.delete') }}</Button>
+      </template>
+    </AlertDialog>
+  </div>
 </template>
