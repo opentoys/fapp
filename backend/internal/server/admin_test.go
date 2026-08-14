@@ -47,7 +47,7 @@ func TestAdminCreateApp(t *testing.T) {
 	s := testServer(t)
 	token := adminLogin(t, s)
 
-	req := authReq(http.MethodPost, "/api/v1/admin/apps", token, []byte(`{"name":"新应用","description":"d","platform":"android"}`))
+	req := authReq(http.MethodPost, "/api/v1/admin/apps", token, []byte(`{"name":"新应用","description":"d","platform":"android","package_name":"com.example.app"}`))
 	w := httptest.NewRecorder()
 	s.CreateApp(w, req)
 
@@ -60,6 +60,48 @@ func TestAdminCreateApp(t *testing.T) {
 	s.DB.First(&app)
 	if app.Platform != "android" {
 		t.Fatalf("platform = %q", app.Platform)
+	}
+	if app.PackageName == nil || *app.PackageName != "com.example.app" {
+		t.Fatalf("package = %v", app.PackageName)
+	}
+}
+
+func TestAdminCreateAppPackageUnique(t *testing.T) {
+	s := testServer(t)
+	token := adminLogin(t, s)
+
+	create := func(body string) int {
+		req := authReq(http.MethodPost, "/api/v1/admin/apps", token, []byte(body))
+		w := httptest.NewRecorder()
+		s.CreateApp(w, req)
+		var res struct {
+			Code int `json:"code"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &res)
+		return res.Code
+	}
+
+	// Same platform + same package must be rejected.
+	if code := create(`{"name":"a","platform":"android","package_name":"com.example.app"}`); code != 0 {
+		t.Fatalf("first create rejected: %d", code)
+	}
+	if code := create(`{"name":"b","platform":"android","package_name":"com.example.app"}`); code == 0 {
+		t.Fatal("duplicate platform+package should be rejected")
+	}
+	// Same package on a different platform is allowed.
+	if code := create(`{"name":"c","platform":"ios","package_name":"com.example.app"}`); code != 0 {
+		t.Fatalf("same package on other platform rejected: %d", code)
+	}
+	// Same platform, different package is allowed.
+	if code := create(`{"name":"d","platform":"android","package_name":"com.example.other"}`); code != 0 {
+		t.Fatalf("different package rejected: %d", code)
+	}
+	// Manually-created apps without a package coexist on one platform (NULL).
+	if code := create(`{"name":"e","platform":"android"}`); code != 0 {
+		t.Fatalf("no-package create rejected: %d", code)
+	}
+	if code := create(`{"name":"f","platform":"android"}`); code != 0 {
+		t.Fatalf("second no-package create rejected: %d", code)
 	}
 }
 

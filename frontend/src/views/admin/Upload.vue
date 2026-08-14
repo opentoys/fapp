@@ -194,6 +194,7 @@ async function submit() {
         name,
         platform: parsed.value!.platform,
         icon: parsed.value?.iconDataUri || undefined,
+        package_name: parsed.value?.package || undefined,
       })
       targetAppId = app.id
     } catch (e) {
