@@ -1,12 +1,19 @@
 import { ref, watch, onMounted } from 'vue'
-import { useTheme as useVuetifyTheme } from 'vuetify'
 
 export type ThemeChoice = 'system' | 'light' | 'dark'
 
 const STORAGE_KEY = 'disapp-theme'
 
-// Module-level state so all callers share the same value.
-const choice = ref<ThemeChoice>('system')
+function systemPrefersDark(): boolean {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+}
+
+function applyTheme(c: ThemeChoice) {
+  const resolved = c === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : c
+  document.documentElement.classList.toggle('dark', resolved === 'dark')
+  document.documentElement.style.colorScheme = resolved
+  localStorage.setItem(STORAGE_KEY, c)
+}
 
 function readStored(): ThemeChoice {
   const v = localStorage.getItem(STORAGE_KEY)
@@ -14,23 +21,17 @@ function readStored(): ThemeChoice {
   return 'system'
 }
 
-function systemPrefersDark(): boolean {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
-}
+// Module-level state so all callers share the same value.
+const choice = ref<ThemeChoice>(readStored())
+
+// Apply immediately (avoid a flash before mount), then keep listening to the OS.
+applyTheme(choice.value)
+let listenerBound = false
 
 export function useTheme() {
-  const vuetifyTheme = useVuetifyTheme()
-
-  function applyTheme(c: ThemeChoice) {
-    const resolved = c === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : c
-    vuetifyTheme.global.name.value = resolved
-    localStorage.setItem(STORAGE_KEY, c)
-  }
-
   onMounted(() => {
-    choice.value = readStored()
-    applyTheme(choice.value)
-
+    if (listenerBound) return
+    listenerBound = true
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     mq.addEventListener('change', () => {
       if (choice.value === 'system') applyTheme('system')
