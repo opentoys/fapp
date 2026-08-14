@@ -21,6 +21,7 @@ const error = ref('')
 const loading = ref(false)
 
 async function submit() {
+  if (loading.value) return
   error.value = ''
   loading.value = true
   try {
