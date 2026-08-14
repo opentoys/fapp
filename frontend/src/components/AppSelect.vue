@@ -46,11 +46,11 @@ function fromStr(s: string): string | number | null {
             v-for="item in props.items"
             :key="String(item.value)"
             :value="String(item.value)"
-            class="data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground cursor-pointer rounded-sm px-2 py-1.5 text-sm outline-none"
+            class="group data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground cursor-pointer rounded-sm px-2 py-1.5 text-sm outline-none"
           >
             <span class="flex items-center justify-between gap-2">
               <span>{{ item.title }}</span>
-              <Check class="size-4 opacity-0 data-[state=checked]:opacity-100" />
+              <Check class="size-4 opacity-0 group-data-[state=checked]:opacity-100" />
             </span>
           </SelectItem>
         </SelectViewport>
