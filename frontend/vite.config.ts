@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
+import tailwindcss from '@tailwindcss/vite'
 
 // Dev workflow: run `go run ./cmd/server` in backend/ for the API, and
 // `npm run dev` here. Vite serves the SPA on :5173 and forwards /api/*
@@ -11,6 +12,8 @@ const API_TARGET = process.env.VITE_API_TARGET || 'http://localhost:8080'
 export default defineConfig({
   plugins: [
     vue(),
+    tailwindcss(),
+    // vite-plugin-vuetify is removed in a later task; kept for now so existing v-* views build.
     vuetify({ autoImport: true }),
   ],
   server: {
