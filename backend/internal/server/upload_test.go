@@ -42,14 +42,13 @@ func uploadVersionReq(t *testing.T, fields map[string]string, filename string, d
 
 func TestUploadVersion(t *testing.T) {
 	s := testServer(t)
-	app := model.App{Name: "a"}
+	app := model.App{Name: "a", Platform: "android"}
 	s.DB.Create(&app)
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	mw.WriteField("app_id", itoa(app.ID))
 	mw.WriteField("release_type", "production")
-	mw.WriteField("platform", "android")
 	mw.WriteField("arch", "arm64,x86_64")
 	mw.WriteField("version_name", "1.2.3")
 	mw.WriteField("version_code", "123")
@@ -89,6 +88,8 @@ func TestUploadVersion(t *testing.T) {
 	if v.Published {
 		t.Fatalf("upload must create a draft, got published = %v", v.Published)
 	}
+	// The version's platform is forced from the app (single-platform apps),
+	// regardless of any platform value the client sends.
 	if v.ReleaseType != "production" || v.Platform != "android" || v.Arch != "arm64,x86_64" {
 		t.Fatalf("release_type/platform/arch not stored: %+v", v)
 	}
@@ -101,6 +102,28 @@ func TestUploadVersion(t *testing.T) {
 	rc.Close()
 	if string(data) != "fake-apk-bytes" {
 		t.Fatalf("stored = %q", data)
+	}
+}
+
+func TestUploadVersionForcesAppPlatform(t *testing.T) {
+	s := testServer(t)
+	app := model.App{Name: "a", Platform: "ios"}
+	s.DB.Create(&app)
+
+	// Client sends a conflicting platform; the server must ignore it and use
+	// the app's platform.
+	req := uploadVersionReq(t, map[string]string{
+		"app_id":       itoa(app.ID),
+		"version_name": "1.0.0",
+		"platform":     "android",
+	}, "app.ipa", []byte("ipa"))
+	w := httptest.NewRecorder()
+	s.UploadVersion(w, req)
+
+	var v model.Version
+	s.DB.Last(&v)
+	if v.Platform != "ios" {
+		t.Fatalf("platform = %q, want ios", v.Platform)
 	}
 }
 

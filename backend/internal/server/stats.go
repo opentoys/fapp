@@ -11,10 +11,11 @@ import (
 )
 
 // DownloadsTimeSeries returns daily download counts for an app, optionally
-// filtered by platform and/or version. "total" aggregates all of the app's
-// versions; "selected" is the filtered subset (null when no filter is set).
-// Dates are zero-filled across the app's full download history so the two
-// series always share the same x axis.
+// filtered by version (apps are single-platform, so there is no platform
+// filter). "total" aggregates all of the app's versions; "selected" is the
+// filtered subset (null when no filter is set). Dates are zero-filled across
+// the app's full download history so the two series always share the same x
+// axis.
 //
 // The driver stores created_at as RFC3339 text and reformats any date-like
 // string it scans, so day bucketing happens in Go on the parsed time.Time
@@ -31,18 +32,14 @@ func (s *Server) DownloadsTimeSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	platform := r.URL.Query().Get("platform")
 	versionID, _ := strconv.ParseInt(r.URL.Query().Get("version_id"), 10, 64)
 
 	// Each call starts a fresh query chain; GORM shares the statement across
 	// chained calls, so reusing one base would accumulate JOIN/WHERE clauses.
-	query := func(platform string, versionID int64) map[string]int {
+	query := func(versionID int64) map[string]int {
 		q := s.DB.Table("download_logs l").
 			Joins("JOIN versions v ON v.id = l.version_id").
 			Where("v.app_id = ?", appID)
-		if platform != "" {
-			q = q.Where("v.platform = ?", platform)
-		}
 		if versionID != 0 {
 			q = q.Where("l.version_id = ?", versionID)
 		}
@@ -59,15 +56,15 @@ func (s *Server) DownloadsTimeSeries(w http.ResponseWriter, r *http.Request) {
 		return m
 	}
 
-	total := query(platform, 0)
+	total := query(0)
 	if total == nil {
 		web.SendError(w, web.CodeInternal, "查询失败")
 		return
 	}
 
 	selected := map[string]int(nil)
-	if platform != "" || versionID != 0 {
-		selected = query(platform, versionID)
+	if versionID != 0 {
+		selected = query(versionID)
 		if selected == nil {
 			web.SendError(w, web.CodeInternal, "查询失败")
 			return
@@ -78,7 +75,7 @@ func (s *Server) DownloadsTimeSeries(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, map[string]any{
 		"dates":    dates,
 		"total":    totals,
-		"selected": sels, // null when no filter active
+		"selected": sels, // null when no version filter active
 	})
 }
 

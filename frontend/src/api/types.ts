@@ -9,6 +9,7 @@ export type AccessMode = 'public' | 'password' | 'expiry'
 export interface AppItem {
   id: number
   name: string
+  platform: Platform
   icon: string
   description: string
   screenshots: string[]
@@ -19,8 +20,7 @@ export interface AppItem {
 }
 
 export type ReleaseType = 'production' | 'beta' | 'canary'
-export type Platform = 'ios' | 'android' | 'windows' | 'macos' | 'linux'
-export type Architecture = 'arm64' | 'x86_64' | 'armv7' | 'x86' | 'universal'
+export type Platform = 'ios' | 'android'
 
 export interface Version {
   id: number

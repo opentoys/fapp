@@ -5,7 +5,7 @@ import { Copy, Upload as UploadIcon } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { api } from '../../api/client'
 import { useI18n } from '../../composables/useI18n'
-import { PLATFORMS, formatArch } from '../../constants/platform'
+import { formatArch } from '../../constants/platform'
 import { fmtDate } from '../../utils/format'
 import LineChart from '../../components/LineChart.vue'
 import { Button } from '../../components/ui/button'
@@ -25,7 +25,7 @@ import { Separator } from '../../components/ui/separator'
 import { Skeleton } from '../../components/ui/skeleton'
 import AppSelect from '../../components/AppSelect.vue'
 import FileUpload from '../../components/FileUpload.vue'
-import type { AppDetail, AppItem, DownloadsTimeSeries, Platform, ReleaseType, Version } from '../../api/types'
+import type { AppDetail, AppItem, DownloadsTimeSeries, ReleaseType, Version } from '../../api/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -35,7 +35,6 @@ const stats = ref<{ download_count: number; install_count: number; recent: Array
 const error = ref('')
 
 // --- Stats: app-level download trend chart, aggregated by day ---
-const chartFilterPlatform = ref<'all' | Platform>('all')
 const chartFilterVersion = ref<'all' | number>('all')
 const chartRange = ref<'7' | '30' | '90' | 'all'>('30')
 const chartData = ref<DownloadsTimeSeries | null>(null)
@@ -96,8 +95,7 @@ async function loadChart() {
   chartLoading.value = true
   chartError.value = ''
   const id = data.value.app.id
-  const params: { platform?: string; version_id?: number } = {}
-  if (chartFilterPlatform.value !== 'all') params.platform = chartFilterPlatform.value
+  const params: { version_id?: number } = {}
   if (chartFilterVersion.value !== 'all') params.version_id = chartFilterVersion.value as number
   try {
     chartData.value = await api.appDownloads(id, params)
@@ -113,7 +111,7 @@ const tab = ref<'overview' | 'versions' | 'stats'>('overview')
 const deleteTarget = ref<Version | null>(null)
 
 // Reload the trend chart when entering the stats tab or changing a filter.
-watch([chartFilterPlatform, chartFilterVersion, chartRange, () => data.value?.app.id], () => {
+watch([chartFilterVersion, chartRange, () => data.value?.app.id], () => {
   if (tab.value === 'stats') loadChart()
 })
 watch(
@@ -405,7 +403,6 @@ const versions = computed(() =>
 // --- Version filters ---
 const statusFilter = ref<'all' | 'draft' | 'published' | 'taken_down'>('all')
 const releaseFilter = ref<'all' | ReleaseType>('all')
-const platformFilter = ref<'all' | Platform>('all')
 
 const statusFilterItems = computed(() => [
   { title: t('adminApp.filterAll'), value: 'all' },
@@ -421,11 +418,6 @@ const releaseFilterItems = computed(() => [
   { title: t('release.canary'), value: 'canary' },
 ])
 
-const platformFilterItems = computed(() => [
-  { title: t('adminApp.filterAll'), value: 'all' },
-  ...PLATFORMS.map((p) => ({ title: t('platform.' + p), value: p })),
-])
-
 function archLabel(arch: string): string {
   return formatArch(t, arch)
 }
@@ -436,7 +428,6 @@ const filteredVersions = computed(() =>
     if (statusFilter.value === 'published' && !(v.published && v.enabled)) return false
     if (statusFilter.value === 'taken_down' && v.enabled) return false
     if (releaseFilter.value !== 'all' && v.release_type !== releaseFilter.value) return false
-    if (platformFilter.value !== 'all' && v.platform !== platformFilter.value) return false
     return true
   })
 )
@@ -608,8 +599,7 @@ function fmtSize(n: number): string {
         <div class="mb-4 flex flex-wrap items-center gap-3">
           <AppSelect v-model="statusFilter" :items="statusFilterItems" class="w-40" />
           <AppSelect v-model="releaseFilter" :items="releaseFilterItems" class="w-40" />
-          <AppSelect v-model="platformFilter" :items="platformFilterItems" class="w-48" />
-          <Button variant="ghost" size="sm" @click="statusFilter = 'all'; releaseFilter = 'all'; platformFilter = 'all'">{{ t('adminApp.filterReset') }}</Button>
+          <Button variant="ghost" size="sm" @click="statusFilter = 'all'; releaseFilter = 'all'">{{ t('adminApp.filterReset') }}</Button>
         </div>
 
         <Card>
@@ -673,7 +663,6 @@ function fmtSize(n: number): string {
           <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
             <CardTitle class="text-base">{{ t('adminApp.chartTitle') }}</CardTitle>
             <div class="flex flex-wrap items-center gap-3">
-              <AppSelect v-model="chartFilterPlatform" :items="platformFilterItems" class="w-40" />
               <AppSelect v-model="chartFilterVersion" :items="chartVersionItems" class="w-52" />
               <AppSelect v-model="chartRange" :items="rangeItems" class="w-40" />
             </div>

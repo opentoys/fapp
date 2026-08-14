@@ -47,7 +47,7 @@ func TestAdminCreateApp(t *testing.T) {
 	s := testServer(t)
 	token := adminLogin(t, s)
 
-	req := authReq(http.MethodPost, "/api/v1/admin/apps", token, []byte(`{"name":"新应用","description":"d"}`))
+	req := authReq(http.MethodPost, "/api/v1/admin/apps", token, []byte(`{"name":"新应用","description":"d","platform":"android"}`))
 	w := httptest.NewRecorder()
 	s.CreateApp(w, req)
 
@@ -55,6 +55,33 @@ func TestAdminCreateApp(t *testing.T) {
 	s.DB.Model(&model.App{}).Count(&count)
 	if count != 1 {
 		t.Fatalf("apps = %d", count)
+	}
+	var app model.App
+	s.DB.First(&app)
+	if app.Platform != "android" {
+		t.Fatalf("platform = %q", app.Platform)
+	}
+}
+
+func TestAdminCreateAppRequiresPlatform(t *testing.T) {
+	s := testServer(t)
+	token := adminLogin(t, s)
+
+	// Missing / invalid platform must be rejected.
+	for _, body := range []string{
+		`{"name":"a","platform":""}`,
+		`{"name":"a","platform":"windows"}`,
+	} {
+		req := authReq(http.MethodPost, "/api/v1/admin/apps", token, []byte(body))
+		w := httptest.NewRecorder()
+		s.CreateApp(w, req)
+		var res struct {
+			Code int `json:"code"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &res)
+		if res.Code == 0 {
+			t.Fatalf("expected rejection for %s, got %s", body, w.Body.String())
+		}
 	}
 }
 
