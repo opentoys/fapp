@@ -50,6 +50,12 @@ const activeTab = computed(() => {
 
 const sonnerTheme = computed<ThemeChoice>(() => choice.value)
 
+const themeLabel = computed(() => {
+  if (choice.value === 'system') return t('app.themeSystem')
+  if (choice.value === 'light') return t('app.themeLight')
+  return t('app.themeDark')
+})
+
 // --- Password change dialog ---
 const pwDialog = ref(false)
 const oldPassword = ref('')
@@ -138,7 +144,7 @@ function onLangSelect(i: number) {
           <!-- Theme -->
           <DropdownMenu :items="[{ label: t('app.themeLight'), value: 'light' }, { label: t('app.themeDark'), value: 'dark' }, { label: t('app.themeSystem'), value: 'system' }]" :selected="choice" @select="onThemeSelect">
             <template #trigger>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" :title="themeLabel">
                 <Sun v-if="choice === 'light'" class="size-4" />
                 <Moon v-else-if="choice === 'dark'" class="size-4" />
                 <SunMoon v-else class="size-4" />
