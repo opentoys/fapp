@@ -9,8 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@iconify-json/material-symbols": "^1.2.88",
+    "@iconify/vue": "^5.0.1",
     "@mdi/js": "^7.4.47",
+    "app-info-parser": "^1.1.6",
     "axios": "^1.19.0",
+    "ua-parser-js": "^2.0.10",
     "vue": "^3.5.40",
     "vue-router": "^5.2.0",
     "vuetify": "^3.7.0"

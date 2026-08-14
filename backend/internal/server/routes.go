@@ -27,6 +27,7 @@ func (s *Server) Routes(dist fs.FS) http.Handler {
 	verify = append(verify, web.RateLimit(30, time.Minute))
 
 	mux.HandleFunc("POST /api/v1/auth/login", web.Chain(login...)(s.Login))
+	mux.HandleFunc("PUT /api/v1/auth/password", web.Chain(admin...)(s.ChangePassword))
 
 	mux.HandleFunc("GET /api/v1/apps", web.Chain(pub...)(s.Apps))
 	mux.HandleFunc("GET /api/v1/apps/{id}", web.Chain(pub...)(s.AppDetail))
@@ -36,15 +37,15 @@ func (s *Server) Routes(dist fs.FS) http.Handler {
 	mux.HandleFunc("GET /api/v1/files/{key...}", web.Chain(pub...)(s.File))
 
 	mux.HandleFunc("GET /api/v1/admin/apps", web.Chain(admin...)(s.AppsList))
+	mux.HandleFunc("GET /api/v1/admin/apps/{id}", web.Chain(admin...)(s.AppDetailAdmin))
 	mux.HandleFunc("POST /api/v1/admin/apps", web.Chain(admin...)(s.CreateApp))
 	mux.HandleFunc("PUT /api/v1/admin/apps/{id}", web.Chain(admin...)(s.UpdateApp))
+	mux.HandleFunc("POST /api/v1/admin/apps/{id}/icon", web.Chain(admin...)(s.UploadAppIcon))
 	mux.HandleFunc("DELETE /api/v1/admin/apps/{id}", web.Chain(admin...)(s.DeleteApp))
 	mux.HandleFunc("GET /api/v1/admin/users", web.Chain(admin...)(s.UsersList))
 	mux.HandleFunc("POST /api/v1/admin/users", web.Chain(admin...)(s.CreateUser))
 	mux.HandleFunc("PUT /api/v1/admin/users/{id}", web.Chain(admin...)(s.UpdateUser))
 	mux.HandleFunc("DELETE /api/v1/admin/users/{id}", web.Chain(admin...)(s.DeleteUser))
-	mux.HandleFunc("GET /api/v1/admin/channels", web.Chain(admin...)(s.ChannelsList))
-	mux.HandleFunc("POST /api/v1/admin/channels", web.Chain(admin...)(s.CreateChannel))
 	mux.HandleFunc("POST /api/v1/admin/versions", web.Chain(admin...)(s.UploadVersion))
 	mux.HandleFunc("PUT /api/v1/admin/versions/{id}", web.Chain(admin...)(s.UpdateVersion))
 	mux.HandleFunc("DELETE /api/v1/admin/versions/{id}", web.Chain(admin...)(s.DeleteVersion))

@@ -3,8 +3,11 @@ package server
 import (
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"disapp/internal/model"
@@ -21,6 +24,27 @@ func (s *Server) AppsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	web.SendJson(w, apps)
+}
+
+// AppDetailAdmin returns app detail with all versions (admin side), including
+// drafts and taken-down ones. The public AppDetail endpoint only exposes
+// published and enabled versions.
+func (s *Server) AppDetailAdmin(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var app model.App
+	if err := s.DB.First(&app, id).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "应用不存在")
+		return
+	}
+	var versions []model.Version
+	if err := s.DB.Where("app_id = ?", app.ID).Order("version_code desc").Find(&versions).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "查询失败")
+		return
+	}
+	web.SendJson(w, map[string]any{
+		"app":      app,
+		"versions": versions,
+	})
 }
 
 // CreateApp creates a new app.
@@ -76,9 +100,18 @@ func (s *Server) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, app)
 }
 
-// DeleteApp deletes an app (cascades channels and versions).
+// DeleteApp deletes an app (cascades versions).
 func (s *Server) DeleteApp(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	var app model.App
+	if err := s.DB.First(&app, id).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "应用不存在")
+		return
+	}
+	// Best-effort cleanup of the app-level icon file.
+	if key := strings.TrimPrefix(app.Icon, "/api/v1/files/"); key != app.Icon {
+		s.Storage.Delete(r.Context(), key)
+	}
 	if err := s.DB.Delete(&model.App{}, id).Error; err != nil {
 		web.SendError(w, web.CodeInternal, "删除失败")
 		return
@@ -86,42 +119,49 @@ func (s *Server) DeleteApp(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, map[string]any{"ok": true})
 }
 
-// ChannelsList returns channels, filtered by ?app_id=.
-func (s *Server) ChannelsList(w http.ResponseWriter, r *http.Request) {
-	q := s.DB.Order("id asc")
-	if aid := r.URL.Query().Get("app_id"); aid != "" {
-		if n, err := strconv.ParseInt(aid, 10, 64); err == nil {
-			q = q.Where("app_id = ?", n)
-		}
-	}
-	var channels []model.Channel
-	if err := q.Find(&channels).Error; err != nil {
-		web.SendError(w, web.CodeInternal, "查询失败")
+// UploadAppIcon stores the app-level icon (multipart file "icon"). It is
+// saved under the fixed key {app_id}/0/icon.png so re-uploads overwrite the
+// previous file instead of accumulating orphans, and the File handler serves
+// it through the usual /api/v1/files/{key} proxy (local + COS).
+func (s *Server) UploadAppIcon(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var app model.App
+	if err := s.DB.First(&app, id).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "应用不存在")
 		return
 	}
-	web.SendJson(w, channels)
+	file, header, err := r.FormFile("icon")
+	if err != nil {
+		web.SendError(w, web.CodeBadRequest, "缺少图标文件")
+		return
+	}
+	defer file.Close()
+	if !isImageUpload(header.Header.Get("Content-Type"), header.Filename) {
+		web.SendError(w, web.CodeBadRequest, "仅支持图片文件")
+		return
+	}
+	key := storage.Key(app.ID, 0, "icon.png")
+	if _, err := s.Storage.Save(r.Context(), key, file); err != nil {
+		web.SendError(w, web.CodeInternal, "存储失败")
+		return
+	}
+	app.Icon = "/api/v1/files/" + key
+	if err := s.DB.Model(&app).Update("icon", app.Icon).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "保存失败")
+		return
+	}
+	web.SendJson(w, app)
 }
 
-// CreateChannel creates a channel.
-func (s *Server) CreateChannel(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		AppID int64  `json:"app_id"`
-		Name  string `json:"name"`
+func isImageUpload(contentType, filename string) bool {
+	if strings.HasPrefix(contentType, "image/") {
+		return true
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		web.SendError(w, web.CodeBadRequest, "bad request")
-		return
+	switch strings.ToLower(filepath.Ext(filename)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg":
+		return true
 	}
-	if req.Name == "" {
-		web.SendError(w, web.CodeBadRequest, "渠道名不能为空")
-		return
-	}
-	ch := model.Channel{AppID: req.AppID, Name: req.Name}
-	if err := s.DB.Create(&ch).Error; err != nil {
-		web.SendError(w, web.CodeInternal, "创建失败")
-		return
-	}
-	web.SendJson(w, ch)
+	return false
 }
 
 // UploadVersion handles multipart file upload for a new version.
@@ -138,41 +178,35 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	appID, _ := strconv.ParseInt(r.FormValue("app_id"), 10, 64)
-	channelID, _ := strconv.ParseInt(r.FormValue("channel_id"), 10, 64)
 	versionCode, _ := strconv.Atoi(r.FormValue("version_code"))
 	versionName := r.FormValue("version_name")
-	accessMode := r.FormValue("access_mode")
-	if accessMode == "" {
-		accessMode = model.AccessPublic
-	}
 
-	if versionName == "" || appID == 0 {
-		web.SendError(w, web.CodeBadRequest, "app_id 与 version_name 必填")
+	if appID == 0 {
+		web.SendError(w, web.CodeBadRequest, "app_id 必填")
+		return
+	}
+	if versionName == "" {
+		web.SendError(w, web.CodeBadRequest, "version_name 必填")
 		return
 	}
 
-	// Create record first to get version_id for storage key.
+	// Upload creates a draft (published=false). Visibility and access mode
+	// are chosen at publish time via UpdateVersion. Metadata such as
+	// package_name/app_name/platform is parsed in the browser and sent here.
+	fileType := model.FileType(header.Filename)
 	v := model.Version{
 		AppID:          appID,
-		ChannelID:      channelID,
+		ReleaseType:    r.FormValue("release_type"),
+		Platform:       r.FormValue("platform"),
+		Arch:           r.FormValue("arch"),
 		VersionName:    versionName,
 		VersionCode:    versionCode,
+		PackageName:    r.FormValue("package_name"),
+		AppName:        r.FormValue("app_name"),
 		FileName:       header.Filename,
-		FileType:       model.FileType(header.Filename),
-		AccessMode:     accessMode,
+		FileType:       fileType,
 		Changelog:      r.FormValue("changelog"),
-		Enabled:        true,
 		StorageBackend: storageBackendName(s),
-	}
-	switch accessMode {
-	case model.AccessPassword:
-		hash, salt := password.Hash(r.FormValue("password"))
-		v.PasswordHash, v.Salt = hash, salt
-	case model.AccessExpiry:
-		expiresAt, _ := time.Parse(time.RFC3339, r.FormValue("expires_at"))
-		if !expiresAt.IsZero() {
-			v.ExpiresAt = &expiresAt
-		}
 	}
 	if err := s.DB.Create(&v).Error; err != nil {
 		web.SendError(w, web.CodeInternal, "创建版本失败")
@@ -192,6 +226,21 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 		"file_size":   hr.n,
 		"sha256":      hex.EncodeToString(hr.h.Sum(nil)),
 	})
+
+	// Best-effort: store the browser-parsed app icon (always PNG) and expose
+	// its URL. The File handler proxies /api/v1/files/{key} via Storage.Open,
+	// so this works for both local and COS backends.
+	if icon, _, err := r.FormFile("icon"); err == nil {
+		defer icon.Close()
+		iconKey := storage.Key(appID, v.ID, "icon.png")
+		if _, err := s.Storage.Save(r.Context(), iconKey, icon); err != nil {
+			log.Printf("store icon failed: %v", err)
+		} else {
+			v.IconURL = "/api/v1/files/" + iconKey
+			s.DB.Model(&v).Update("icon_url", v.IconURL)
+		}
+	}
+
 	web.SendJson(w, v)
 }
 
@@ -205,6 +254,7 @@ func (s *Server) UpdateVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Changelog  *string    `json:"changelog"`
+		Published  *bool      `json:"published"`
 		AccessMode *string    `json:"access_mode"`
 		Password   *string    `json:"password"`
 		ExpiresAt  *time.Time `json:"expires_at"`
@@ -217,6 +267,9 @@ func (s *Server) UpdateVersion(w http.ResponseWriter, r *http.Request) {
 	if req.Changelog != nil {
 		v.Changelog = *req.Changelog
 	}
+	if req.Published != nil {
+		v.Published = *req.Published
+	}
 	if req.AccessMode != nil {
 		v.AccessMode = *req.AccessMode
 	}
@@ -225,7 +278,10 @@ func (s *Server) UpdateVersion(w http.ResponseWriter, r *http.Request) {
 		v.PasswordHash, v.Salt = h, salt
 	}
 	if req.ExpiresAt != nil {
-		v.ExpiresAt = req.ExpiresAt
+		// Normalize client-provided expiry to the server's default timezone so
+		// it is stored/displayed as server-local wall-clock time.
+		at := req.ExpiresAt.In(time.Local)
+		v.ExpiresAt = &at
 	}
 	if req.Enabled != nil {
 		v.Enabled = *req.Enabled
@@ -327,11 +383,15 @@ func (s *Server) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
+		Username *string `json:"username"`
 		Password *string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		web.SendError(w, web.CodeBadRequest, "bad request")
 		return
+	}
+	if req.Username != nil && *req.Username != "" {
+		u.Username = *req.Username
 	}
 	if req.Password != nil && *req.Password != "" {
 		hash, salt := password.Hash(*req.Password)

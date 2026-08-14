@@ -24,22 +24,27 @@ type App struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-type Channel struct {
-	ID        int64     `gorm:"primaryKey" json:"id"`
-	AppID     int64     `gorm:"index" json:"app_id"`
-	Name      string    `gorm:"size:64" json:"name"`
-	CreatedAt time.Time `json:"created_at"`
-}
+// ReleaseType values.
+const (
+	ReleaseProduction = "production"
+	ReleaseBeta       = "beta"
+	ReleaseCanary     = "canary"
+)
 
 type Version struct {
 	ID             int64      `gorm:"primaryKey" json:"id"`
 	AppID          int64      `gorm:"index" json:"app_id"`
-	ChannelID      int64      `gorm:"index" json:"channel_id"`
+	ReleaseType    string     `gorm:"size:16" json:"release_type"`
+	Platform       string     `gorm:"size:16" json:"platform"`
+	Arch           string     `gorm:"size:64" json:"arch"` // 逗号分隔的多架构，如 "arm64,armv7,x86"
 	VersionName    string     `gorm:"size:64" json:"version_name"`
 	VersionCode    int        `json:"version_code"`
 	FileType       string     `gorm:"size:16" json:"file_type"`
 	FileName       string     `gorm:"size:256" json:"file_name"`
 	FileSize       int64      `json:"file_size"`
+	PackageName    string     `gorm:"size:128" json:"package_name"` // Android package / iOS bundle id（解析所得）
+	AppName        string     `gorm:"size:128" json:"app_name"`     // 解析出的应用名称
+	IconURL        string     `gorm:"size:512" json:"icon_url"`     // 解析出的图标 URL（仅 Android）
 	StorageKey     string     `gorm:"size:512" json:"-"`
 	StorageBackend string     `gorm:"size:16" json:"-"`
 	SHA256         string     `gorm:"size:64" json:"sha256"`
@@ -48,12 +53,11 @@ type Version struct {
 	PasswordHash   string     `json:"-"`
 	Salt           string     `json:"-"`
 	ExpiresAt      *time.Time `json:"expires_at"`
+	Published      bool       `gorm:"default:false" json:"published"`
 	Enabled        bool       `gorm:"default:true" json:"enabled"`
 	DownloadCount  int64      `json:"download_count"`
 	InstallCount   int64      `json:"install_count"`
 	CreatedAt      time.Time  `json:"created_at"`
-
-	Channel *Channel `gorm:"foreignKey:ChannelID" json:"channel,omitempty"`
 }
 
 type DownloadLog struct {

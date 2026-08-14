@@ -3,11 +3,18 @@ import { messages, type Locale } from '../i18n/messages'
 
 const STORAGE_KEY = 'disapp-locale'
 
+function browserLang(): Locale {
+  if (typeof navigator === 'undefined') return 'en'
+  const lang = navigator.language || ''
+  if (lang.startsWith('zh')) return 'zh'
+  return 'en'
+}
+
 function readStored(): Locale {
   if (typeof window === 'undefined') return 'en'
   const v = localStorage.getItem(STORAGE_KEY)
   if (v === 'en' || v === 'zh') return v
-  return 'en'
+  return browserLang()
 }
 
 // Module-level state: every component sees the same locale.

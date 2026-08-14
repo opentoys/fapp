@@ -30,7 +30,7 @@ func (s *Server) Apps(w http.ResponseWriter, r *http.Request) {
 	}
 	var versions []model.Version
 	if len(ids) > 0 {
-		s.DB.Where("app_id IN ? AND enabled = ?", ids, true).Order("version_code desc").Find(&versions)
+		s.DB.Where("app_id IN ? AND enabled = ? AND published = ?", ids, true, true).Order("version_code desc").Find(&versions)
 	}
 	out := make([]appSummary, 0, len(apps))
 	for _, a := range apps {
@@ -58,20 +58,20 @@ func (s *Server) AppDetail(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeNotFound, "应用不存在")
 		return
 	}
-	var channels []model.Channel
-	s.DB.Where("app_id = ?", id).Order("id asc").Find(&channels)
 	var versions []model.Version
-	s.DB.Where("app_id = ? AND enabled = ?", id, true).
-		Order("version_code desc").Preload("Channel").Find(&versions)
+	s.DB.Where("app_id = ? AND enabled = ? AND published = ?", id, true, true).
+		Order("version_code desc").Find(&versions)
 
 	web.SendJson(w, map[string]any{
 		"app":      app,
-		"channels": channels,
 		"versions": versions,
 	})
 }
 
 func (s *Server) checkAccess(v *model.Version, pwd string) error {
+	if !v.Published {
+		return &webErr{web.CodeForbidden, "该版本未上架"}
+	}
 	if !v.Enabled {
 		return &webErr{web.CodeForbidden, "该版本已下架"}
 	}

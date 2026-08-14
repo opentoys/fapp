@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { useAuth } from '../composables/useAuth'
-import type { ApiResp, AppDetail, AppItem, Channel, User, Version } from './types'
+import type { ApiResp, AppDetail, AppItem, User, Version } from './types'
 
 const client = axios.create({ baseURL: '/api/v1', timeout: 60000 })
 
@@ -25,6 +25,8 @@ client.interceptors.response.use((res) => {
 export const api = {
   login: (username: string, password: string) =>
     client.post<ApiResp<{ token: string }>>('/auth/login', { username, password }),
+  changePassword: (oldPassword: string, newPassword: string) =>
+    client.put<ApiResp<{ ok: boolean }>>('/auth/password', { old_password: oldPassword, new_password: newPassword }),
 
   apps: () => client.get<ApiResp<AppItem[]>>('/apps').then((r) => r.data.data),
   appDetail: (id: number) => client.get<ApiResp<AppDetail>>(`/apps/${id}`).then((r) => r.data.data),
@@ -40,14 +42,16 @@ export const api = {
       .then((r) => r.data.data.url),
 
   adminApps: () => client.get<ApiResp<AppItem[]>>('/admin/apps').then((r) => r.data.data),
+  adminAppDetail: (id: number) => client.get<ApiResp<AppDetail>>(`/admin/apps/${id}`).then((r) => r.data.data),
   createApp: (data: { name: string; description?: string }) =>
     client.post<ApiResp<AppItem>>('/admin/apps', data).then((r) => r.data.data),
   updateApp: (id: number, data: Partial<AppItem>) => client.put<ApiResp<AppItem>>(`/admin/apps/${id}`, data),
+  uploadAppIcon: (id: number, file: File) => {
+    const form = new FormData()
+    form.append('icon', file)
+    return client.post<ApiResp<AppItem>>(`/admin/apps/${id}/icon`, form).then((r) => r.data.data)
+  },
   deleteApp: (id: number) => client.delete<ApiResp<unknown>>(`/admin/apps/${id}`),
-  channels: (appId?: number) =>
-    client.get<ApiResp<Channel[]>>('/admin/channels', { params: { app_id: appId } }).then((r) => r.data.data),
-  createChannel: (appId: number, name: string) =>
-    client.post<ApiResp<Channel>>('/admin/channels', { app_id: appId, name }),
   uploadVersion: (form: FormData) => client.post<ApiResp<Version>>('/admin/versions', form),
   updateVersion: (id: number, data: Partial<Version> & { password?: string }) =>
     client.put<ApiResp<Version>>(`/admin/versions/${id}`, data),
@@ -61,7 +65,7 @@ export const api = {
   adminUsers: () => client.get<ApiResp<User[]>>('/admin/users').then((r) => r.data.data),
   createUser: (data: { username: string; password: string }) =>
     client.post<ApiResp<User>>('/admin/users', data),
-  updateUser: (id: number, data: { password?: string }) =>
+  updateUser: (id: number, data: { username?: string; password?: string }) =>
     client.put<ApiResp<User>>(`/admin/users/${id}`, data),
   deleteUser: (id: number) => client.delete<ApiResp<unknown>>(`/admin/users/${id}`),
 }

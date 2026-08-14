@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"disapp/internal/model"
@@ -56,6 +58,31 @@ func TestAdminCreateApp(t *testing.T) {
 	}
 }
 
+func TestAdminAppDetailIncludesDrafts(t *testing.T) {
+	s := testServer(t)
+	app := seedApp(t, s)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/apps/"+itoa(app.ID), nil)
+	req.SetPathValue("id", itoa(app.ID))
+	w := httptest.NewRecorder()
+	s.AppDetailAdmin(w, req)
+
+	var res struct {
+		Code int `json:"code"`
+		Data struct {
+			Versions []model.Version `json:"versions"`
+		} `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 0 {
+		t.Fatalf("res = %s", w.Body.String())
+	}
+	// seedApp creates: published+enabled, published+disabled, draft → all 3.
+	if len(res.Data.Versions) != 3 {
+		t.Fatalf("admin detail should include drafts and disabled, got %d", len(res.Data.Versions))
+	}
+}
+
 func TestAdminRequiresAuth(t *testing.T) {
 	s := testServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/apps", nil)
@@ -94,18 +121,79 @@ func TestAdminAppsListAndDelete(t *testing.T) {
 	}
 }
 
-func TestAdminChannels(t *testing.T) {
+func TestAdminUploadAppIcon(t *testing.T) {
 	s := testServer(t)
-	token := adminLogin(t, s)
 	app := model.App{Name: "a"}
 	s.DB.Create(&app)
 
-	req := authReq(http.MethodPost, "/api/v1/admin/channels", token, []byte(`{"app_id":1,"name":"release"}`))
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, _ := mw.CreateFormFile("icon", "icon.png")
+	fw.Write(pngData)
+	mw.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/apps/"+itoa(app.ID)+"/icon", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.SetPathValue("id", itoa(app.ID))
 	w := httptest.NewRecorder()
-	s.CreateChannel(w, req)
-	var count int64
-	s.DB.Model(&model.Channel{}).Count(&count)
-	if count != 1 {
-		t.Fatalf("channels = %d", count)
+	s.UploadAppIcon(w, req)
+
+	var res struct {
+		Code int `json:"code"`
+		Data struct {
+			Icon string `json:"icon"`
+		} `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 0 {
+		t.Fatalf("res = %s", w.Body.String())
+	}
+	if res.Data.Icon == "" {
+		t.Fatal("icon url missing")
+	}
+
+	// Bytes stored at the exposed key.
+	key := strings.TrimPrefix(res.Data.Icon, "/api/v1/files/")
+	rc, err := s.Storage.Open(nil, key)
+	if err != nil {
+		t.Fatalf("icon not stored: %v", err)
+	}
+	got, _ := io.ReadAll(rc)
+	rc.Close()
+	if !bytes.Equal(got, pngData) {
+		t.Fatalf("icon bytes mismatch: got %d bytes", len(got))
+	}
+
+	// Deleting the app removes the icon file too.
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/apps/"+itoa(app.ID), nil)
+	delReq.SetPathValue("id", itoa(app.ID))
+	s.DeleteApp(httptest.NewRecorder(), delReq)
+	if _, err := s.Storage.Open(nil, key); err == nil {
+		t.Fatal("icon file should be deleted with the app")
+	}
+}
+
+func TestAdminUploadAppIconRejectsNonImage(t *testing.T) {
+	s := testServer(t)
+	app := model.App{Name: "a"}
+	s.DB.Create(&app)
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, _ := mw.CreateFormFile("icon", "app.txt")
+	fw.Write([]byte("not an image"))
+	mw.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/apps/"+itoa(app.ID)+"/icon", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.SetPathValue("id", itoa(app.ID))
+	w := httptest.NewRecorder()
+	s.UploadAppIcon(w, req)
+	var res struct {
+		Code int `json:"code"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code == 0 {
+		t.Fatalf("expected rejection, got %s", w.Body.String())
 	}
 }
