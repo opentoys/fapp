@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Check, ChevronDown } from 'lucide-vue-next'
-import { SelectContent, SelectItem, SelectPortal, SelectRoot, SelectTrigger, SelectValue, SelectViewport } from 'reka-ui'
+import { SelectContent, SelectItem, SelectItemText, SelectPortal, SelectRoot, SelectTrigger, SelectValue, SelectViewport } from 'reka-ui'
 import { cn } from '../lib/utils'
 
 export interface SelectOption {
@@ -51,7 +51,7 @@ function fromStr(s: string): string | number | null {
             class="group data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground cursor-pointer rounded-sm px-2 py-1.5 text-sm outline-none"
           >
             <span class="flex items-center justify-between gap-2">
-              <span>{{ item.title }}</span>
+              <SelectItemText>{{ item.title }}</SelectItemText>
               <Check class="size-4 opacity-0 group-data-[state=checked]:opacity-100" />
             </span>
           </SelectItem>
