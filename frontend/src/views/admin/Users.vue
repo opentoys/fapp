@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { api } from '../../api/client'
 import { useAuth } from '../../composables/useAuth'
 import { useI18n } from '../../composables/useI18n'
+import { fmtDate } from '../../utils/format'
 import type { User } from '../../api/types'
 
 const { isAuthed } = useAuth()
@@ -12,8 +13,14 @@ const newUsername = ref('')
 const newPassword = ref('')
 const error = ref('')
 const deleteTarget = ref<User | null>(null)
-const dialogOpen = ref(false)
+const deleteDialogOpen = ref(false)
 const createDialogOpen = ref(false)
+const editTarget = ref<User | null>(null)
+const editDialogOpen = ref(false)
+const editUsername = ref('')
+const editPassword = ref('')
+const editError = ref('')
+const editLoading = ref(false)
 const snackbar = ref('')
 const snackbarOpen = ref(false)
 
@@ -56,11 +63,11 @@ async function confirmCreate() {
 
 function askDelete(u: User) {
   deleteTarget.value = u
-  dialogOpen.value = true
+  deleteDialogOpen.value = true
 }
 
 function cancelDelete() {
-  dialogOpen.value = false
+  deleteDialogOpen.value = false
   deleteTarget.value = null
 }
 
@@ -77,14 +84,51 @@ async function confirmDelete() {
   }
 }
 
+function openEdit(u: User) {
+  editTarget.value = u
+  editUsername.value = u.username
+  editPassword.value = ''
+  editError.value = ''
+  editDialogOpen.value = true
+}
+
+function closeEdit() {
+  editDialogOpen.value = false
+  editTarget.value = null
+}
+
+async function confirmEdit() {
+  if (!editTarget.value) return
+  if (!editUsername.value.trim()) {
+    editError.value = t('adminUsers.required')
+    return
+  }
+  editError.value = ''
+  editLoading.value = true
+  try {
+    const data: { username?: string; password?: string } = {}
+    if (editUsername.value.trim() !== editTarget.value.username) {
+      data.username = editUsername.value.trim()
+    }
+    if (editPassword.value) {
+      data.password = editPassword.value
+    }
+    await api.updateUser(editTarget.value.id, data)
+    closeEdit()
+    await load()
+    showSnack(t('adminUsers.userUpdated'))
+  } catch (e) {
+    editError.value = (e as Error).message
+  } finally {
+    editLoading.value = false
+  }
+}
+
 function showSnack(msg: string) {
   snackbar.value = msg
   snackbarOpen.value = true
 }
 
-function fmtDate(s: string): string {
-  return new Date(s).toISOString().replace('T', ' ').slice(0, 19)
-}
 </script>
 
 <template>
@@ -131,6 +175,13 @@ function fmtDate(s: string): string {
         <v-btn
           variant="text"
           size="small"
+          @click="openEdit(item)"
+        >
+          {{ t('common.edit') }}
+        </v-btn>
+        <v-btn
+          variant="text"
+          size="small"
           color="error"
           @click="askDelete(item)"
         >
@@ -139,6 +190,7 @@ function fmtDate(s: string): string {
       </template>
     </v-data-table>
 
+    <!-- Create dialog -->
     <v-dialog v-model="createDialogOpen" max-width="480">
       <v-card>
         <v-card-title>{{ t('adminUsers.newUser') }}</v-card-title>
@@ -175,7 +227,44 @@ function fmtDate(s: string): string {
       </v-card>
     </v-dialog>
 
-    <v-dialog v-model="dialogOpen" max-width="400">
+    <!-- Edit dialog -->
+    <v-dialog v-model="editDialogOpen" max-width="480">
+      <v-card>
+        <v-card-title>{{ t('adminUsers.editUser') }}</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="editUsername"
+            :label="t('common.username')"
+            autofocus
+          />
+          <v-text-field
+            v-model="editPassword"
+            :label="t('adminUsers.newPassword')"
+            type="password"
+            @keyup.enter="confirmEdit"
+          />
+          <v-alert v-if="editError" type="error" variant="tonal" density="compact" class="mt-2">
+            {{ editError }}
+          </v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn @click="closeEdit">{{ t('common.cancel') }}</v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :loading="editLoading"
+            :disabled="!editUsername.trim()"
+            @click="confirmEdit"
+          >
+            {{ t('common.save') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Delete dialog -->
+    <v-dialog v-model="deleteDialogOpen" max-width="400">
       <v-card>
         <v-card-title>{{ t('common.confirmDelete') }}</v-card-title>
         <v-card-text>

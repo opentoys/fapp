@@ -18,10 +18,6 @@ function systemPrefersDark(): boolean {
   return window.matchMedia('(prefers-color-scheme: dark)').matches
 }
 
-function nextChoice(c: ThemeChoice): ThemeChoice {
-  return c === 'system' ? 'light' : c === 'light' ? 'dark' : 'system'
-}
-
 export function useTheme() {
   const vuetifyTheme = useVuetifyTheme()
 
@@ -35,7 +31,6 @@ export function useTheme() {
     choice.value = readStored()
     applyTheme(choice.value)
 
-    // React to system changes when in 'system' mode.
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     mq.addEventListener('change', () => {
       if (choice.value === 'system') applyTheme('system')
@@ -44,9 +39,9 @@ export function useTheme() {
 
   watch(choice, (c) => applyTheme(c))
 
-  function cycle() {
-    choice.value = nextChoice(choice.value)
+  function setChoice(c: ThemeChoice) {
+    choice.value = c
   }
 
-  return { choice, cycle }
+  return { choice, setChoice }
 }

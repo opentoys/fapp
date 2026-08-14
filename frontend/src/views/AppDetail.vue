@@ -1,17 +1,56 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import { mdiDownload } from '@mdi/js'
 import { api } from '../api/client'
 import { useI18n } from '../composables/useI18n'
-import type { AppDetail } from '../api/types'
+import { detectUA } from '../utils/ua'
+import { PLATFORMS } from '../constants/platform'
+import VersionPanel from '../components/VersionPanel.vue'
+import type { AppDetail, Platform, Version } from '../api/types'
 
 const route = useRoute()
 const { t } = useI18n()
+const detected = detectUA()
+
 const data = ref<AppDetail | null>(null)
 const error = ref('')
 const passwordPrompt = ref<{ versionId: number; password: string } | null>(null)
 const dialogOpen = ref(false)
-const passwordError = ref('')
+
+// Newest first by creation time.
+const versions = computed(() =>
+  [...(data.value?.versions ?? [])].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
+)
+
+// Latest version per platform (first encounter wins in a desc-sorted list).
+const byPlatform = computed(() => {
+  const map = new Map<Platform, Version>()
+  for (const v of versions.value) {
+    if (v.platform && !map.has(v.platform)) map.set(v.platform, v)
+  }
+  return map
+})
+
+// Platform cards shown on desktop / unknown UA, in canonical platform order.
+const platformList = computed(() => {
+  const result: { platform: Platform; version: Version }[] = []
+  for (const p of PLATFORMS) {
+    const v = byPlatform.value.get(p)
+    if (v) result.push({ platform: p, version: v })
+  }
+  return result
+})
+
+// Mobile (android/ios): show that platform's latest version as a no-card hero
+// instead of the per-platform grid. If the app has no version for the detected
+// platform, fall back to the newest version so mobile styles always apply.
+const mobileVersion = computed(() => {
+  if (detected.isDesktop || !detected.platform) return null
+  return byPlatform.value.get(detected.platform) ?? versions.value[0] ?? null
+})
 
 function openPasswordPrompt(versionId: number) {
   passwordPrompt.value = { versionId, password: '' }
@@ -31,31 +70,12 @@ async function load() {
   }
 }
 
-function fmtSize(n: number): string {
-  if (n > 1024 * 1024 * 1024) return (n / 1024 / 1024 / 1024).toFixed(2) + ' GB'
-  if (n > 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + ' MB'
-  if (n > 1024) return (n / 1024).toFixed(1) + ' KB'
-  return n + ' B'
+function isExpired(v: { access_mode: string; expires_at: string | null } | null): boolean {
+  return !!v && v.access_mode === 'expiry' && !!v.expires_at && new Date(v.expires_at) < new Date()
 }
 
-function fmtDate(s: string): string {
-  return new Date(s).toISOString().replace('T', ' ').slice(0, 19)
-}
-
-function accessColor(mode: string, enabled: boolean): string {
-  if (!enabled) return 'error'
-  if (mode === 'public') return 'success'
-  if (mode === 'password' || mode === 'expiry') return 'warning'
-  return 'grey'
-}
-
-function accessLabel(mode: string, enabled: boolean): string {
-  if (!enabled) return t('detail.takenDown')
-  return t(`access.${mode}`)
-}
-
-async function download(v: { id: number; access_mode: string }) {
-  passwordError.value = ''
+async function download(v: Version | null) {
+  if (!v) return
   if (v.access_mode === 'password') {
     openPasswordPrompt(v.id)
     return
@@ -88,85 +108,64 @@ async function doDownload(versionId: number, password: string | undefined) {
     </v-alert>
 
     <template v-if="data">
-      <v-row>
-        <v-col cols="12" md="4">
-          <h1 class="text-h4 mb-2">{{ data.app.name }}</h1>
-          <p v-if="data.app.description" class="text-body-1 mb-4">{{ data.app.description }}</p>
+      <div class="d-flex align-center mb-2" style="gap: 12px;">
+        <v-avatar v-if="data.app.icon" :image="data.app.icon" size="40" />
+        <v-avatar v-else color="primary" size="40">
+          <span class="text-h6">{{ data.app.name.charAt(0).toUpperCase() }}</span>
+        </v-avatar>
+        <h1 class="text-h4 mb-0">{{ data.app.name }}</h1>
+      </div>
+      <p v-if="data.app.description" class="text-body-1 mb-6">{{ data.app.description }}</p>
 
-          <div v-if="data.channels.length" class="mb-4">
-            <div class="text-overline mb-2">{{ t('detail.channels') }}</div>
-            <v-chip
-              v-for="c in data.channels"
-              :key="c.id"
-              class="mr-2 mb-2"
-              variant="outlined"
-            >
-              {{ c.name }}
-            </v-chip>
-          </div>
-        </v-col>
+      <!-- Mobile: detected platform's latest version, no card wrapper -->
+      <div v-if="mobileVersion" style="max-width: 560px;" class="pb-18">
+        <VersionPanel
+          :version="mobileVersion"
+          :fallback-name="data.app.name"
+          :fallback-icon="data.app.icon"
+          :no-download="true"
+          @download="download"
+        />
+      </div>
 
-        <v-col cols="12" md="8">
-          <div class="text-overline mb-3">{{ t('detail.versions') }}</div>
-
-          <v-card v-if="data.versions.length" variant="outlined">
-            <v-list lines="three">
-              <v-list-item
-                v-for="v in data.versions"
-                :key="v.id"
-                :class="{ 'text-disabled': !v.enabled }"
-              >
-                <template #prepend>
-                  <v-chip
-                    :color="accessColor(v.access_mode, v.enabled)"
-                    size="small"
-                    variant="tonal"
-                    class="mr-3"
-                  >
-                    {{ accessLabel(v.access_mode, v.enabled) }}
-                  </v-chip>
-                </template>
-
-                <v-list-item-title>
-                  <span class="text-h6">{{ v.version_name }}</span>
-                  <span class="text-body-2 text-medium-emphasis ml-2">
-                    {{ t('detail.code') }} {{ v.version_code }} · {{ fmtSize(v.file_size) }}
-                  </span>
-                </v-list-item-title>
-
-                <v-list-item-subtitle>
-                  <code class="text-caption">{{ v.sha256.slice(0, 16) }}…</code>
-                  <span class="text-caption text-medium-emphasis ml-2">{{ fmtDate(v.created_at) }}</span>
-                </v-list-item-subtitle>
-
-                <template v-if="v.changelog" #append>
-                  <v-list-item-subtitle class="text-body-2 mt-1" style="white-space: pre-wrap;">
-                    {{ v.changelog }}
-                  </v-list-item-subtitle>
-                </template>
-
-                <template #append>
-                  <v-btn
-                    v-if="v.enabled"
-                    color="primary"
-                    variant="flat"
-                    size="small"
-                    :disabled="v.access_mode === 'expiry' && !!v.expires_at && new Date(v.expires_at) < new Date()"
-                    @click="download(v)"
-                  >
-                    {{ t('detail.download') }}
-                  </v-btn>
-                </template>
-              </v-list-item>
-            </v-list>
-          </v-card>
-
-          <v-card v-else variant="tonal" class="text-center pa-8">
-            <v-card-text>{{ t('detail.empty') }}</v-card-text>
+      <!-- Desktop / unknown UA: one card per platform -->
+      <v-row v-else-if="platformList.length">
+        <v-col
+          v-for="{ platform, version } in platformList"
+          :key="platform"
+          cols="12"
+          md="6"
+        >
+          <v-card :variant="detected.isDesktop ? 'outlined' : 'flat'" class="pa-4 h-100">
+            <VersionPanel
+              :version="version"
+              :fallback-name="data.app.name"
+              :fallback-icon="data.app.icon"
+              @download="download"
+            />
           </v-card>
         </v-col>
       </v-row>
+
+      <v-card v-else-if="!error" variant="tonal" class="text-center pa-8">
+        <v-card-text>{{ t('detail.empty') }}</v-card-text>
+      </v-card>
     </template>
+
+    <!-- Floating download button: 80% width, pinned to the viewport bottom on
+         the mobile hero view. -->
+    <div v-if="mobileVersion && !error" class="download-fab">
+      <v-btn
+        color="primary"
+        size="large"
+        variant="flat"
+        :disabled="isExpired(mobileVersion)"
+        @click="download(mobileVersion)"
+      >
+        <v-icon start :icon="mdiDownload" />
+        {{ t('detail.download') }}
+      </v-btn>
+    </div>
 
     <v-dialog v-model="dialogOpen" max-width="400">
       <v-card>
@@ -191,3 +190,22 @@ async function doDownload(versionId: number, password: string | undefined) {
     </v-dialog>
   </v-container>
 </template>
+
+<style scoped>
+.download-fab {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  padding: 12px 0;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  /* Fade so content scrolling underneath stays legible behind the button. */
+  background: linear-gradient(to top, rgb(var(--v-theme-surface)) 55%, transparent);
+  z-index: 100;
+}
+.download-fab .v-btn {
+  width: 80%;
+}
+</style>

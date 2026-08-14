@@ -20,7 +20,7 @@ func TestVerifyPassword(t *testing.T) {
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", AccessMode: model.AccessPassword, PasswordHash: hash, Salt: salt,
-		Enabled: true, StorageKey: "1/3/a.apk",
+		Published: true, Enabled: true, StorageKey: "1/3/a.apk",
 	}
 	s.DB.Create(&v)
 
@@ -45,7 +45,7 @@ func TestDownloadWrongPassword(t *testing.T) {
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", AccessMode: model.AccessPassword, PasswordHash: hash, Salt: salt,
-		Enabled: true, StorageKey: "1/3/a.apk",
+		Published: true, Enabled: true, StorageKey: "1/3/a.apk",
 	}
 	s.DB.Create(&v)
 
@@ -69,7 +69,7 @@ func TestDownloadExpired(t *testing.T) {
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", AccessMode: model.AccessExpiry, ExpiresAt: &past,
-		Enabled: true, StorageKey: "1/3/a.apk",
+		Published: true, Enabled: true, StorageKey: "1/3/a.apk",
 	}
 	s.DB.Create(&v)
 
@@ -91,7 +91,7 @@ func TestDownloadCounts(t *testing.T) {
 	app := seedApp(t, s)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
-		FileType: "apk", AccessMode: model.AccessPublic, Enabled: true, StorageKey: "1/3/a.apk",
+		FileType: "apk", AccessMode: model.AccessPublic, Published: true, Enabled: true, StorageKey: "1/3/a.apk",
 	}
 	s.DB.Create(&v)
 
@@ -127,7 +127,7 @@ func TestInstallCounts(t *testing.T) {
 	app := seedApp(t, s)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
-		FileType: "apk", AccessMode: model.AccessPublic, Enabled: true, StorageKey: "1/3/a.apk",
+		FileType: "apk", AccessMode: model.AccessPublic, Published: true, Enabled: true, StorageKey: "1/3/a.apk",
 	}
 	s.DB.Create(&v)
 

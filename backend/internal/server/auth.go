@@ -63,6 +63,48 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, map[string]any{"token": token})
 }
 
+// ChangePassword lets the authenticated user change their own password.
+// Super-admin (uid=-1) is rejected — their password is managed in config.json.
+func (s *Server) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	user := userFrom(r)
+	if user == nil {
+		web.SendError(w, web.CodeUnauthorized, "未登录")
+		return
+	}
+	if user.UserID == SuperAdminUID {
+		web.SendError(w, web.CodeBadRequest, "超管密码请在 config.json 中修改")
+		return
+	}
+	var req struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		web.SendError(w, web.CodeBadRequest, "bad request")
+		return
+	}
+	if req.OldPassword == "" || req.NewPassword == "" {
+		web.SendError(w, web.CodeBadRequest, "密码不能为空")
+		return
+	}
+	var u model.User
+	if err := s.DB.First(&u, user.UserID).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "用户不存在")
+		return
+	}
+	if !password.Verify(req.OldPassword, u.PasswordHash, u.Salt) {
+		web.SendError(w, web.CodeUnauthorized, "原密码错误")
+		return
+	}
+	hash, salt := password.Hash(req.NewPassword)
+	u.PasswordHash, u.Salt = hash, salt
+	if err := s.DB.Save(&u).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "保存失败")
+		return
+	}
+	web.SendJson(w, map[string]any{"ok": true})
+}
+
 // RequireAuth validates Bearer JWT middleware.
 func (s *Server) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

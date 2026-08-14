@@ -16,9 +16,6 @@ func TestOpenAutoMigrates(t *testing.T) {
 	if !gdb.Migrator().HasTable("apps") {
 		t.Fatal("apps table missing")
 	}
-	if !gdb.Migrator().HasTable("channels") {
-		t.Fatal("channels table missing")
-	}
 	if !gdb.Migrator().HasTable("versions") {
 		t.Fatal("versions table missing")
 	}

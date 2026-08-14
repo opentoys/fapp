@@ -1,6 +1,8 @@
 package db
 
 import (
+	"time"
+
 	"github.com/libtnb/sqlite"
 	"gorm.io/gorm"
 
@@ -9,12 +11,15 @@ import (
 
 // Open opens sqlite database and auto-migrates all tables.
 func Open(dsn string) (*gorm.DB, error) {
-	gdb, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	gdb, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		// Store auto timestamps in the server's default timezone (time.Local).
+		NowFunc: func() time.Time { return time.Now().In(time.Local) },
+	})
 	if err != nil {
 		return nil, err
 	}
 	if err := gdb.AutoMigrate(
-		&model.User{}, &model.App{}, &model.Channel{}, &model.Version{}, &model.DownloadLog{},
+		&model.User{}, &model.App{}, &model.Version{}, &model.DownloadLog{},
 	); err != nil {
 		return nil, err
 	}

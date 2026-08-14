@@ -15,27 +15,33 @@ func seedApp(t *testing.T, s *Server) *model.App {
 	if err := s.DB.Create(&app).Error; err != nil {
 		t.Fatal(err)
 	}
-	ch := model.Channel{AppID: app.ID, Name: "test"}
-	if err := s.DB.Create(&ch).Error; err != nil {
-		t.Fatal(err)
-	}
 	v := model.Version{
-		AppID: app.ID, ChannelID: ch.ID, VersionName: "1.0.0", VersionCode: 1,
+		AppID: app.ID, VersionName: "1.0.0", VersionCode: 1,
 		FileName: "app.apk", FileType: "apk", FileSize: 100, AccessMode: model.AccessPublic,
-		Enabled: true, StorageKey: "1/2/app.apk", StorageBackend: "local",
+		Published: true, Enabled: true, StorageKey: "1/2/app.apk", StorageBackend: "local",
 	}
 	if err := s.DB.Create(&v).Error; err != nil {
 		t.Fatal(err)
 	}
 	disabled := model.Version{
-		AppID: app.ID, ChannelID: ch.ID, VersionName: "0.9.0", VersionCode: 0,
-		FileName: "old.apk", FileType: "apk", AccessMode: model.AccessPublic, Enabled: true,
+		AppID: app.ID, VersionName: "0.9.0", VersionCode: 0,
+		FileName: "old.apk", FileType: "apk", AccessMode: model.AccessPublic,
+		Published: true, Enabled: true,
 	}
 	if err := s.DB.Create(&disabled).Error; err != nil {
 		t.Fatal(err)
 	}
 	// GORM default:true overrides Enabled=false on Create, so update after.
 	s.DB.Model(&disabled).Update("enabled", false)
+	// A draft (published=false, enabled=true) must stay hidden publicly.
+	draft := model.Version{
+		AppID: app.ID, VersionName: "2.0.0", VersionCode: 2,
+		FileName: "new.apk", FileType: "apk", AccessMode: model.AccessPublic,
+		Published: false, Enabled: true, StorageKey: "1/4/new.apk", StorageBackend: "local",
+	}
+	if err := s.DB.Create(&draft).Error; err != nil {
+		t.Fatal(err)
+	}
 	return &app
 }
 
