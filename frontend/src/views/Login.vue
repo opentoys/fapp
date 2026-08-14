@@ -4,6 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import { useAuth } from '../composables/useAuth'
 import { useI18n } from '../composables/useI18n'
+import { Button } from '../components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
+import { Alert } from '../components/ui/alert'
 
 const route = useRoute()
 const router = useRouter()
@@ -32,38 +37,27 @@ async function submit() {
 </script>
 
 <template>
-  <v-container class="d-flex align-center justify-center" style="min-height: calc(100vh - 64px);">
-    <v-card max-width="400" width="100%">
-      <v-card-title>{{ t('login.title') }}</v-card-title>
-      <v-card-text>
-        <v-form @submit.prevent="submit">
-          <v-text-field
-            v-model="username"
-            :label="t('common.username')"
-            autocomplete="username"
-            autofocus
-          />
-          <v-text-field
-            v-model="password"
-            :label="t('common.password')"
-            type="password"
-            autocomplete="current-password"
-            @keyup.enter="submit"
-          />
-          <v-alert v-if="error" type="error" variant="tonal" class="mb-3">
-            {{ error }}
-          </v-alert>
-          <v-btn
-            color="primary"
-            variant="flat"
-            block
-            :loading="loading"
-            type="submit"
-          >
+  <div class="flex min-h-[calc(100vh-3.5rem)] items-center justify-center px-4 py-12">
+    <Card class="w-full max-w-sm">
+      <CardHeader>
+        <CardTitle class="text-lg">{{ t('login.title') }}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form class="grid gap-4" @submit.prevent="submit">
+          <div class="grid gap-2">
+            <Label for="username">{{ t('common.username') }}</Label>
+            <Input id="username" v-model="username" autocomplete="username" autofocus />
+          </div>
+          <div class="grid gap-2">
+            <Label for="password">{{ t('common.password') }}</Label>
+            <Input id="password" v-model="password" type="password" autocomplete="current-password" @keyup.enter="submit" />
+          </div>
+          <Alert v-if="error" variant="destructive">{{ error }}</Alert>
+          <Button type="submit" :disabled="loading" class="w-full">
             {{ t('login.submit') }}
-          </v-btn>
-        </v-form>
-      </v-card-text>
-    </v-card>
-  </v-container>
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  </div>
 </template>
