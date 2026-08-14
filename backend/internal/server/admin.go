@@ -52,6 +52,7 @@ func (s *Server) AppDetailAdmin(w http.ResponseWriter, r *http.Request) {
 func (s *Server) CreateApp(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name        string `json:"name"`
+		Platform    string `json:"platform"`
 		Icon        string `json:"icon"`
 		Description string `json:"description"`
 	}
@@ -63,7 +64,12 @@ func (s *Server) CreateApp(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeBadRequest, "应用名不能为空")
 		return
 	}
-	app := model.App{Name: req.Name, Icon: req.Icon, Description: req.Description}
+	// Platform is chosen at creation and immutable afterwards.
+	if req.Platform != "ios" && req.Platform != "android" {
+		web.SendError(w, web.CodeBadRequest, "平台必须为 ios 或 android")
+		return
+	}
+	app := model.App{Name: req.Name, Platform: req.Platform, Icon: req.Icon, Description: req.Description}
 	if err := s.DB.Create(&app).Error; err != nil {
 		web.SendError(w, web.CodeInternal, "创建失败")
 		return
@@ -276,6 +282,11 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeBadRequest, "app_id 必填")
 		return
 	}
+	var app model.App
+	if err := s.DB.First(&app, appID).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "应用不存在")
+		return
+	}
 	if versionName == "" {
 		web.SendError(w, web.CodeBadRequest, "version_name 必填")
 		return
@@ -283,12 +294,14 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 
 	// Upload creates a draft (published=false). Visibility and access mode
 	// are chosen at publish time via UpdateVersion. Metadata such as
-	// package_name/app_name/platform is parsed in the browser and sent here.
+	// package_name/app_name is parsed in the browser and sent here. The
+	// platform is always taken from the app (single-platform apps), so a
+	// version can never drift onto a different platform than its app.
 	fileType := model.FileType(header.Filename)
 	v := model.Version{
 		AppID:          appID,
 		ReleaseType:    r.FormValue("release_type"),
-		Platform:       r.FormValue("platform"),
+		Platform:       app.Platform,
 		Arch:           r.FormValue("arch"),
 		VersionName:    versionName,
 		VersionCode:    versionCode,

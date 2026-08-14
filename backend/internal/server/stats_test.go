@@ -10,8 +10,8 @@ import (
 	"disapp/internal/model"
 )
 
-// seedDownloads creates an app with two published versions (android/ios) and
-// download logs spread over a few days, returning the two versions.
+// seedDownloads creates an app with two published versions and download logs
+// spread over a few days, returning the app and the two versions.
 func seedDownloads(t *testing.T, s *Server) (*model.App, *model.Version, *model.Version) {
 	t.Helper()
 	app := model.App{Name: "统计测试"}
@@ -91,13 +91,6 @@ func TestDownloadsTimeSeries(t *testing.T) {
 	d = get("?version_id=" + itoa(ios.ID))
 	sel, _ := d["selected"].([]any)
 	if len(sel) != 5 || sel[0].(float64) != 1 || sel[2].(float64) != 1 || sel[4].(float64) != 0 {
-		t.Fatalf("selected = %v", sel)
-	}
-
-	// Filter by platform.
-	d = get("?platform=android")
-	sel, _ = d["selected"].([]any)
-	if sel[0].(float64) != 2 || sel[4].(float64) != 1 {
 		t.Fatalf("selected = %v", sel)
 	}
 

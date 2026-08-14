@@ -64,6 +64,7 @@ func (l JSONList) MarshalJSON() ([]byte, error) {
 type App struct {
 	ID           int64      `gorm:"primaryKey" json:"id"`
 	Name         string     `gorm:"size:128" json:"name"`
+	Platform     string     `gorm:"size:16" json:"platform"` // ios / android，创建时确定，不可修改
 	Icon         string     `gorm:"size:512" json:"icon"`
 	Description  string     `gorm:"type:text" json:"description"`
 	Screenshots  JSONList   `gorm:"type:text" json:"screenshots"`
