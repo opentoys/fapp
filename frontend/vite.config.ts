@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import vuetify from 'vite-plugin-vuetify'
 import tailwindcss from '@tailwindcss/vite'
 
 // Dev workflow: run `go run ./cmd/server` in backend/ for the API, and
@@ -13,8 +12,6 @@ export default defineConfig({
   plugins: [
     vue(),
     tailwindcss(),
-    // vite-plugin-vuetify is removed in a later task; kept for now so existing v-* views build.
-    vuetify({ autoImport: true }),
   ],
   server: {
     host: true,
