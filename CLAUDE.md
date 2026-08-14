@@ -1,11 +1,11 @@
 # disapp — App Distribution Platform
 
-Vue 3 + Vuetify 3 frontend, Go backend, SQLite storage.
+Vue 3 + Tailwind CSS v4 + shadcn-vue frontend, Go backend, SQLite storage.
 
 ## Project structure
 
 ```
-frontend/    Vue 3 + Vite + TypeScript + Vuetify 3
+frontend/    Vue 3 + Vite + TypeScript + Tailwind CSS v4 + shadcn-vue
 backend/     Go 1.22+ std-lib HTTP, GORM + SQLite
 ```
 
@@ -42,4 +42,5 @@ Open http://localhost:5173. Kill both when done.
 - No migration code — `make reset` to rebuild schema
 - Super-admin is configured in `config.json`, not in the DB
 - API responses are NOT translated; only UI strings are
-- `@mdi/js` SVG paths, `vuetify/iconsets/mdi-svg` icon set
+- Icons: `lucide-vue-next`; `vue-sonner` for toasts
+- Reuse `frontend/src/components/ui/*` shadcn primitives, never raw Vuetify

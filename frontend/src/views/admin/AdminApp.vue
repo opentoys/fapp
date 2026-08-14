@@ -306,6 +306,20 @@ async function submitPublish() {
 }
 
 onMounted(load)
+
+// Router reuses this component when only the :id param changes (browser
+// back/forward across apps), so reload and reset per-app state.
+watch(
+  () => route.params.id,
+  () => {
+    chartData.value = null
+    chartError.value = ''
+    stats.value = null
+    error.value = ''
+    load()
+  }
+)
+
 async function load() {
   const id = Number(route.params.id)
   try {
