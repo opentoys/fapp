@@ -1,28 +1,40 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { toast } from 'vue-sonner'
+import { Plus } from 'lucide-vue-next'
 import { api } from '../../api/client'
 import { useAuth } from '../../composables/useAuth'
 import { useI18n } from '../../composables/useI18n'
 import { fmtDate } from '../../utils/format'
+import { Button } from '../../components/ui/button'
+import { Card, CardContent } from '../../components/ui/card'
+import { Alert } from '../../components/ui/alert'
+import { Dialog } from '../../components/ui/dialog'
+import { AlertDialog } from '../../components/ui/alert-dialog'
+import { Input } from '../../components/ui/input'
+import { Label } from '../../components/ui/label'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table'
 import type { User } from '../../api/types'
 
 const { isAuthed } = useAuth()
 const { t } = useI18n()
 const users = ref<User[]>([])
+const error = ref('')
+
 const newUsername = ref('')
 const newPassword = ref('')
-const error = ref('')
-const deleteTarget = ref<User | null>(null)
-const deleteDialogOpen = ref(false)
+const createError = ref('')
 const createDialogOpen = ref(false)
+
 const editTarget = ref<User | null>(null)
 const editDialogOpen = ref(false)
 const editUsername = ref('')
 const editPassword = ref('')
 const editError = ref('')
 const editLoading = ref(false)
-const snackbar = ref('')
-const snackbarOpen = ref(false)
+
+const deleteTarget = ref<User | null>(null)
+const deleteDialogOpen = ref(false)
 
 onMounted(load)
 
@@ -37,50 +49,23 @@ async function load() {
 function openCreate() {
   newUsername.value = ''
   newPassword.value = ''
-  error.value = ''
+  createError.value = ''
   createDialogOpen.value = true
-}
-
-function closeCreate() {
-  createDialogOpen.value = false
 }
 
 async function confirmCreate() {
   if (!newUsername.value || !newPassword.value) {
-    error.value = t('adminUsers.required')
+    createError.value = t('adminUsers.required')
     return
   }
-  error.value = ''
+  createError.value = ''
   try {
     await api.createUser({ username: newUsername.value, password: newPassword.value })
-    closeCreate()
+    createDialogOpen.value = false
     await load()
-    showSnack(t('adminUsers.userCreated'))
+    toast(t('adminUsers.userCreated'))
   } catch (e) {
-    error.value = (e as Error).message
-  }
-}
-
-function askDelete(u: User) {
-  deleteTarget.value = u
-  deleteDialogOpen.value = true
-}
-
-function cancelDelete() {
-  deleteDialogOpen.value = false
-  deleteTarget.value = null
-}
-
-async function confirmDelete() {
-  if (!deleteTarget.value) return
-  const id = deleteTarget.value.id
-  cancelDelete()
-  try {
-    await api.deleteUser(id)
-    await load()
-    showSnack(t('adminUsers.userDeleted'))
-  } catch (e) {
-    error.value = (e as Error).message
+    createError.value = (e as Error).message
   }
 }
 
@@ -90,11 +75,6 @@ function openEdit(u: User) {
   editPassword.value = ''
   editError.value = ''
   editDialogOpen.value = true
-}
-
-function closeEdit() {
-  editDialogOpen.value = false
-  editTarget.value = null
 }
 
 async function confirmEdit() {
@@ -114,9 +94,9 @@ async function confirmEdit() {
       data.password = editPassword.value
     }
     await api.updateUser(editTarget.value.id, data)
-    closeEdit()
+    editDialogOpen.value = false
     await load()
-    showSnack(t('adminUsers.userUpdated'))
+    toast(t('adminUsers.userUpdated'))
   } catch (e) {
     editError.value = (e as Error).message
   } finally {
@@ -124,162 +104,109 @@ async function confirmEdit() {
   }
 }
 
-function showSnack(msg: string) {
-  snackbar.value = msg
-  snackbarOpen.value = true
+function askDelete(u: User) {
+  deleteTarget.value = u
+  deleteDialogOpen.value = true
 }
 
+async function confirmDelete() {
+  if (!deleteTarget.value) return
+  const id = deleteTarget.value.id
+  deleteDialogOpen.value = false
+  try {
+    await api.deleteUser(id)
+    await load()
+    toast(t('adminUsers.userDeleted'))
+  } catch (e) {
+    toast((e as Error).message)
+  }
+}
 </script>
 
 <template>
-  <v-container class="pa-6" max-width="1000">
-    <div class="d-flex align-center justify-space-between mb-6">
-      <h1 class="text-h4">{{ t('adminUsers.title') }}</h1>
-      <v-btn
-        v-if="isAuthed"
-        color="primary"
-        variant="flat"
-        @click="openCreate"
-      >
+  <div class="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+    <div class="mb-6 flex items-center justify-between">
+      <h1 class="text-2xl font-semibold tracking-tight">{{ t('adminUsers.title') }}</h1>
+      <Button v-if="isAuthed" @click="openCreate">
+        <Plus class="size-4" />
         {{ t('adminUsers.newUser') }}
-      </v-btn>
+      </Button>
     </div>
 
-    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable>
-      {{ error }}
-    </v-alert>
+    <Alert v-if="error" variant="destructive" class="mb-4">{{ error }}</Alert>
 
-    <v-card variant="outlined" class="mb-4">
-      <v-card-text>
-        <div class="text-overline mb-1">{{ t('adminUsers.superAdminLabel') }}</div>
-        <div class="text-caption text-medium-emphasis" v-html="t('adminUsers.superAdminNote')" />
-      </v-card-text>
-    </v-card>
+    <Card class="mb-4">
+      <CardContent class="py-4 text-sm">
+        <div class="mb-1 text-xs font-semibold uppercase tracking-wider">{{ t('adminUsers.superAdminLabel') }}</div>
+        <span class="text-muted-foreground" v-html="t('adminUsers.superAdminNote')" />
+      </CardContent>
+    </Card>
 
-    <v-data-table
-      :items="users"
-      :headers="[
-        { title: t('common.username'), key: 'username' },
-        { title: t('common.created'), key: 'created_at' },
-        { title: '', key: 'actions', sortable: false, align: 'end' },
-      ]"
-      :items-per-page="-1"
-    >
-      <template #item.username="{ item }">
-        <code>{{ item.username }}</code>
+    <Card>
+      <CardContent class="!p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{{ t('common.username') }}</TableHead>
+              <TableHead>{{ t('common.created') }}</TableHead>
+              <TableHead class="text-right"> </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="u in users" :key="u.id">
+              <TableCell><code>{{ u.username }}</code></TableCell>
+              <TableCell><code class="text-xs">{{ fmtDate(u.created_at) }}</code></TableCell>
+              <TableCell class="text-right">
+                <Button variant="ghost" size="sm" @click="openEdit(u)">{{ t('common.edit') }}</Button>
+                <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive" @click="askDelete(u)">{{ t('common.delete') }}</Button>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+
+    <Dialog v-model:open="createDialogOpen" :title="t('adminUsers.newUser')" max-width="md">
+      <div class="grid gap-4">
+        <div class="grid gap-2">
+          <Label>{{ t('common.username') }}</Label>
+          <Input v-model="newUsername" autofocus />
+        </div>
+        <div class="grid gap-2">
+          <Label>{{ t('common.password') }}</Label>
+          <Input v-model="newPassword" type="password" @keyup.enter="confirmCreate" />
+        </div>
+        <Alert v-if="createError" variant="destructive">{{ createError }}</Alert>
+        <div class="flex justify-end gap-2">
+          <Button variant="outline" @click="createDialogOpen = false">{{ t('common.cancel') }}</Button>
+          <Button :disabled="!newUsername || !newPassword" @click="confirmCreate">{{ t('common.create') }}</Button>
+        </div>
+      </div>
+    </Dialog>
+
+    <Dialog v-model:open="editDialogOpen" :title="t('adminUsers.editUser')" max-width="md">
+      <div class="grid gap-4">
+        <div class="grid gap-2">
+          <Label>{{ t('common.username') }}</Label>
+          <Input v-model="editUsername" autofocus />
+        </div>
+        <div class="grid gap-2">
+          <Label>{{ t('adminUsers.newPassword') }}</Label>
+          <Input v-model="editPassword" type="password" @keyup.enter="confirmEdit" />
+        </div>
+        <Alert v-if="editError" variant="destructive">{{ editError }}</Alert>
+        <div class="flex justify-end gap-2">
+          <Button variant="outline" @click="editDialogOpen = false">{{ t('common.cancel') }}</Button>
+          <Button :disabled="!editUsername.trim()" @click="confirmEdit">{{ t('common.save') }}</Button>
+        </div>
+      </div>
+    </Dialog>
+
+    <AlertDialog v-model:open="deleteDialogOpen" :title="t('common.confirmDelete')" :description="t('adminUsers.confirmDeleteUser', { name: deleteTarget?.username ?? '' })">
+      <template #footer>
+        <Button variant="outline" @click="deleteDialogOpen = false">{{ t('common.cancel') }}</Button>
+        <Button variant="destructive" @click="confirmDelete">{{ t('common.delete') }}</Button>
       </template>
-      <template #item.created_at="{ item }">
-        <code class="text-caption">{{ fmtDate(item.created_at) }}</code>
-      </template>
-      <template #item.actions="{ item }">
-        <v-btn
-          variant="text"
-          size="small"
-          @click="openEdit(item)"
-        >
-          {{ t('common.edit') }}
-        </v-btn>
-        <v-btn
-          variant="text"
-          size="small"
-          color="error"
-          @click="askDelete(item)"
-        >
-          {{ t('common.delete') }}
-        </v-btn>
-      </template>
-    </v-data-table>
-
-    <!-- Create dialog -->
-    <v-dialog v-model="createDialogOpen" max-width="480">
-      <v-card>
-        <v-card-title>{{ t('adminUsers.newUser') }}</v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="newUsername"
-            :label="t('common.username')"
-            autofocus
-            :error="!!error"
-          />
-          <v-text-field
-            v-model="newPassword"
-            :label="t('common.password')"
-            type="password"
-            :error="!!error"
-            @keyup.enter="confirmCreate"
-          />
-          <v-alert v-if="error" type="error" variant="tonal" density="compact" class="mt-2">
-            {{ error }}
-          </v-alert>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="closeCreate">{{ t('common.cancel') }}</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
-            :disabled="!newUsername || !newPassword"
-            @click="confirmCreate"
-          >
-            {{ t('common.create') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Edit dialog -->
-    <v-dialog v-model="editDialogOpen" max-width="480">
-      <v-card>
-        <v-card-title>{{ t('adminUsers.editUser') }}</v-card-title>
-        <v-card-text>
-          <v-text-field
-            v-model="editUsername"
-            :label="t('common.username')"
-            autofocus
-          />
-          <v-text-field
-            v-model="editPassword"
-            :label="t('adminUsers.newPassword')"
-            type="password"
-            @keyup.enter="confirmEdit"
-          />
-          <v-alert v-if="editError" type="error" variant="tonal" density="compact" class="mt-2">
-            {{ editError }}
-          </v-alert>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="closeEdit">{{ t('common.cancel') }}</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
-            :loading="editLoading"
-            :disabled="!editUsername.trim()"
-            @click="confirmEdit"
-          >
-            {{ t('common.save') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <!-- Delete dialog -->
-    <v-dialog v-model="deleteDialogOpen" max-width="400">
-      <v-card>
-        <v-card-title>{{ t('common.confirmDelete') }}</v-card-title>
-        <v-card-text>
-          <span v-html="t('adminUsers.confirmDeleteUser', { name: deleteTarget?.username ?? '' })" />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="cancelDelete">{{ t('common.cancel') }}</v-btn>
-          <v-btn color="error" variant="flat" @click="confirmDelete">{{ t('common.delete') }}</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
-    <v-snackbar v-model="snackbarOpen" :timeout="2000">
-      {{ snackbar }}
-    </v-snackbar>
-  </v-container>
+    </AlertDialog>
+  </div>
 </template>
