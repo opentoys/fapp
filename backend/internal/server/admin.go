@@ -27,9 +27,9 @@ func (s *Server) AppsList(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, apps)
 }
 
-// AppDetailAdmin returns app detail with all versions (admin side), including
-// drafts and taken-down ones. The public AppDetail endpoint only exposes
-// published and enabled versions.
+// AppDetailAdmin returns app detail with all versions (admin side). The public
+// AppDetail endpoint only exposes the app's current version (and only when the
+// app itself is published).
 func (s *Server) AppDetailAdmin(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var app model.App
@@ -116,6 +116,7 @@ func (s *Server) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		AccessMode  *string    `json:"access_mode"`
 		Password    *string    `json:"password"`
 		ExpiresAt   *time.Time `json:"expires_at"`
+		Published   *bool      `json:"published"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		web.SendError(w, web.CodeBadRequest, "bad request")
@@ -129,6 +130,9 @@ func (s *Server) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Description != nil {
 		app.Description = *req.Description
+	}
+	if req.Published != nil {
+		app.Published = *req.Published
 	}
 	if req.AccessMode != nil {
 		app.AccessMode = *req.AccessMode
@@ -147,6 +151,44 @@ func (s *Server) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		at := req.ExpiresAt.In(time.Local)
 		app.ExpiresAt = &at
 	}
+	if err := s.DB.Save(&app).Error; err != nil {
+		web.SendError(w, web.CodeInternal, "保存失败")
+		return
+	}
+	web.SendJson(w, app)
+}
+
+// SetCurrentVersion marks one version as the app's current version. An app has
+// exactly one current version (a single public download), so setting one simply
+// overwrites app.CurrentVersionID. The version must belong to the app.
+func (s *Server) SetCurrentVersion(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var app model.App
+	if err := s.DB.First(&app, id).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "应用不存在")
+		return
+	}
+	var req struct {
+		VersionID int64 `json:"version_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		web.SendError(w, web.CodeBadRequest, "bad request")
+		return
+	}
+	if req.VersionID <= 0 {
+		web.SendError(w, web.CodeBadRequest, "version_id 必填")
+		return
+	}
+	var v model.Version
+	if err := s.DB.First(&v, req.VersionID).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "版本不存在")
+		return
+	}
+	if v.AppID != app.ID {
+		web.SendError(w, web.CodeBadRequest, "版本不属于该应用")
+		return
+	}
+	app.CurrentVersionID = v.ID
 	if err := s.DB.Save(&app).Error; err != nil {
 		web.SendError(w, web.CodeInternal, "保存失败")
 		return
@@ -316,11 +358,12 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Upload creates a draft (published=false). Visibility and access mode
-	// are chosen at publish time via UpdateVersion. Metadata such as
-	// package_name/app_name is parsed in the browser and sent here. The
-	// platform is always taken from the app (single-platform apps), so a
-	// version can never drift onto a different platform than its app.
+	// Upload always creates a draft: a version only becomes publicly visible
+	// once it is set as the app's current version and the app itself is
+	// published. Metadata such as package_name/app_name is parsed in the
+	// browser and sent here. The platform is always taken from the app
+	// (single-platform apps), so a version can never drift onto a different
+	// platform than its app.
 	fileType := model.FileType(header.Filename)
 	v := model.Version{
 		AppID:          appID,
@@ -372,41 +415,9 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, v)
 }
 
-// UpdateVersion updates version info (changelog, published, enabled). Access
-// scope is app-level and edited on the app's Overview page, not per version.
-func (s *Server) UpdateVersion(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	var v model.Version
-	if err := s.DB.First(&v, id).Error; err != nil {
-		web.SendError(w, web.CodeNotFound, "版本不存在")
-		return
-	}
-	var req struct {
-		Changelog *string `json:"changelog"`
-		Published *bool   `json:"published"`
-		Enabled   *bool   `json:"enabled"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		web.SendError(w, web.CodeBadRequest, "bad request")
-		return
-	}
-	if req.Changelog != nil {
-		v.Changelog = *req.Changelog
-	}
-	if req.Published != nil {
-		v.Published = *req.Published
-	}
-	if req.Enabled != nil {
-		v.Enabled = *req.Enabled
-	}
-	if err := s.DB.Save(&v).Error; err != nil {
-		web.SendError(w, web.CodeInternal, "保存失败")
-		return
-	}
-	web.SendJson(w, v)
-}
-
-// DeleteVersion deletes a version, optionally deleting the storage file.
+// DeleteVersion deletes a version, optionally deleting the storage file. If
+// the deleted version is the app's current version, the app's current version
+// pointer is reset so the app no longer exposes a public download.
 func (s *Server) DeleteVersion(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var v model.Version
@@ -421,6 +432,8 @@ func (s *Server) DeleteVersion(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeInternal, "删除失败")
 		return
 	}
+	s.DB.Model(&model.App{}).Where("id = ? AND current_version_id = ?", v.AppID, v.ID).
+		Update("current_version_id", 0)
 	web.SendJson(w, map[string]any{"ok": true})
 }
 

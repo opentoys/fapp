@@ -69,8 +69,8 @@ export const api = {
       .get<ApiResp<DownloadsTimeSeries>>(`/admin/apps/${id}/downloads`, { params })
       .then((r) => r.data.data),
   uploadVersion: (form: FormData) => client.post<ApiResp<Version>>('/admin/versions', form),
-  updateVersion: (id: number, data: Partial<Version> & { password?: string }) =>
-    client.put<ApiResp<Version>>(`/admin/versions/${id}`, data),
+  setCurrentVersion: (appId: number, versionId: number) =>
+    client.post<ApiResp<AppItem>>(`/admin/apps/${appId}/current`, { version_id: versionId }).then((r) => r.data.data),
   deleteVersion: (id: number, deleteFile = true) =>
     client.delete<ApiResp<unknown>>(`/admin/versions/${id}`, { params: { delete_file: deleteFile } }),
   versionStats: (id: number) =>

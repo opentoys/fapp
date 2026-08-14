@@ -49,8 +49,8 @@ func (s *Server) Routes(dist fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/v1/admin/users", web.Chain(admin...)(s.CreateUser))
 	mux.HandleFunc("PUT /api/v1/admin/users/{id}", web.Chain(admin...)(s.UpdateUser))
 	mux.HandleFunc("DELETE /api/v1/admin/users/{id}", web.Chain(admin...)(s.DeleteUser))
+	mux.HandleFunc("POST /api/v1/admin/apps/{id}/current", web.Chain(admin...)(s.SetCurrentVersion))
 	mux.HandleFunc("POST /api/v1/admin/versions", web.Chain(admin...)(s.UploadVersion))
-	mux.HandleFunc("PUT /api/v1/admin/versions/{id}", web.Chain(admin...)(s.UpdateVersion))
 	mux.HandleFunc("DELETE /api/v1/admin/versions/{id}", web.Chain(admin...)(s.DeleteVersion))
 	mux.HandleFunc("GET /api/v1/admin/versions/{id}/stats", web.Chain(admin...)(s.VersionStats))
 

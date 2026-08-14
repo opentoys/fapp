@@ -146,9 +146,85 @@ func TestAdminAppDetailIncludesDrafts(t *testing.T) {
 	if res.Code != 0 {
 		t.Fatalf("res = %s", w.Body.String())
 	}
-	// seedApp creates: published+enabled, published+disabled, draft → all 3.
+	// seedApp creates 3 versions (1.0.0 current, 0.9.0, 2.0.0); the admin
+	// detail exposes all of them regardless of current/published state.
 	if len(res.Data.Versions) != 3 {
-		t.Fatalf("admin detail should include drafts and disabled, got %d", len(res.Data.Versions))
+		t.Fatalf("admin detail should include all versions, got %d", len(res.Data.Versions))
+	}
+}
+
+func TestSetCurrentVersion(t *testing.T) {
+	s := testServer(t)
+	app := model.App{Name: "a", Platform: "android"}
+	s.DB.Create(&app)
+	other := model.App{Name: "b", Platform: "android"}
+	s.DB.Create(&other)
+	v1 := model.Version{AppID: app.ID, VersionName: "1.0.0"}
+	v2 := model.Version{AppID: app.ID, VersionName: "2.0.0"}
+	s.DB.Create(&v1)
+	s.DB.Create(&v2)
+	foreign := model.Version{AppID: other.ID, VersionName: "1.0.0"}
+	s.DB.Create(&foreign)
+
+	set := func(id, body string) int {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/apps/"+id+"/current", strings.NewReader(body))
+		req.SetPathValue("id", id)
+		w := httptest.NewRecorder()
+		s.SetCurrentVersion(w, req)
+		var res struct {
+			Code int `json:"code"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &res)
+		return res.Code
+	}
+
+	if code := set(itoa(app.ID), `{"version_id":`+itoa(v1.ID)+`}`); code != 0 {
+		t.Fatalf("set current failed: %d", code)
+	}
+	var reload model.App
+	s.DB.First(&reload, app.ID)
+	if reload.CurrentVersionID != v1.ID {
+		t.Fatalf("current_version_id = %d", reload.CurrentVersionID)
+	}
+
+	// Switching to another version overwrites (still one current version).
+	if code := set(itoa(app.ID), `{"version_id":`+itoa(v2.ID)+`}`); code != 0 {
+		t.Fatalf("switch current failed: %d", code)
+	}
+	s.DB.First(&reload, app.ID)
+	if reload.CurrentVersionID != v2.ID {
+		t.Fatalf("current_version_id after switch = %d", reload.CurrentVersionID)
+	}
+
+	// A version of a different app must be rejected.
+	if code := set(itoa(app.ID), `{"version_id":`+itoa(foreign.ID)+`}`); code == 0 {
+		t.Fatal("foreign version must be rejected")
+	}
+	// Missing version_id rejected.
+	if code := set(itoa(app.ID), `{}`); code == 0 {
+		t.Fatal("missing version_id must be rejected")
+	}
+}
+
+func TestUpdateAppPublished(t *testing.T) {
+	s := testServer(t)
+	app := model.App{Name: "a"}
+	s.DB.Create(&app)
+
+	pub := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"published":true}`))
+	pub.SetPathValue("id", itoa(app.ID))
+	s.UpdateApp(httptest.NewRecorder(), pub)
+	s.DB.First(&app, app.ID)
+	if !app.Published {
+		t.Fatal("app should be published")
+	}
+
+	down := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"published":false}`))
+	down.SetPathValue("id", itoa(app.ID))
+	s.UpdateApp(httptest.NewRecorder(), down)
+	s.DB.First(&app, app.ID)
+	if app.Published {
+		t.Fatal("app should be unpublished")
 	}
 }
 

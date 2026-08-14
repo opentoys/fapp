@@ -16,6 +16,8 @@ export interface AppItem {
   screenshots: string[]
   access_mode: AccessMode
   expires_at: string | null
+  published: boolean
+  current_version_id: number
   created_at: string
   latest_version: Version | null
 }
@@ -39,8 +41,6 @@ export interface Version {
   icon_url: string
   sha256: string
   changelog: string
-  published: boolean
-  enabled: boolean
   download_count: number
   install_count: number
   created_at: string

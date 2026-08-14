@@ -82,12 +82,8 @@ func TestUploadVersion(t *testing.T) {
 		t.Fatal("sha256 missing")
 	}
 
-	// Upload must create a draft: not visible until published.
 	var v model.Version
 	s.DB.Last(&v)
-	if v.Published {
-		t.Fatalf("upload must create a draft, got published = %v", v.Published)
-	}
 	// The version's platform is forced from the app (single-platform apps),
 	// regardless of any platform value the client sends.
 	if v.ReleaseType != "production" || v.Platform != "android" || v.Arch != "arm64,x86_64" {
@@ -156,41 +152,11 @@ func TestUploadVersionIgnoresAccessFields(t *testing.T) {
 		t.Fatalf("res = %s", w.Body.String())
 	}
 
-	// Access fields from the multipart body must be ignored; the upload is
-	// a draft and the access scope is configured at the app level.
-	var v model.Version
-	s.DB.Last(&v)
-	if v.Published {
-		t.Fatalf("upload must not publish, got published = %v", v.Published)
-	}
-	s.DB.First(&app, v.AppID)
+	// Access fields from the multipart body must be ignored; the access
+	// scope is configured at the app level, never per version.
+	s.DB.First(&app, app.ID)
 	if app.AccessMode != "" {
 		t.Fatalf("upload must not touch app access, got %+v", app)
-	}
-}
-
-func TestPublishVersion(t *testing.T) {
-	s := testServer(t)
-	v := model.Version{
-		AppID: 1, VersionName: "1.0", VersionCode: 1, StorageKey: "1/2/a.apk",
-	}
-	s.DB.Create(&v)
-
-	// Publishing flips visibility only; access scope is app-level and is set
-	// on the app's Overview page, never per version.
-	body := `{"published":true,"enabled":true}`
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/versions/"+itoa(v.ID), strings.NewReader(body))
-	req.SetPathValue("id", itoa(v.ID))
-	w := httptest.NewRecorder()
-	s.UpdateVersion(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("code = %d, body = %s", w.Code, w.Body.String())
-	}
-
-	var reload model.Version
-	s.DB.First(&reload, v.ID)
-	if !reload.Published || !reload.Enabled {
-		t.Fatalf("reload = %+v", reload)
 	}
 }
 
@@ -229,33 +195,11 @@ func TestUpdateAppNormalizesExpiryTZ(t *testing.T) {
 	}
 }
 
-func TestUpdateVersionToggleDisabled(t *testing.T) {
-	s := testServer(t)
-	v := model.Version{
-		AppID: 1, VersionName: "1.0", VersionCode: 1,
-		Enabled: true, StorageKey: "1/2/a.apk",
-	}
-	s.DB.Create(&v)
-
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/versions/"+itoa(v.ID), strings.NewReader(`{"enabled":false,"changelog":"下架"}`))
-	req.SetPathValue("id", itoa(v.ID))
-	w := httptest.NewRecorder()
-	s.UpdateVersion(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("code = %d", w.Code)
-	}
-	var reload model.Version
-	s.DB.First(&reload, v.ID)
-	if reload.Enabled || reload.Changelog != "下架" {
-		t.Fatalf("reload = %+v", reload)
-	}
-}
-
 func TestDeleteVersion(t *testing.T) {
 	s := testServer(t)
 	v := model.Version{
 		AppID: 1, VersionName: "1.0", VersionCode: 1,
-		Enabled: true, StorageKey: "1/2/a.apk",
+		StorageKey: "1/2/a.apk",
 	}
 	s.DB.Create(&v)
 	s.Storage.Save(nil, "1/2/a.apk", strings.NewReader("x"))
@@ -391,7 +335,7 @@ func TestVersionStats(t *testing.T) {
 	s := testServer(t)
 	v := model.Version{
 		AppID: 1, VersionName: "1.0", VersionCode: 1,
-		Enabled: true, StorageKey: "1/2/a.apk", DownloadCount: 3, InstallCount: 1,
+		StorageKey: "1/2/a.apk", DownloadCount: 3, InstallCount: 1,
 	}
 	s.DB.Create(&v)
 	s.DB.Create(&model.DownloadLog{VersionID: v.ID, IP: "1.2.3.4", UserAgent: "curl"})
