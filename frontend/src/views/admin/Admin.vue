@@ -66,6 +66,7 @@ function onCreateIcon(file: File | File[]) {
 }
 
 async function confirmCreate() {
+  if (creating.value) return
   if (!newName.value.trim()) {
     createError.value = t('admin.nameRequired')
     return
@@ -106,6 +107,7 @@ function onEditIcon(file: File | File[]) {
 }
 
 async function confirmEdit() {
+  if (editing.value) return
   if (!editTarget.value) return
   if (!editName.value.trim()) {
     editError.value = t('admin.nameRequired')
@@ -135,6 +137,7 @@ function askDelete(item: AppItem) {
 async function confirmDelete() {
   if (!deleteTarget.value) return
   const id = deleteTarget.value.id
+  deleteTarget.value = null
   deleteDialogOpen.value = false
   try {
     await api.deleteApp(id)
@@ -186,8 +189,8 @@ async function confirmDelete() {
     <Dialog v-model:open="createDialogOpen" :title="t('admin.newApp')" max-width="md">
       <div class="grid gap-4">
         <div class="grid gap-2">
-          <Label>{{ t('admin.appName') }}</Label>
-          <Input v-model="newName" autofocus @keyup.enter="confirmCreate" />
+          <Label for="app-name">{{ t('admin.appName') }}</Label>
+          <Input id="app-name" v-model="newName" autofocus @keyup.enter="confirmCreate" />
         </div>
         <div class="flex items-center gap-3">
           <Avatar :src="createIconPreview" :fallback="(newName || '?').charAt(0).toUpperCase()" class="size-12" />
@@ -198,7 +201,7 @@ async function confirmDelete() {
         <Alert v-if="createError" variant="destructive">{{ createError }}</Alert>
         <div class="flex justify-end gap-2">
           <Button variant="outline" @click="createDialogOpen = false">{{ t('common.cancel') }}</Button>
-          <Button :disabled="!newName.trim()" @click="confirmCreate">{{ t('common.create') }}</Button>
+          <Button :disabled="!newName.trim() || creating" @click="confirmCreate">{{ t('common.create') }}</Button>
         </div>
       </div>
     </Dialog>
@@ -207,8 +210,8 @@ async function confirmDelete() {
     <Dialog v-model:open="editDialogOpen" :title="t('admin.editApp')" max-width="md">
       <div class="grid gap-4">
         <div class="grid gap-2">
-          <Label>{{ t('admin.appName') }}</Label>
-          <Input v-model="editName" autofocus @keyup.enter="confirmEdit" />
+          <Label for="edit-name">{{ t('admin.appName') }}</Label>
+          <Input id="edit-name" v-model="editName" autofocus @keyup.enter="confirmEdit" />
         </div>
         <div class="flex items-center gap-3">
           <Avatar :src="editIconPreview" :fallback="(editName || '?').charAt(0).toUpperCase()" class="size-12" />
@@ -219,7 +222,7 @@ async function confirmDelete() {
         <Alert v-if="editError" variant="destructive">{{ editError }}</Alert>
         <div class="flex justify-end gap-2">
           <Button variant="outline" @click="editDialogOpen = false">{{ t('common.cancel') }}</Button>
-          <Button :disabled="!editName.trim()" @click="confirmEdit">{{ t('common.save') }}</Button>
+          <Button :disabled="!editName.trim() || editing" @click="confirmEdit">{{ t('common.save') }}</Button>
         </div>
       </div>
     </Dialog>
