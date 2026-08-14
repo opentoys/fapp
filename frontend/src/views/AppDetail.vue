@@ -70,6 +70,8 @@ onMounted(load)
 watch(() => route.params.name, (name) => { if (name) load() })
 
 async function load() {
+  data.value = null
+  error.value = ''
   try {
     data.value = await loadDownloadApp(String(route.params.name))
   } catch (e) {
@@ -170,11 +172,13 @@ async function doDownload(versionId: number, password: string | undefined) {
       <div class="grid gap-4">
         <p class="text-muted-foreground text-sm">{{ t('detail.passwordBody') }}</p>
         <div class="grid gap-2">
-          <Label>{{ t('common.password') }}</Label>
+          <Label for="download-password">{{ t('common.password') }}</Label>
           <Input
             v-if="passwordPrompt"
+            id="download-password"
             v-model="passwordPrompt.password"
             type="password"
+            autocomplete="off"
             autofocus
             @keyup.enter="submitPassword"
           />
