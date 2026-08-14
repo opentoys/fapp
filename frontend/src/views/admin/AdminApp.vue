@@ -1,12 +1,30 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { mdiContentCopy } from '@mdi/js'
+import { Copy, Upload as UploadIcon } from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
 import { api } from '../../api/client'
 import { useI18n } from '../../composables/useI18n'
 import { PLATFORMS, formatArch } from '../../constants/platform'
 import { fmtDate } from '../../utils/format'
 import LineChart from '../../components/LineChart.vue'
+import { Button } from '../../components/ui/button'
+import { Avatar } from '../../components/ui/avatar'
+import { Badge } from '../../components/ui/badge'
+import { Card, CardContent, CardTitle } from '../../components/ui/card'
+import { Alert } from '../../components/ui/alert'
+import { Dialog } from '../../components/ui/dialog'
+import { AlertDialog } from '../../components/ui/alert-dialog'
+import { Input } from '../../components/ui/input'
+import { Label } from '../../components/ui/label'
+import { Textarea } from '../../components/ui/textarea'
+import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableEmpty } from '../../components/ui/table'
+import { Separator } from '../../components/ui/separator'
+import { Skeleton } from '../../components/ui/skeleton'
+import AppSelect from '../../components/AppSelect.vue'
+import FileUpload from '../../components/FileUpload.vue'
 import type { AppDetail, AppItem, DownloadsTimeSeries, Platform, ReleaseType, Version } from '../../api/types'
 
 const route = useRoute()
@@ -65,10 +83,10 @@ const chartSeries = computed(() => {
   const s = sliced.value
   if (!s.dates.length) return []
   const series: { name: string; color: string; values: number[] }[] = [
-    { name: t('adminApp.chartTotal'), color: 'rgb(var(--v-theme-primary))', values: s.total },
+    { name: t('adminApp.chartTotal'), color: 'var(--color-primary)', values: s.total },
   ]
   if (s.selected) {
-    series.push({ name: t('adminApp.chartSelected'), color: 'rgb(var(--v-theme-warning))', values: s.selected })
+    series.push({ name: t('adminApp.chartSelected'), color: 'var(--color-warning)', values: s.selected })
   }
   return series
 })
@@ -95,7 +113,6 @@ const tab = ref<'overview' | 'versions' | 'stats'>('overview')
 const deleteTarget = ref<Version | null>(null)
 
 // Reload the trend chart when entering the stats tab or changing a filter.
-// Registered after `tab` is declared (watch evaluates its source eagerly).
 watch([chartFilterPlatform, chartFilterVersion, chartRange, () => data.value?.app.id], () => {
   if (tab.value === 'stats') loadChart()
 })
@@ -126,8 +143,6 @@ watch(chartFilterVersion, async (id) => {
 })
 
 const dialogOpen = ref(false)
-const snackbar = ref('')
-const snackbarOpen = ref(false)
 
 // --- Overview: app info ---
 const infoName = ref('')
@@ -347,9 +362,9 @@ async function reEnable(v: Version) {
   }
 }
 
-function statusColor(v: Version): string {
-  if (!v.published) return 'grey'
-  return v.enabled ? 'success' : 'error'
+function statusBadge(v: Version): 'secondary' | 'success' | 'destructive' {
+  if (!v.published) return 'secondary'
+  return v.enabled ? 'success' : 'destructive'
 }
 
 function statusLabel(v: Version): string {
@@ -411,9 +426,28 @@ const filteredVersions = computed(() =>
 // Effective download access for every version, set once at the app level.
 const appAccessMode = computed(() => data.value?.app.access_mode || 'public')
 
+function releaseBadge(rt: string): 'default' | 'info' | 'warning' {
+  if (rt === 'beta') return 'info'
+  if (rt === 'canary') return 'warning'
+  return 'default'
+}
+
+function accessBadge(appAccess: string, v: Version): 'secondary' | 'success' | 'warning' | 'destructive' {
+  if (!v.published) return 'secondary'
+  if (!v.enabled) return 'destructive'
+  if (appAccess === 'public') return 'success'
+  if (appAccess === 'password' || appAccess === 'expiry') return 'warning'
+  return 'secondary'
+}
+
+function accessLabel(mode: string, published: boolean, enabled: boolean): string {
+  if (!published) return t('adminApp.statusDraft')
+  if (!enabled) return t('detail.takenDown')
+  return t(`access.${mode}`)
+}
+
 function showSnack(msg: string) {
-  snackbar.value = msg
-  snackbarOpen.value = true
+  toast(msg)
 }
 
 function goUpload() {
@@ -443,471 +477,265 @@ function fmtSize(n: number): string {
   if (n > 1024) return (n / 1024).toFixed(1) + ' KB'
   return n + ' B'
 }
-
-
-function releaseColor(rt: string): string {
-  if (rt === 'beta') return 'info'
-  if (rt === 'canary') return 'warning'
-  return 'primary'
-}
-
-function accessColor(mode: string, published: boolean, enabled: boolean): string {
-  if (!published) return 'grey'
-  if (!enabled) return 'error'
-  if (mode === 'public') return 'success'
-  if (mode === 'password' || mode === 'expiry') return 'warning'
-  return 'grey'
-}
-
-function accessLabel(mode: string, published: boolean, enabled: boolean): string {
-  if (!published) return t('adminApp.statusDraft')
-  if (!enabled) return t('detail.takenDown')
-  return t(`access.${mode}`)
-}
-
-const versionHeaders = computed(() => [
-  { title: t('adminApp.colVersion'), key: 'version_name' },
-  { title: t('adminApp.colAppName'), key: 'app_name' },
-  { title: t('adminApp.colPackage'), key: 'package_name' },
-  { title: t('adminApp.colPlatform'), key: 'platform' },
-  { title: t('adminApp.colRelease'), key: 'release_type' },
-  { title: t('adminApp.colSize'), key: 'file_size' },
-  { title: t('adminApp.colAccess'), key: 'access_mode' },
-  { title: t('adminApp.colDownloads'), key: 'download_count' },
-  { title: t('adminApp.colStatus'), key: 'enabled' },
-  { title: '', key: 'actions', sortable: false, align: 'end' as const },
-])
-
-const statsHeaders = computed(() => [
-  { title: t('adminApp.colTime'), key: 'created_at' },
-  { title: t('adminApp.colIp'), key: 'ip' },
-  { title: t('adminApp.colUserAgent'), key: 'user_agent' },
-])
 </script>
 
 <template>
-  <v-container class="pa-6" max-width="1200">
-    <div v-if="data" class="d-flex align-center justify-space-between mb-2">
-      <div class="d-flex align-center" style="gap: 12px;">
-        <v-avatar v-if="data.app.icon" :image="data.app.icon" size="40" />
-        <v-avatar v-else color="primary" size="40">
-          <span class="text-h6">{{ data.app.name.charAt(0).toUpperCase() }}</span>
-        </v-avatar>
-        <h1 class="text-h4 mb-0">{{ data.app.name }}</h1>
+  <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+    <div v-if="data" class="mb-6 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <Avatar :src="data.app.icon" :fallback="data.app.name.charAt(0).toUpperCase()" class="size-10" />
+        <h1 class="text-2xl font-semibold tracking-tight">{{ data.app.name }}</h1>
       </div>
-      <v-btn color="primary" variant="flat" @click="goUpload">
+      <Button @click="goUpload">
+        <UploadIcon class="size-4" />
         {{ t('adminApp.upload') }}
-      </v-btn>
+      </Button>
     </div>
 
-    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" closable>
-      {{ error }}
-    </v-alert>
+    <Alert v-if="error" variant="destructive" class="mb-4">{{ error }}</Alert>
 
-    <v-tabs v-model="tab" class="mt-4">
-      <v-tab value="overview">{{ t('adminApp.tabOverview') }}</v-tab>
-      <v-tab value="versions">{{ t('adminApp.tabVersions') }}</v-tab>
-      <v-tab value="stats">{{ t('adminApp.tabStats') }}</v-tab>
-    </v-tabs>
+    <Tabs v-model="tab" class="mt-4">
+      <TabsList>
+        <TabsTrigger value="overview">{{ t('adminApp.tabOverview') }}</TabsTrigger>
+        <TabsTrigger value="versions">{{ t('adminApp.tabVersions') }}</TabsTrigger>
+        <TabsTrigger value="stats">{{ t('adminApp.tabStats') }}</TabsTrigger>
+      </TabsList>
 
-    <v-divider />
+      <TabsContent value="overview" class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <!-- App info -->
+        <Card class="p-5">
+          <CardTitle class="text-base mb-4">{{ t('adminApp.overviewInfo') }}</CardTitle>
+          <div class="mb-4 flex items-center gap-3">
+            <Avatar :src="infoIconPreview" :fallback="(infoName || data?.app.name || '?').charAt(0).toUpperCase()" class="size-14" />
+            <div class="flex-1">
+              <FileUpload :label="t('admin.appIcon')" accept="image/*" @change="onInfoIconChange" />
+            </div>
+          </div>
+          <div class="grid gap-3">
+            <div class="grid gap-2">
+              <Label>{{ t('admin.appName') }}</Label>
+              <Input v-model="infoName" />
+            </div>
+            <div class="grid gap-2">
+              <Label>{{ t('adminApp.appDescription') }}</Label>
+              <Textarea v-model="infoDescription" rows="2" />
+            </div>
+            <Alert v-if="infoError" variant="destructive">{{ infoError }}</Alert>
+            <div class="flex justify-end">
+              <Button :disabled="!infoName.trim()" @click="saveInfo">{{ t('common.save') }}</Button>
+            </div>
+          </div>
+        </Card>
 
-    <v-window v-model="tab" class="mt-6">
-      <v-window-item value="overview">
-        <v-row>
-          <!-- App info -->
-          <v-col cols="12" md="6">
-            <v-card variant="tonal" class="pa-4 h-100">
-              <div class="text-subtitle-1 font-weight-medium mb-3">{{ t('adminApp.overviewInfo') }}</div>
-              <div class="d-flex align-center mb-3" style="gap: 12px;">
-                <v-avatar v-if="infoIconPreview" :image="infoIconPreview" size="56" />
-                <v-avatar v-else color="primary" size="56">
-                  <span class="text-h5">{{ (infoName || data?.app.name || '?').charAt(0).toUpperCase() }}</span>
-                </v-avatar>
-                <v-file-input
-                  :model-value="infoIcon"
-                  :label="t('admin.appIcon')"
-                  accept="image/*"
-                  density="compact"
-                  hide-details
-                  class="flex-grow-1"
-                  @update:model-value="onInfoIconChange"
-                />
+        <!-- Download link + access permission -->
+        <Card class="p-5">
+          <CardTitle class="text-base mb-4">{{ t('adminApp.downloadLink') }}</CardTitle>
+          <div class="flex gap-2">
+            <Input :model-value="downloadLink" readonly class="flex-1" />
+            <Button @click="copyLink">
+              <Copy class="size-4" />
+              {{ t('adminApp.copyLink') }}
+            </Button>
+          </div>
+          <Separator class="my-4" />
+          <CardTitle class="text-base mb-4">{{ t('upload.access') }}</CardTitle>
+          <RadioGroup v-model="accessMode">
+            <div class="flex items-center gap-2 text-sm">
+              <RadioGroupItem value="public" id="r-public" />
+              <Label for="r-public">{{ t('upload.accessPublic') }}</Label>
+            </div>
+            <div class="flex items-center gap-2 text-sm">
+              <RadioGroupItem value="password" id="r-password" />
+              <Label for="r-password">{{ t('upload.accessPassword') }}</Label>
+            </div>
+            <div class="flex items-center gap-2 text-sm">
+              <RadioGroupItem value="expiry" id="r-expiry" />
+              <Label for="r-expiry">{{ t('upload.accessExpiry') }}</Label>
+            </div>
+          </RadioGroup>
+          <div v-if="accessMode === 'password'" class="mt-3 grid gap-2">
+            <Label>{{ t('upload.downloadPassword') }}</Label>
+            <Input v-model="accessPassword" type="password" />
+          </div>
+          <div v-if="accessMode === 'expiry'" class="mt-3 grid gap-2">
+            <Label>{{ t('upload.expiresAt') }}</Label>
+            <Input v-model="accessExpiresAt" type="datetime-local" />
+          </div>
+          <Alert v-if="accessError" variant="destructive" class="mt-2">{{ accessError }}</Alert>
+          <div class="mt-3 flex justify-end">
+            <Button @click="saveAccess">{{ t('common.save') }}</Button>
+          </div>
+        </Card>
+
+        <!-- Screenshots -->
+        <Card class="p-5 md:col-span-2">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <CardTitle class="text-base">{{ t('adminApp.overviewScreenshots') }}</CardTitle>
+            <FileUpload :label="t('adminApp.uploadScreenshots')" accept="image/*" multiple @change="onScreenshotsChange" />
+          </div>
+          <Alert v-if="shotsError" variant="destructive" class="mb-2">{{ shotsError }}</Alert>
+          <div v-if="data && data.app.screenshots.length" class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+            <div v-for="url in data.app.screenshots" :key="url" class="overflow-hidden rounded-lg border">
+              <img :src="url" class="aspect-[9/16] w-full object-cover" />
+              <div class="flex justify-end p-1">
+                <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive" @click="deleteScreenshot(url)">{{ t('common.delete') }}</Button>
               </div>
-              <v-text-field v-model="infoName" :label="t('admin.appName')" density="compact" />
-              <v-textarea
-                v-model="infoDescription"
-                :label="t('adminApp.appDescription')"
-                density="compact"
-                auto-grow
-                rows="2"
-              />
-              <v-alert v-if="infoError" type="error" variant="tonal" density="compact" class="mt-2">
-                {{ infoError }}
-              </v-alert>
-              <div class="d-flex justify-end mt-3">
-                <v-btn
-                  color="primary"
-                  variant="flat"
-                  :loading="infoSaving"
-                  :disabled="!infoName.trim()"
-                  @click="saveInfo"
-                >
-                  {{ t('common.save') }}
-                </v-btn>
-              </div>
-            </v-card>
-          </v-col>
+            </div>
+          </div>
+          <p v-else class="text-muted-foreground py-4 text-center text-sm">{{ t('adminApp.noScreenshots') }}</p>
+        </Card>
+      </TabsContent>
 
-          <!-- Download link + access permission -->
-          <v-col cols="12" md="6">
-            <v-card variant="tonal" class="pa-4 h-100">
-              <div class="text-subtitle-1 font-weight-medium mb-3">{{ t('adminApp.downloadLink') }}</div>
-              <div class="d-flex align-center" style="gap: 8px;">
-                <v-text-field
-                  :model-value="downloadLink"
-                  readonly
-                  variant="outlined"
-                  density="compact"
-                  hide-details
-                  class="flex-grow-1"
-                />
-                <v-btn color="primary" variant="flat" @click="copyLink">
-                  <v-icon start :icon="mdiContentCopy" />
-                  {{ t('adminApp.copyLink') }}
-                </v-btn>
-              </div>
-
-              <v-divider class="my-4" />
-              <div class="text-subtitle-1 font-weight-medium mb-3">{{ t('upload.access') }}</div>
-              <v-radio-group v-model="accessMode" hide-details>
-                <v-radio :label="t('upload.accessPublic')" value="public" />
-                <v-radio :label="t('upload.accessPassword')" value="password" />
-                <v-radio :label="t('upload.accessExpiry')" value="expiry" />
-              </v-radio-group>
-              <v-text-field
-                v-if="accessMode === 'password'"
-                v-model="accessPassword"
-                :label="t('upload.downloadPassword')"
-                type="password"
-                density="compact"
-                class="mt-3"
-              />
-              <v-text-field
-                v-if="accessMode === 'expiry'"
-                v-model="accessExpiresAt"
-                :label="t('upload.expiresAt')"
-                type="datetime-local"
-                density="compact"
-                class="mt-3"
-              />
-              <v-alert v-if="accessError" type="error" variant="tonal" density="compact" class="mt-2">
-                {{ accessError }}
-              </v-alert>
-              <div class="d-flex justify-end mt-3">
-                <v-btn color="primary" variant="flat" :loading="accessSaving" @click="saveAccess">
-                  {{ t('common.save') }}
-                </v-btn>
-              </div>
-            </v-card>
-          </v-col>
-
-          <!-- Screenshots -->
-          <v-col cols="12">
-            <v-card variant="tonal" class="pa-4">
-              <div class="d-flex align-center justify-space-between mb-3" style="gap: 12px; flex-wrap: wrap;">
-                <div class="text-subtitle-1 font-weight-medium">{{ t('adminApp.overviewScreenshots') }}</div>
-                <v-file-input
-                  v-model="shotsInput"
-                  :label="t('adminApp.uploadScreenshots')"
-                  accept="image/*"
-                  multiple
-                  density="compact"
-                  hide-details
-                  style="max-width: 320px;"
-                  :loading="shotsUploading"
-                  @update:model-value="onScreenshotsChange"
-                />
-              </div>
-              <v-alert v-if="shotsError" type="error" variant="tonal" density="compact" class="mb-2">
-                {{ shotsError }}
-              </v-alert>
-              <v-row v-if="data && data.app.screenshots.length">
-                <v-col v-for="url in data.app.screenshots" :key="url" cols="6" sm="4" md="3">
-                  <v-card>
-                    <v-img :src="url" aspect-ratio="9/16" class="rounded" />
-                    <v-card-actions>
-                      <v-spacer />
-                      <v-btn variant="text" size="small" color="error" @click="deleteScreenshot(url)">
-                        {{ t('common.delete') }}
-                      </v-btn>
-                    </v-card-actions>
-                  </v-card>
-                </v-col>
-              </v-row>
-              <div v-else class="text-center text-medium-emphasis pa-4">
-                {{ t('adminApp.noScreenshots') }}
-              </div>
-            </v-card>
-          </v-col>
-        </v-row>
-      </v-window-item>
-
-      <v-window-item value="versions">
-        <div class="d-flex align-center mb-4" style="gap: 12px; flex-wrap: wrap;">
-          <v-select
-            v-model="statusFilter"
-            :items="statusFilterItems"
-            :label="t('adminApp.colStatus')"
-            density="compact"
-            hide-details
-            style="max-width: 160px;"
-          />
-          <v-select
-            v-model="releaseFilter"
-            :items="releaseFilterItems"
-            :label="t('adminApp.colRelease')"
-            density="compact"
-            hide-details
-            style="max-width: 160px;"
-          />
-          <v-select
-            v-model="platformFilter"
-            :items="platformFilterItems"
-            :label="t('adminApp.colPlatform')"
-            density="compact"
-            hide-details
-            style="max-width: 200px;"
-          />
-          <v-btn
-            variant="text"
-            size="small"
-            @click="statusFilter = 'all'; releaseFilter = 'all'; platformFilter = 'all'"
-          >
-            {{ t('adminApp.filterReset') }}
-          </v-btn>
+      <TabsContent value="versions" class="mt-6">
+        <div class="mb-4 flex flex-wrap items-center gap-3">
+          <AppSelect v-model="statusFilter" :items="statusFilterItems" class="w-40" />
+          <AppSelect v-model="releaseFilter" :items="releaseFilterItems" class="w-40" />
+          <AppSelect v-model="platformFilter" :items="platformFilterItems" class="w-48" />
+          <Button variant="ghost" size="sm" @click="statusFilter = 'all'; releaseFilter = 'all'; platformFilter = 'all'">{{ t('adminApp.filterReset') }}</Button>
         </div>
-        <v-data-table
-          :items="filteredVersions"
-          :headers="versionHeaders"
-          :items-per-page="-1"
-        >
-          <template #item.version_name="{ item }">
-            <div class="d-flex align-center">
-              <v-avatar v-if="item.icon_url" :image="item.icon_url" size="28" class="me-2" />
-              <v-avatar v-else color="primary" size="28" class="me-2">
-                <span class="text-caption">{{ (item.app_name || item.version_name || '?').charAt(0).toUpperCase() }}</span>
-              </v-avatar>
-              <code>{{ item.version_name }}</code>
-              <span class="text-caption text-medium-emphasis ml-2">{{ t('detail.code') }} {{ item.version_code }}</span>
-            </div>
-          </template>
-          <template #item.app_name="{ item }">
-            <span v-if="item.app_name">{{ item.app_name }}</span>
-            <span v-else class="text-medium-emphasis">—</span>
-          </template>
-          <template #item.package_name="{ item }">
-            <code v-if="item.package_name" class="text-caption">{{ item.package_name }}</code>
-            <span v-else class="text-medium-emphasis">—</span>
-          </template>
-          <template #item.platform="{ item }">
-            <v-chip v-if="item.platform" size="x-small" variant="outlined">
-              {{ t('platform.' + item.platform) }}
-            </v-chip>
-            <span v-if="item.arch" class="text-caption text-medium-emphasis ml-1">
-              {{ archLabel(item.arch) }}
-            </span>
-            <span v-if="!item.platform && !item.arch" class="text-medium-emphasis">—</span>
-          </template>
-          <template #item.release_type="{ item }">
-            <v-chip
-              v-if="item.release_type"
-              size="x-small"
-              variant="tonal"
-              :color="releaseColor(item.release_type)"
-            >
-              {{ t('release.' + item.release_type) }}
-            </v-chip>
-          </template>
-          <template #item.file_size="{ item }">
-            <code class="text-caption">{{ fmtSize(item.file_size) }}</code>
-          </template>
-          <template #item.access_mode="{ item }">
-            <v-chip
-              :color="accessColor(appAccessMode, item.published, item.enabled)"
-              size="small"
-              variant="tonal"
-            >
-              {{ accessLabel(appAccessMode, item.published, item.enabled) }}
-            </v-chip>
-          </template>
-          <template #item.download_count="{ item }">
-            {{ item.download_count }}
-          </template>
-          <template #item.enabled="{ item }">
-            <v-chip :color="statusColor(item)" size="small" variant="tonal">
-              {{ statusLabel(item) }}
-            </v-chip>
-          </template>
-          <template #item.actions="{ item }">
-            <v-btn
-              variant="text"
-              size="small"
-              :color="item.published && item.enabled ? '' : 'primary'"
-              @click="onMainAction(item)"
-            >
-              {{ actionLabel(item) }}
-            </v-btn>
-            <v-btn
-              variant="text"
-              size="small"
-              color="error"
-              @click="askDelete(item)"
-            >
-              {{ t('common.delete') }}
-            </v-btn>
-          </template>
-        </v-data-table>
-      </v-window-item>
 
-      <v-window-item value="stats">
-        <v-card variant="tonal" class="pa-4 mb-4">
-          <div class="d-flex align-center justify-space-between mb-3" style="gap: 12px; flex-wrap: wrap;">
-            <div class="text-subtitle-1 font-weight-medium">{{ t('adminApp.chartTitle') }}</div>
-            <div class="d-flex align-center" style="gap: 12px; flex-wrap: wrap;">
-              <v-select
-                v-model="chartFilterPlatform"
-                :items="platformFilterItems"
-                :label="t('adminApp.colPlatform')"
-                density="compact"
-                hide-details
-                style="max-width: 160px;"
-              />
-              <v-select
-                v-model="chartFilterVersion"
-                :items="chartVersionItems"
-                :label="t('adminApp.colVersion')"
-                density="compact"
-                hide-details
-                style="max-width: 220px;"
-              />
-              <v-select
-                v-model="chartRange"
-                :items="rangeItems"
-                :label="t('adminApp.chartRange')"
-                density="compact"
-                hide-details
-                style="max-width: 160px;"
-              />
+        <Card>
+          <CardContent class="!p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{{ t('adminApp.colVersion') }}</TableHead>
+                  <TableHead>{{ t('adminApp.colAppName') }}</TableHead>
+                  <TableHead>{{ t('adminApp.colPackage') }}</TableHead>
+                  <TableHead>{{ t('adminApp.colPlatform') }}</TableHead>
+                  <TableHead>{{ t('adminApp.colRelease') }}</TableHead>
+                  <TableHead>{{ t('adminApp.colSize') }}</TableHead>
+                  <TableHead>{{ t('adminApp.colAccess') }}</TableHead>
+                  <TableHead>{{ t('adminApp.colDownloads') }}</TableHead>
+                  <TableHead>{{ t('adminApp.colStatus') }}</TableHead>
+                  <TableHead class="text-right"> </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="v in filteredVersions" :key="v.id">
+                  <TableCell>
+                    <div class="flex items-center gap-2">
+                      <Avatar :src="v.icon_url" :fallback="(v.app_name || v.version_name || '?').charAt(0).toUpperCase()" class="size-7" />
+                      <code>{{ v.version_name }}</code>
+                      <span class="text-muted-foreground text-xs">{{ t('detail.code') }} {{ v.version_code }}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>{{ v.app_name || '—' }}</TableCell>
+                  <TableCell><code v-if="v.package_name" class="text-xs">{{ v.package_name }}</code><span v-else class="text-muted-foreground">—</span></TableCell>
+                  <TableCell>
+                    <span v-if="v.platform" class="mr-1">
+                      <Badge variant="outline">{{ t('platform.' + v.platform) }}</Badge>
+                    </span>
+                    <span v-if="v.arch" class="text-muted-foreground text-xs">{{ archLabel(v.arch) }}</span>
+                    <span v-if="!v.platform && !v.arch" class="text-muted-foreground">—</span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge v-if="v.release_type" :variant="releaseBadge(v.release_type)">{{ t('release.' + v.release_type) }}</Badge>
+                  </TableCell>
+                  <TableCell><code class="text-xs">{{ fmtSize(v.file_size) }}</code></TableCell>
+                  <TableCell>
+                    <Badge :variant="accessBadge(appAccessMode, v)">{{ accessLabel(appAccessMode, v.published, v.enabled) }}</Badge>
+                  </TableCell>
+                  <TableCell>{{ v.download_count }}</TableCell>
+                  <TableCell><Badge :variant="statusBadge(v)">{{ statusLabel(v) }}</Badge></TableCell>
+                  <TableCell class="text-right">
+                    <Button variant="ghost" size="sm" :class="v.published && v.enabled ? '' : 'text-primary'" @click="onMainAction(v)">{{ actionLabel(v) }}</Button>
+                    <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive" @click="askDelete(v)">{{ t('common.delete') }}</Button>
+                  </TableCell>
+                </TableRow>
+                <TableEmpty v-if="!filteredVersions.length">{{ t('adminApp.statsEmpty') }}</TableEmpty>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="stats" class="mt-6">
+        <Card class="mb-4 p-5">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <CardTitle class="text-base">{{ t('adminApp.chartTitle') }}</CardTitle>
+            <div class="flex flex-wrap items-center gap-3">
+              <AppSelect v-model="chartFilterPlatform" :items="platformFilterItems" class="w-40" />
+              <AppSelect v-model="chartFilterVersion" :items="chartVersionItems" class="w-52" />
+              <AppSelect v-model="chartRange" :items="rangeItems" class="w-40" />
             </div>
           </div>
-          <v-progress-linear v-if="chartLoading" indeterminate color="primary" class="mb-2" />
-          <v-alert v-else-if="chartError" type="error" variant="tonal" density="compact" class="mb-2">
-            {{ chartError }}
-          </v-alert>
-          <LineChart
-            :dates="sliced.dates"
-            :series="chartSeries"
-            :empty-text="t('adminApp.chartEmpty')"
-          />
-          <div v-if="chartSeries.length" class="d-flex align-center mt-2" style="gap: 16px;">
-            <div v-for="s in chartSeries" :key="s.name" class="d-flex align-center" style="gap: 6px;">
-              <span
-                class="d-inline-block rounded-circle"
-                style="width: 10px; height: 10px;"
-                :style="{ background: s.color }"
-              />
-              <span class="text-caption">{{ s.name }}</span>
+          <Skeleton v-if="chartLoading" class="mb-2 h-8 w-full" />
+          <Alert v-else-if="chartError" variant="destructive" class="mb-2">{{ chartError }}</Alert>
+          <LineChart :dates="sliced.dates" :series="chartSeries" :empty-text="t('adminApp.chartEmpty')" />
+          <div v-if="chartSeries.length" class="mt-2 flex items-center gap-4">
+            <div v-for="s in chartSeries" :key="s.name" class="flex items-center gap-1.5 text-xs">
+              <span class="inline-block size-2.5 rounded-full" :style="{ background: s.color }" />
+              <span>{{ s.name }}</span>
             </div>
           </div>
-        </v-card>
+        </Card>
 
-        <v-card v-if="!stats" variant="tonal" class="text-center pa-8">
-          <v-card-text>{{ t('adminApp.statsEmpty') }}</v-card-text>
-        </v-card>
+        <Card v-if="!stats" class="text-center">
+          <CardContent class="py-12 text-muted-foreground">{{ t('adminApp.statsEmpty') }}</CardContent>
+        </Card>
         <template v-else>
-          <v-row class="mb-4">
-            <v-col cols="6" md="3">
-              <v-card variant="tonal" color="primary">
-                <v-card-text>
-                  <div class="text-overline">{{ t('adminApp.statDownloads') }}</div>
-                  <div class="text-h4">{{ stats.download_count }}</div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-            <v-col cols="6" md="3">
-              <v-card variant="tonal" color="primary">
-                <v-card-text>
-                  <div class="text-overline">{{ t('adminApp.statInstalls') }}</div>
-                  <div class="text-h4">{{ stats.install_count }}</div>
-                </v-card-text>
-              </v-card>
-            </v-col>
-          </v-row>
-          <v-data-table
-            :items="stats.recent"
-            :headers="statsHeaders"
-            :items-per-page="-1"
-          >
-            <template #item.created_at="{ item }">
-              <code class="text-caption">{{ fmtDate(item.created_at) }}</code>
-            </template>
-            <template #item.ip="{ item }">
-              <code class="text-caption">{{ item.ip }}</code>
-            </template>
-            <template #item.user_agent="{ item }">
-              <code class="text-caption" style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block;">{{ item.user_agent }}</code>
-            </template>
-          </v-data-table>
-          <v-btn class="mt-4" variant="text" @click="chartFilterVersion = 'all'">{{ t('adminApp.statsClear') }}</v-btn>
-        </template>
-      </v-window-item>
-    </v-window>
-
-    <v-dialog v-model="publishDialogOpen" max-width="440">
-      <v-card>
-        <v-card-title>{{ t('adminApp.publishTitle') }}</v-card-title>
-        <v-card-text>
-          <div class="text-body-2">
-            <code>{{ publishTarget?.version_name }}</code>
-            <span class="text-medium-emphasis"> · {{ t('detail.code') }} {{ publishTarget?.version_code }}</span>
+          <div class="mb-4 grid grid-cols-2 gap-4 md:grid-cols-3">
+            <Card>
+              <CardContent class="py-4">
+                <div class="text-muted-foreground text-xs uppercase tracking-wider">{{ t('adminApp.statDownloads') }}</div>
+                <div class="text-3xl font-semibold">{{ stats.download_count }}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent class="py-4">
+                <div class="text-muted-foreground text-xs uppercase tracking-wider">{{ t('adminApp.statInstalls') }}</div>
+                <div class="text-3xl font-semibold">{{ stats.install_count }}</div>
+              </CardContent>
+            </Card>
           </div>
-          <p class="text-body-2 text-medium-emphasis mt-2 mb-0">{{ t('adminApp.publishHint') }}</p>
-          <v-alert v-if="publishError" type="error" variant="tonal" density="compact" class="mt-2">
-            {{ publishError }}
-          </v-alert>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="closePublish">{{ t('common.cancel') }}</v-btn>
-          <v-btn
-            color="primary"
-            variant="flat"
-            :loading="publishLoading"
-            @click="submitPublish"
-          >
-            {{ t('adminApp.publish') }}
-          </v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+          <Card>
+            <CardContent class="!p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{{ t('adminApp.colTime') }}</TableHead>
+                    <TableHead>{{ t('adminApp.colIp') }}</TableHead>
+                    <TableHead>{{ t('adminApp.colUserAgent') }}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow v-for="(row, i) in stats.recent" :key="i">
+                    <TableCell><code class="text-xs">{{ fmtDate(row.created_at) }}</code></TableCell>
+                    <TableCell><code class="text-xs">{{ row.ip }}</code></TableCell>
+                    <TableCell><code class="text-xs block max-w-[400px] truncate">{{ row.user_agent }}</code></TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+          <Button variant="ghost" class="mt-4" @click="chartFilterVersion = 'all'">{{ t('adminApp.statsClear') }}</Button>
+        </template>
+      </TabsContent>
+    </Tabs>
 
-    <v-dialog v-model="dialogOpen" max-width="400">
-      <v-card>
-        <v-card-title>{{ t('common.confirmDelete') }}</v-card-title>
-        <v-card-text>
-          <span v-html="t('adminApp.confirmDeleteVersion', { name: deleteTarget?.version_name ?? '' })" />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="cancelDelete">{{ t('common.cancel') }}</v-btn>
-          <v-btn color="error" variant="flat" @click="deleteVersion">{{ t('common.delete') }}</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <!-- Publish dialog -->
+    <Dialog v-model:open="publishDialogOpen" :title="t('adminApp.publishTitle')" max-width="md">
+      <div class="grid gap-4">
+        <div class="text-sm">
+          <code>{{ publishTarget?.version_name }}</code>
+          <span class="text-muted-foreground"> · {{ t('detail.code') }} {{ publishTarget?.version_code }}</span>
+        </div>
+        <p class="text-muted-foreground text-sm">{{ t('adminApp.publishHint') }}</p>
+        <Alert v-if="publishError" variant="destructive">{{ publishError }}</Alert>
+        <div class="flex justify-end gap-2">
+          <Button variant="outline" @click="closePublish">{{ t('common.cancel') }}</Button>
+          <Button @click="submitPublish">{{ t('adminApp.publish') }}</Button>
+        </div>
+      </div>
+    </Dialog>
 
-    <v-snackbar v-model="snackbarOpen" :timeout="2000">
-      {{ snackbar }}
-    </v-snackbar>
-  </v-container>
+    <!-- Delete version dialog -->
+    <AlertDialog v-model:open="dialogOpen" :title="t('common.confirmDelete')" :description="t('adminApp.confirmDeleteVersion', { name: deleteTarget?.version_name ?? '' })">
+      <template #footer>
+        <Button variant="outline" @click="cancelDelete">{{ t('common.cancel') }}</Button>
+        <Button variant="destructive" @click="deleteVersion">{{ t('common.delete') }}</Button>
+      </template>
+    </AlertDialog>
+  </div>
 </template>
