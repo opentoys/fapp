@@ -85,6 +85,16 @@ const mismatch = computed(() => {
   return parsed.value.platform !== selectedApp.value.platform
 })
 
+// The app's appid (package_name) is locked on its first version upload. A
+// locked app may only receive packages exposing the exact same appid — the
+// server enforces this, and we surface it up front like the platform check.
+const appidMismatch = computed(() => {
+  if (mode.value !== 'existing') return false
+  const locked = selectedApp.value?.package_name
+  if (!locked || !parsed.value) return false
+  return (parsed.value.package || '') !== locked
+})
+
 function normalizeResult(res: AppInfoParserResult, ext: string) {
   if (ext === 'apk') {
     let appName = res.appName || ''
@@ -173,6 +183,10 @@ async function submit() {
   }
   if (mismatch.value) {
     error.value = t('upload.platformMismatch')
+    return
+  }
+  if (appidMismatch.value) {
+    error.value = t('upload.appidMismatch')
     return
   }
   error.value = ''
@@ -289,6 +303,13 @@ async function submit() {
             <Badge variant="outline">{{ t('platform.' + lockedPlatform) }}</Badge>
           </div>
           <Alert v-if="mismatch" variant="warning">{{ t('upload.platformMismatch') }}</Alert>
+
+          <div v-if="mode === 'existing' && selectedApp" class="flex items-center gap-2 text-sm">
+            <span class="text-muted-foreground">{{ t('upload.appid') }}:</span>
+            <code v-if="selectedApp.package_name" class="text-xs">{{ selectedApp.package_name }}</code>
+            <span v-else class="text-muted-foreground text-xs">{{ t('upload.appidUnlocked') }}</span>
+          </div>
+          <Alert v-if="appidMismatch" variant="warning">{{ t('upload.appidMismatch') }}</Alert>
 
           <div class="grid gap-2">
             <Label for="upload-release-type">{{ t('upload.releaseType') }}</Label>

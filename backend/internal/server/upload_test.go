@@ -160,6 +160,94 @@ func TestUploadVersionIgnoresAccessFields(t *testing.T) {
 	}
 }
 
+// The app's appid (package_name) is locked on the first version upload that
+// carries one; afterwards the app row stores it.
+func TestUploadVersionLocksAppidOnFirstUpload(t *testing.T) {
+	s := testServer(t)
+	app := model.App{Name: "a", Platform: "android"}
+	s.DB.Create(&app)
+
+	req := uploadVersionReq(t, map[string]string{
+		"app_id":       itoa(app.ID),
+		"version_name": "1.0.0",
+		"package_name": "com.example.app",
+	}, "app.apk", []byte("apk"))
+	s.UploadVersion(httptest.NewRecorder(), req)
+
+	s.DB.First(&app, app.ID)
+	if app.PackageName == nil || *app.PackageName != "com.example.app" {
+		t.Fatalf("appid not locked: %v", app.PackageName)
+	}
+}
+
+// Once locked, an upload carrying a different (or no) appid must be rejected.
+func TestUploadVersionRejectsMismatchedAppid(t *testing.T) {
+	s := testServer(t)
+	pkg := "com.example.app"
+	app := model.App{Name: "a", Platform: "android", PackageName: &pkg}
+	s.DB.Create(&app)
+
+	upload := func(extra map[string]string) int {
+		fields := map[string]string{"app_id": itoa(app.ID), "version_name": "1.0.0"}
+		for k, v := range extra {
+			fields[k] = v
+		}
+		req := uploadVersionReq(t, fields, "app.apk", []byte("apk"))
+		w := httptest.NewRecorder()
+		s.UploadVersion(w, req)
+		var res struct {
+			Code int `json:"code"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &res)
+		return res.Code
+	}
+
+	if code := upload(map[string]string{"package_name": "com.example.app"}); code != 0 {
+		t.Fatalf("matching appid rejected: %d", code)
+	}
+	if code := upload(map[string]string{"package_name": "com.other.app"}); code == 0 {
+		t.Fatal("mismatched appid must be rejected")
+	}
+	if code := upload(nil); code == 0 {
+		t.Fatal("missing appid on a locked app must be rejected")
+	}
+}
+
+// Locking an appid must respect the (platform, appid) uniqueness rule: a second
+// app on the same platform cannot lock the same appid.
+func TestUploadVersionLockRespectsUnique(t *testing.T) {
+	s := testServer(t)
+	app1 := model.App{Name: "a", Platform: "android"}
+	s.DB.Create(&app1)
+	app2 := model.App{Name: "b", Platform: "android"}
+	s.DB.Create(&app2)
+
+	upload := func(appID int64, pkg string) int {
+		fields := map[string]string{"app_id": itoa(appID), "version_name": "1.0.0"}
+		if pkg != "" {
+			fields["package_name"] = pkg
+		}
+		req := uploadVersionReq(t, fields, "app.apk", []byte("apk"))
+		w := httptest.NewRecorder()
+		s.UploadVersion(w, req)
+		var res struct {
+			Code int `json:"code"`
+		}
+		json.Unmarshal(w.Body.Bytes(), &res)
+		return res.Code
+	}
+
+	if code := upload(app1.ID, "com.example.app"); code != 0 {
+		t.Fatalf("first lock failed: %d", code)
+	}
+	if code := upload(app2.ID, "com.example.app"); code == 0 {
+		t.Fatal("duplicate appid lock on same platform must be rejected")
+	}
+	if code := upload(app2.ID, "com.other.app"); code != 0 {
+		t.Fatalf("distinct appid lock failed: %d", code)
+	}
+}
+
 func TestUpdateAppNormalizesExpiryTZ(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}

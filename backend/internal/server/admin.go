@@ -358,6 +358,38 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Appid lock: the app's package_name (appid) is locked on the first version
+	// upload that carries one. After that, every uploaded package must expose
+	// the same appid (+ the app's platform, which is already enforced), so an
+	// app can never silently accumulate versions of unrelated apps. An app
+	// without a lock stays unlocked when the package exposes no appid.
+	pkg := strings.TrimSpace(r.FormValue("package_name"))
+	if app.PackageName == nil || *app.PackageName == "" {
+		if pkg != "" {
+			var n int64
+			s.DB.Model(&model.App{}).
+				Where("platform = ? AND package_name = ? AND id != ?", app.Platform, pkg, app.ID).
+				Count(&n)
+			if n > 0 {
+				web.SendError(w, web.CodeBadRequest, "该平台下已存在相同包名（appid）的应用")
+				return
+			}
+			app.PackageName = &pkg
+			if err := s.DB.Save(&app).Error; err != nil {
+				// Belt-and-suspenders for a concurrent duplicate lock.
+				if strings.Contains(err.Error(), "UNIQUE") {
+					web.SendError(w, web.CodeBadRequest, "该平台下已存在相同包名（appid）的应用")
+					return
+				}
+				web.SendError(w, web.CodeInternal, "保存失败")
+				return
+			}
+		}
+	} else if pkg != *app.PackageName {
+		web.SendError(w, web.CodeBadRequest, "安装包 appid 与应用不一致")
+		return
+	}
+
 	// Upload always creates a draft: a version only becomes publicly visible
 	// once it is set as the app's current version and the app itself is
 	// published. Metadata such as package_name/app_name is parsed in the
@@ -372,7 +404,7 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 		Arch:           r.FormValue("arch"),
 		VersionName:    versionName,
 		VersionCode:    versionCode,
-		PackageName:    r.FormValue("package_name"),
+		PackageName:    pkg,
 		AppName:        r.FormValue("app_name"),
 		FileName:       header.Filename,
 		FileType:       fileType,
