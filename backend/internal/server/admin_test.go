@@ -10,13 +10,13 @@ import (
 	"strings"
 	"testing"
 
-	"disapp/internal/model"
-	"disapp/internal/password"
+	"disapp/internal/resources/store/model"
+	"disapp/pkg/pwd"
 )
 
 func adminLogin(t *testing.T, s *Server) string {
 	t.Helper()
-	hash, salt := password.Hash("pass123")
+	hash, salt := pwd.Hash("pass123")
 	s.DB.Create(&model.User{Username: "admin", PasswordHash: hash, Salt: salt})
 	body := bytes.NewBufferString(`{"username":"admin","password":"pass123"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", body)

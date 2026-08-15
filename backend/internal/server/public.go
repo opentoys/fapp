@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"disapp/internal/model"
-	"disapp/internal/password"
-	"disapp/internal/web"
+	"disapp/internal/resources/store/model"
+	"disapp/pkg/pwd"
+	"disapp/pkg/web"
 )
 
 type appSummary struct {
@@ -93,7 +93,7 @@ func (s *Server) AppDetail(w http.ResponseWriter, r *http.Request) {
 // app-level access permission. A version is public only when its app is
 // published and the version is the app's current version. The password/expiry
 // scope lives on the app, not per version.
-func (s *Server) checkAccess(v *model.Version, pwd string) error {
+func (s *Server) checkAccess(v *model.Version, password string) error {
 	var app model.App
 	if err := s.DB.First(&app, v.AppID).Error; err != nil {
 		return &webErr{web.CodeNotFound, "应用不存在"}
@@ -106,7 +106,7 @@ func (s *Server) checkAccess(v *model.Version, pwd string) error {
 	}
 	switch app.AccessMode {
 	case model.AccessPassword:
-		if !password.Verify(pwd, app.PasswordHash, app.Salt) {
+		if !pwd.Verify(password, app.PasswordHash, app.Salt) {
 			return &webErr{web.CodeUnauthorized, "密码错误"}
 		}
 	case model.AccessExpiry:

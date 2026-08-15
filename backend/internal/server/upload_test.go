@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"disapp/internal/model"
+	"disapp/internal/resources/store/model"
 )
 
 // pngData is a 1x1 PNG for icon tests.

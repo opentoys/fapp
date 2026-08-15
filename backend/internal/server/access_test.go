@@ -9,19 +9,19 @@ import (
 	"testing"
 	"time"
 
-	"disapp/internal/model"
-	"disapp/internal/password"
+	"disapp/internal/resources/store/model"
+	"disapp/pkg/pwd"
 )
 
 // setAppAccess applies the app-level access scope for the test app.
-func setAppAccess(s *Server, app *model.App, mode, pwd string, expiresAt *time.Time) {
+func setAppAccess(s *Server, app *model.App, mode, secret string, expiresAt *time.Time) {
 	m := map[string]any{"access_mode": mode}
 	if expiresAt != nil {
 		m["expires_at"] = expiresAt
 	}
 	s.DB.Model(app).Updates(m)
-	if pwd != "" {
-		h, salt := password.Hash(pwd)
+	if secret != "" {
+		h, salt := pwd.Hash(secret)
 		s.DB.Model(app).Updates(map[string]any{"password_hash": h, "salt": salt})
 	}
 }

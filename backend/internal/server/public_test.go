@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"disapp/internal/model"
+	"disapp/internal/resources/store/model"
 )
 
 func seedApp(t *testing.T, s *Server) *model.App {

@@ -7,10 +7,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"disapp/internal/config"
-	"disapp/internal/db"
+	"disapp/internal/resources/config"
+	"disapp/internal/resources/storage"
+	"disapp/internal/resources/storage/cos"
+	"disapp/internal/resources/storage/local"
+	"disapp/internal/resources/store/db"
 	"disapp/internal/server"
-	"disapp/internal/storage"
 	"disapp/static"
 )
 
@@ -49,13 +51,13 @@ func main() {
 	var st storage.Storage
 	switch cfg.Storage.Backend {
 	case "cos":
-		cosSt, err := storage.NewCOSFromConfig(cfg.Storage.COS.SecretID, cfg.Storage.COS.SecretKey, cfg.Storage.COS.Bucket, cfg.Storage.COS.Region, cfg.Storage.COS.BaseURL)
+		cosSt, err := cos.NewCOSFromConfig(cfg.Storage.COS.SecretID, cfg.Storage.COS.SecretKey, cfg.Storage.COS.Bucket, cfg.Storage.COS.Region, cfg.Storage.COS.BaseURL)
 		if err != nil {
 			log.Fatalf("init cos: %v", err)
 		}
 		st = cosSt
 	default:
-		loc, err := storage.NewLocal(cfg.Storage.Local.Dir)
+		loc, err := local.NewLocal(cfg.Storage.Local.Dir)
 		if err != nil {
 			log.Fatalf("init local storage: %v", err)
 		}

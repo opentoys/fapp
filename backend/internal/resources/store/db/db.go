@@ -6,7 +6,7 @@ import (
 	"github.com/libtnb/sqlite"
 	"gorm.io/gorm"
 
-	"disapp/internal/model"
+	"disapp/internal/resources/store/model"
 )
 
 // Open opens sqlite database and auto-migrates all tables.

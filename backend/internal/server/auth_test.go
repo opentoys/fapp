@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"disapp/internal/auth"
-	"disapp/internal/config"
-	"disapp/internal/db"
-	"disapp/internal/model"
-	"disapp/internal/password"
-	"disapp/internal/storage"
+	"disapp/internal/resources/config"
+	"disapp/internal/resources/storage/local"
+	"disapp/internal/resources/store/db"
+	"disapp/internal/resources/store/model"
+	"disapp/pkg/pwd"
+	"disapp/pkg/token"
 )
 
 func testServer(t *testing.T) *Server {
@@ -22,7 +22,7 @@ func testServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, err := storage.NewLocal(filepath.Join(t.TempDir(), "files"))
+	st, err := local.NewLocal(filepath.Join(t.TempDir(), "files"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func testServerWithAdmin(t *testing.T, user, pass string) *Server {
 
 func TestLoginOK(t *testing.T) {
 	s := testServer(t)
-	hash, salt := password.Hash("pass123")
+	hash, salt := pwd.Hash("pass123")
 	s.DB.Create(&model.User{Username: "admin", PasswordHash: hash, Salt: salt})
 
 	body := bytes.NewBufferString(`{"username":"admin","password":"pass123"}`)
@@ -63,7 +63,7 @@ func TestLoginOK(t *testing.T) {
 
 func TestLoginWrongPassword(t *testing.T) {
 	s := testServer(t)
-	hash, salt := password.Hash("pass123")
+	hash, salt := pwd.Hash("pass123")
 	s.DB.Create(&model.User{Username: "admin", PasswordHash: hash, Salt: salt})
 
 	body := bytes.NewBufferString(`{"username":"admin","password":"nope"}`)
@@ -99,7 +99,7 @@ func TestSuperAdminLoginFromConfig(t *testing.T) {
 
 	// Deliberately put a *different* user in the DB to prove the login
 	// didn't go through the DB path.
-	hash, salt := password.Hash("dbpass")
+	hash, salt := pwd.Hash("dbpass")
 	s.DB.Create(&model.User{Username: "root", PasswordHash: hash, Salt: salt})
 
 	body := bytes.NewBufferString(`{"username":"root","password":"s3cret"}`)
@@ -120,7 +120,7 @@ func TestSuperAdminLoginFromConfig(t *testing.T) {
 		t.Fatalf("res = %s", w.Body.String())
 	}
 
-	claims, err := auth.ParseToken(s.Config.JWT.Secret, res.Data.Token)
+	claims, err := token.ParseToken(s.Config.JWT.Secret, res.Data.Token)
 	if err != nil {
 		t.Fatalf("parse token: %v", err)
 	}

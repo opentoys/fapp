@@ -1,4 +1,4 @@
-package storage
+package local
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"disapp/internal/resources/storage"
 )
 
 type LocalStorage struct {
@@ -22,7 +24,7 @@ func NewLocal(dir string) (*LocalStorage, error) {
 }
 
 func (s *LocalStorage) Save(ctx context.Context, key string, r io.Reader) (int64, error) {
-	if !ValidKey(key) {
+	if !storage.ValidKey(key) {
 		return 0, fmt.Errorf("invalid key %q", key)
 	}
 	full := filepath.Join(s.dir, filepath.FromSlash(key))
@@ -41,7 +43,7 @@ func (s *LocalStorage) Save(ctx context.Context, key string, r io.Reader) (int64
 }
 
 func (s *LocalStorage) Open(ctx context.Context, key string) (io.ReadCloser, error) {
-	if !ValidKey(key) {
+	if !storage.ValidKey(key) {
 		return nil, fmt.Errorf("invalid key %q", key)
 	}
 	full := filepath.Join(s.dir, filepath.FromSlash(key))
@@ -49,7 +51,7 @@ func (s *LocalStorage) Open(ctx context.Context, key string) (io.ReadCloser, err
 }
 
 func (s *LocalStorage) Delete(ctx context.Context, key string) error {
-	if !ValidKey(key) {
+	if !storage.ValidKey(key) {
 		return fmt.Errorf("invalid key %q", key)
 	}
 	full := filepath.Join(s.dir, filepath.FromSlash(key))

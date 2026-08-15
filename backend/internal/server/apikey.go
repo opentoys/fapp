@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"disapp/internal/model"
-	"disapp/internal/web"
+	"disapp/internal/resources/store/model"
+	"disapp/pkg/web"
 )
 
 const keyPrefix = "dk_"

@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"disapp/internal/model"
-	"disapp/internal/password"
-	"disapp/internal/storage"
-	"disapp/internal/web"
+	"disapp/internal/resources/store/model"
+	"disapp/pkg/pwd"
+	"disapp/internal/resources/storage"
+	"disapp/pkg/web"
 
 	"gorm.io/gorm"
 )
@@ -144,7 +144,7 @@ func (s *Server) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.Password != nil && *req.Password != "" {
-		h, salt := password.Hash(*req.Password)
+		h, salt := pwd.Hash(*req.Password)
 		app.PasswordHash, app.Salt = h, salt
 	}
 	if req.ExpiresAt != nil {
@@ -598,7 +598,7 @@ func (s *Server) CreateUser(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeBadRequest, "该用户名为超管保留")
 		return
 	}
-	hash, salt := password.Hash(req.Password)
+	hash, salt := pwd.Hash(req.Password)
 	u := model.User{Username: req.Username, PasswordHash: hash, Salt: salt}
 	if err := s.DB.Create(&u).Error; err != nil {
 		web.SendError(w, web.CodeInternal, "创建失败")
@@ -607,7 +607,7 @@ func (s *Server) CreateUser(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, u)
 }
 
-// UpdateUser resets a user's password.
+// UpdateUser resets a user's pwd.
 func (s *Server) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var u model.User
@@ -627,7 +627,7 @@ func (s *Server) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		u.Username = *req.Username
 	}
 	if req.Password != nil && *req.Password != "" {
-		hash, salt := password.Hash(*req.Password)
+		hash, salt := pwd.Hash(*req.Password)
 		u.PasswordHash, u.Salt = hash, salt
 	}
 	if err := s.DB.Save(&u).Error; err != nil {

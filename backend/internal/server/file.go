@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"path"
 
-	"disapp/internal/storage"
-	"disapp/internal/web"
+	"disapp/internal/resources/storage"
+	"disapp/pkg/web"
 )
 
 // File serves local storage files via streaming proxy.

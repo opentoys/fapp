@@ -1,22 +1,24 @@
-package storage
+package local
 
 import (
 	"io"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"disapp/internal/resources/storage"
 )
 
 func TestValidKey(t *testing.T) {
 	valid := []string{"1/2/app.apk", "12/345/foo bar.zip"}
 	invalid := []string{"", "../x", "a/b/c", "1/2/../../etc", "1//x", "/1/2/x", "1/2/"}
 	for _, k := range valid {
-		if !ValidKey(k) {
+		if !storage.ValidKey(k) {
 			t.Errorf("expected valid: %q", k)
 		}
 	}
 	for _, k := range invalid {
-		if ValidKey(k) {
+		if storage.ValidKey(k) {
 			t.Errorf("expected invalid: %q", k)
 		}
 	}

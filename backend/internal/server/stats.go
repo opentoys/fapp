@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"disapp/internal/model"
-	"disapp/internal/web"
+	"disapp/internal/resources/store/model"
+	"disapp/pkg/web"
 )
 
 // DownloadsTimeSeries returns daily download counts for an app, optionally

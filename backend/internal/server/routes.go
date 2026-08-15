@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"disapp/internal/web"
+	"disapp/pkg/web"
 )
 
 // Routes assembles all routes and static file serving.

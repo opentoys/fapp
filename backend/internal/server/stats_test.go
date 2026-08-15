@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"disapp/internal/model"
+	"disapp/internal/resources/store/model"
 )
 
 // seedDownloads creates an app with two versions and download logs spread

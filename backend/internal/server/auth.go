@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strings"
 
-	"disapp/internal/auth"
-	"disapp/internal/model"
-	"disapp/internal/password"
-	"disapp/internal/web"
+	"disapp/pkg/token"
+	"disapp/internal/resources/store/model"
+	"disapp/pkg/pwd"
+	"disapp/pkg/web"
 )
 
 // SuperAdminUID is the user id assigned to the super-admin in JWT claims.
@@ -35,7 +35,7 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 			web.SendError(w, web.CodeUnauthorized, "用户名或密码错误")
 			return
 		}
-		token, err := auth.CreateToken(s.Config.JWT.Secret, SuperAdminUID, s.Config.Admin.Username, s.Config.JWTExpire())
+		token, err := token.CreateToken(s.Config.JWT.Secret, SuperAdminUID, s.Config.Admin.Username, s.Config.JWTExpire())
 		if err != nil {
 			web.SendError(w, web.CodeInternal, "生成 token 失败")
 			return
@@ -51,11 +51,11 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeUnauthorized, "用户名或密码错误")
 		return
 	}
-	if !password.Verify(req.Password, u.PasswordHash, u.Salt) {
+	if !pwd.Verify(req.Password, u.PasswordHash, u.Salt) {
 		web.SendError(w, web.CodeUnauthorized, "用户名或密码错误")
 		return
 	}
-	token, err := auth.CreateToken(s.Config.JWT.Secret, u.ID, u.Username, s.Config.JWTExpire())
+	token, err := token.CreateToken(s.Config.JWT.Secret, u.ID, u.Username, s.Config.JWTExpire())
 	if err != nil {
 		web.SendError(w, web.CodeInternal, "生成 token 失败")
 		return
@@ -63,7 +63,7 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, map[string]any{"token": token})
 }
 
-// ChangePassword lets the authenticated user change their own password.
+// ChangePassword lets the authenticated user change their own pwd.
 // Super-admin (uid=-1) is rejected — their password is managed in config.json.
 func (s *Server) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r)
@@ -92,11 +92,11 @@ func (s *Server) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeNotFound, "用户不存在")
 		return
 	}
-	if !password.Verify(req.OldPassword, u.PasswordHash, u.Salt) {
+	if !pwd.Verify(req.OldPassword, u.PasswordHash, u.Salt) {
 		web.SendError(w, web.CodeUnauthorized, "原密码错误")
 		return
 	}
-	hash, salt := password.Hash(req.NewPassword)
+	hash, salt := pwd.Hash(req.NewPassword)
 	u.PasswordHash, u.Salt = hash, salt
 	if err := s.DB.Save(&u).Error; err != nil {
 		web.SendError(w, web.CodeInternal, "保存失败")
@@ -109,7 +109,7 @@ func (s *Server) ChangePassword(w http.ResponseWriter, r *http.Request) {
 func (s *Server) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		raw := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		claims, err := auth.ParseToken(s.Config.JWT.Secret, raw)
+		claims, err := token.ParseToken(s.Config.JWT.Secret, raw)
 		if err != nil {
 			web.SendStatus(w, http.StatusUnauthorized, "未登录或登录已过期")
 			return

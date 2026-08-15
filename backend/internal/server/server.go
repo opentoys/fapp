@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 
-	"disapp/internal/auth"
-	"disapp/internal/config"
-	"disapp/internal/storage"
+	"disapp/pkg/token"
+	"disapp/internal/resources/config"
+	"disapp/internal/resources/storage"
 
 	"gorm.io/gorm"
 )
@@ -25,11 +25,11 @@ type ctxKey int
 
 const userKey ctxKey = 0
 
-func withUser(ctx context.Context, c *auth.Claims) context.Context {
+func withUser(ctx context.Context, c *token.Claims) context.Context {
 	return context.WithValue(ctx, userKey, c)
 }
 
-func userFrom(r *http.Request) *auth.Claims {
-	c, _ := r.Context().Value(userKey).(*auth.Claims)
+func userFrom(r *http.Request) *token.Claims {
+	c, _ := r.Context().Value(userKey).(*token.Claims)
 	return c
 }

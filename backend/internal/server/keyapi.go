@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"disapp/internal/model"
-	"disapp/internal/web"
+	"disapp/internal/resources/store/model"
+	"disapp/pkg/web"
 )
 
 // authorizeKeyApp authenticates the `apikey` query param against an app that

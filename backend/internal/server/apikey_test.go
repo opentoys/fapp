@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"disapp/internal/model"
+	"disapp/internal/resources/store/model"
 )
 
 // seedMember binds userID to appID in app_members.

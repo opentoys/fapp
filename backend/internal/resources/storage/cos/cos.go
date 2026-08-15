@@ -1,4 +1,4 @@
-package storage
+package cos
 
 import (
 	"bytes"
@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/tencentyun/cos-go-sdk-v5"
+
+	"disapp/internal/resources/storage"
 )
 
 // objectClient is a narrow interface for cos object operations, for test mocking.
@@ -54,7 +56,7 @@ func NewCOSFromConfig(secretID, secretKey, bucket, region, baseURL string) (*COS
 }
 
 func (s *COSStorage) Save(ctx context.Context, key string, r io.Reader) (int64, error) {
-	if !ValidKey(key) {
+	if !storage.ValidKey(key) {
 		return 0, fmt.Errorf("invalid key %q", key)
 	}
 	// Read all content to get size, then re-upload from buffer
@@ -68,7 +70,7 @@ func (s *COSStorage) Save(ctx context.Context, key string, r io.Reader) (int64, 
 }
 
 func (s *COSStorage) Open(ctx context.Context, key string) (io.ReadCloser, error) {
-	if !ValidKey(key) {
+	if !storage.ValidKey(key) {
 		return nil, fmt.Errorf("invalid key %q", key)
 	}
 	resp, err := s.client.Get(ctx, key, nil)
@@ -79,7 +81,7 @@ func (s *COSStorage) Open(ctx context.Context, key string) (io.ReadCloser, error
 }
 
 func (s *COSStorage) Delete(ctx context.Context, key string) error {
-	if !ValidKey(key) {
+	if !storage.ValidKey(key) {
 		return fmt.Errorf("invalid key %q", key)
 	}
 	_, err := s.client.Delete(ctx, key)
@@ -87,7 +89,7 @@ func (s *COSStorage) Delete(ctx context.Context, key string) error {
 }
 
 func (s *COSStorage) DownloadURL(ctx context.Context, key, filename string, expire time.Duration) (string, error) {
-	if !ValidKey(key) {
+	if !storage.ValidKey(key) {
 		return "", fmt.Errorf("invalid key %q", key)
 	}
 	query := url.Values{"response-content-disposition": []string{
