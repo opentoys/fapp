@@ -65,7 +65,7 @@ type App struct {
 	ID               int64      `gorm:"primaryKey" json:"id"`
 	Name             string     `gorm:"size:128" json:"name"`
 	Platform         string     `gorm:"size:16;uniqueIndex:idx_app_platform_package" json:"platform"`    // ios / android，创建时确定，不可修改
-	PackageName      *string    `gorm:"size:128;uniqueIndex:idx_app_platform_package" json:"package_name"` // Android package / iOS bundle id（appid），同一平台下唯一；nil 表示未解析/手动创建，SQLite 视 NULL 为互不相同
+	PackageName      *string    `gorm:"size:128;uniqueIndex:idx_app_platform_package" json:"appid"` // Android package / iOS bundle id（appid），同一平台下唯一；nil 表示未解析/手动创建，SQLite 视 NULL 为互不相同
 	Icon             string     `gorm:"size:512" json:"icon"`
 	Description      string     `gorm:"type:text" json:"description"`
 	Screenshots      JSONList   `gorm:"type:text" json:"screenshots"`
@@ -96,7 +96,7 @@ type Version struct {
 	FileType       string     `gorm:"size:16" json:"file_type"`
 	FileName       string     `gorm:"size:256" json:"file_name"`
 	FileSize       int64      `json:"file_size"`
-	PackageName    string     `gorm:"size:128" json:"package_name"` // Android package / iOS bundle id（解析所得）
+	PackageName    string     `gorm:"size:128" json:"appid"` // Android package / iOS bundle id（解析所得）
 	AppName        string     `gorm:"size:128" json:"app_name"`     // 解析出的应用名称
 	IconURL        string     `gorm:"size:512" json:"icon_url"`     // 解析出的图标 URL（仅 Android）
 	StorageKey     string     `gorm:"size:512" json:"-"`
@@ -106,6 +106,37 @@ type Version struct {
 	DownloadCount  int64      `json:"download_count"`
 	InstallCount   int64      `json:"install_count"`
 	CreatedAt      time.Time  `json:"created_at"`
+}
+
+// AppMember links a user to an app they can manage (admin side). Only members
+// may operate on the app once admin endpoints are permission-gated.
+type AppMember struct {
+	ID        int64     `gorm:"primaryKey" json:"id"`
+	UserID    int64     `gorm:"index:idx_member_user_app,unique" json:"user_id"`
+	AppID     int64     `gorm:"index:idx_member_user_app,unique" json:"app_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// API key scopes.
+const (
+	KeyScopeRead = "read"
+	KeyScopeRun  = "run"
+)
+
+// ApiKey authenticates programmatic access (query param `apikey`). It is not
+// bound to specific apps: at call time its scope is "the creator's currently
+// manageable apps" (super-admin can manage everything). Plain text storage was
+// a deliberate product decision (simpler key lifecycle; drop + recreate if
+// leaked).
+type ApiKey struct {
+	ID         int64      `gorm:"primaryKey" json:"id"`
+	Name       string     `gorm:"size:128" json:"name"`
+	Key        string     `gorm:"uniqueIndex;size:128" json:"key"`
+	UserID     int64      `gorm:"index" json:"user_id"` // 创建人 uid；超管 = -1
+	Scope      string     `gorm:"size:16" json:"scope"` // read | run
+	ExpiresAt  *time.Time `json:"expires_at"`           // nil = 永不过期
+	LastUsedAt *time.Time `json:"last_used_at"`
+	CreatedAt  time.Time  `json:"created_at"`
 }
 
 type DownloadLog struct {

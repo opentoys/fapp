@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Copy, Upload as UploadIcon } from 'lucide-vue-next'
+import { Copy, Upload as UploadIcon, X } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { api } from '../../api/client'
+import { useAuth } from '../../composables/useAuth'
 import { useI18n } from '../../composables/useI18n'
 import { formatArch } from '../../constants/platform'
 import { fmtDate } from '../../utils/format'
@@ -24,11 +25,26 @@ import { Separator } from '../../components/ui/separator'
 import { Skeleton } from '../../components/ui/skeleton'
 import AppSelect from '../../components/AppSelect.vue'
 import FileUpload from '../../components/FileUpload.vue'
-import type { AppDetail, AppItem, DownloadsTimeSeries, ReleaseType, Version } from '../../api/types'
+import type { AppDetail, AppItem, DownloadsTimeSeries, ReleaseType, User, Version } from '../../api/types'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const { isSuperAdmin } = useAuth()
+
+// --- Members: which users can manage this app (tag list + picker) ---
+const allUsers = ref<User[]>([])
+const memberIds = ref<number[]>([])
+const memberDirty = ref(false)
+const membersError = ref('')
+const membersSaving = ref(false)
+
+// Users not yet added, shown in the trailing picker.
+const pickableUsers = computed(() =>
+  allUsers.value.filter((u) => !memberIds.value.includes(u.id))
+)
+const memberName = (id: number) =>
+  allUsers.value.find((u) => u.id === id)?.username ?? String(id)
 const data = ref<AppDetail | null>(null)
 const stats = ref<{ download_count: number; install_count: number; recent: Array<{ ip: string; user_agent: string; created_at: string }> } | null>(null)
 const error = ref('')
@@ -106,7 +122,7 @@ async function loadChart() {
   }
 }
 
-const tab = ref<'overview' | 'versions' | 'stats'>('overview')
+const tab = ref<'overview' | 'versions' | 'stats' | 'members'>('overview')
 const deleteTarget = ref<Version | null>(null)
 
 // Reload the trend chart when entering the stats tab or changing a filter.
@@ -302,6 +318,14 @@ watch(
   }
 )
 
+// Load member list when entering the members tab.
+watch(
+  () => tab.value,
+  (v) => {
+    if (v === 'members') loadMembers()
+  }
+)
+
 async function load() {
   const id = Number(route.params.id)
   try {
@@ -386,6 +410,49 @@ function releaseBadge(rt: string): 'default' | 'info' | 'warning' {
   return 'default'
 }
 
+async function loadMembers() {
+  if (!data.value) return
+  const id = data.value.app.id
+  membersError.value = ''
+  try {
+    const [users, members] = await Promise.all([api.adminUsers(), api.appMembers(id)])
+    allUsers.value = users
+    memberIds.value = members
+    memberDirty.value = false
+  } catch (e) {
+    membersError.value = (e as Error).message
+  }
+}
+
+function addMember(id: string | number | null) {
+  if (id === null) return
+  const n = Number(id)
+  if (memberIds.value.includes(n)) return
+  memberIds.value.push(n)
+  memberDirty.value = true
+}
+
+function removeMember(id: number) {
+  const i = memberIds.value.indexOf(id)
+  if (i >= 0) memberIds.value.splice(i, 1)
+  memberDirty.value = true
+}
+
+async function saveMembers() {
+  if (!data.value || membersSaving.value) return
+  membersSaving.value = true
+  membersError.value = ''
+  try {
+    memberIds.value = await api.setAppMembers(data.value.app.id, memberIds.value)
+    memberDirty.value = false
+    showSnack(t('adminApp.membersSaved'))
+  } catch (e) {
+    membersError.value = (e as Error).message
+  } finally {
+    membersSaving.value = false
+  }
+}
+
 function showSnack(msg: string) {
   toast(msg)
 }
@@ -439,6 +506,7 @@ function fmtSize(n: number): string {
         <TabsTrigger value="overview">{{ t('adminApp.tabOverview') }}</TabsTrigger>
         <TabsTrigger value="versions">{{ t('adminApp.tabVersions') }}</TabsTrigger>
         <TabsTrigger value="stats">{{ t('adminApp.tabStats') }}</TabsTrigger>
+        <TabsTrigger value="members">{{ t('adminApp.tabManage') }}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="overview" class="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -459,7 +527,7 @@ function fmtSize(n: number): string {
             <div class="grid gap-1">
               <Label>{{ t('adminApp.appid') }}</Label>
               <div class="text-sm">
-                <code v-if="data?.app.package_name" class="text-xs">{{ data?.app.package_name }}</code>
+                <code v-if="data?.app.appid" class="text-xs">{{ data?.app.appid }}</code>
                 <span v-else class="text-muted-foreground text-xs">{{ t('adminApp.appidUnlocked') }}</span>
               </div>
             </div>
@@ -586,7 +654,7 @@ function fmtSize(n: number): string {
                     </div>
                   </TableCell>
                   <TableCell>{{ v.app_name || '—' }}</TableCell>
-                  <TableCell><code v-if="v.package_name" class="text-xs">{{ v.package_name }}</code><span v-else class="text-muted-foreground">—</span></TableCell>
+                  <TableCell><code v-if="v.appid" class="text-xs">{{ v.appid }}</code><span v-else class="text-muted-foreground">—</span></TableCell>
                   <TableCell>
                     <span v-if="v.platform" class="mr-1">
                       <Badge variant="outline">{{ t('platform.' + v.platform) }}</Badge>
@@ -672,6 +740,46 @@ function fmtSize(n: number): string {
           </Card>
           <Button variant="ghost" class="mt-4" @click="chartFilterVersion = 'all'">{{ t('adminApp.statsClear') }}</Button>
         </template>
+      </TabsContent>
+
+      <TabsContent value="members" class="mt-6">
+        <Card class="p-5">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <CardTitle class="text-base">{{ t('adminApp.membersTitle') }}</CardTitle>
+            <span v-if="!isSuperAdmin" class="text-muted-foreground text-sm">{{ t('adminApp.membersSuperHint') }}</span>
+          </div>
+          <Alert v-if="membersError" variant="destructive" class="mb-2">{{ membersError }}</Alert>
+          <div class="flex flex-wrap items-center gap-2">
+            <template v-for="id in memberIds" :key="id">
+              <Badge variant="secondary" class="gap-1 pr-1">
+                <code class="text-xs">{{ memberName(id) }}</code>
+                <Button
+                  v-if="isSuperAdmin"
+                  variant="ghost"
+                  size="icon"
+                  class="text-muted-foreground hover:text-destructive size-5"
+                  :title="t('common.remove')"
+                  @click="removeMember(id)"
+                >
+                  <X class="size-3" />
+                </Button>
+              </Badge>
+            </template>
+            <AppSelect
+              v-if="isSuperAdmin && pickableUsers.length"
+              :items="pickableUsers.map((u) => ({ title: u.username, value: u.id }))"
+              :placeholder="t('adminApp.membersPick')"
+              class="w-40"
+              @update:model-value="addMember"
+            />
+          </div>
+          <p v-if="!memberIds.length && !membersError" class="text-muted-foreground py-2 text-sm">
+            {{ t('adminApp.membersEmpty') }}
+          </p>
+          <div class="mt-4 flex justify-end">
+            <Button :disabled="!isSuperAdmin || !memberDirty || membersSaving" @click="saveMembers">{{ t('common.save') }}</Button>
+          </div>
+        </Card>
       </TabsContent>
     </Tabs>
 

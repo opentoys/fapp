@@ -39,12 +39,18 @@ const tabs = computed(() => {
   if (isSuperAdmin.value) {
     result.push({ label: t('adminUsers.title'), to: '/admin/users', match: '/admin/users' })
   }
+  result.push({ label: t('adminKeys.title'), to: '/admin/keys', match: '/admin/keys' })
+  result.push({ label: t('apiDoc.title'), to: '/admin/keys/doc', match: '/admin/keys/doc' })
   return result
 })
 
 const activeTab = computed(() => {
   const p = route.path
-  const hit = tabs.value.find((tab) => p === tab.match || p.startsWith(tab.match + '/'))
+  // Longest matching tab wins so that e.g. /admin/users highlights the
+  // "Users" tab instead of the prefix "Apps" (/admin) one.
+  const hit = tabs.value
+    .filter((tab) => p === tab.match || p.startsWith(tab.match + '/'))
+    .sort((a, b) => b.match.length - a.match.length)[0]
   return hit?.to ?? ''
 })
 

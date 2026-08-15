@@ -15,6 +15,8 @@ import (
 	"disapp/internal/password"
 	"disapp/internal/storage"
 	"disapp/internal/web"
+
+	"gorm.io/gorm"
 )
 
 // AppsList returns app list (admin side).
@@ -55,7 +57,7 @@ func (s *Server) CreateApp(w http.ResponseWriter, r *http.Request) {
 		Platform    string  `json:"platform"`
 		Icon        string  `json:"icon"`
 		Description string  `json:"description"`
-		PackageName *string `json:"package_name"`
+		PackageName *string `json:"appid"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		web.SendError(w, web.CodeBadRequest, "bad request")
@@ -333,17 +335,7 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeBadRequest, "multipart 解析失败")
 		return
 	}
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		web.SendError(w, web.CodeBadRequest, "缺少文件")
-		return
-	}
-	defer file.Close()
-
 	appID, _ := strconv.ParseInt(r.FormValue("app_id"), 10, 64)
-	versionCode, _ := strconv.Atoi(r.FormValue("version_code"))
-	versionName := r.FormValue("version_name")
-
 	if appID == 0 {
 		web.SendError(w, web.CodeBadRequest, "app_id 必填")
 		return
@@ -353,6 +345,23 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeNotFound, "应用不存在")
 		return
 	}
+	s.uploadForApp(w, r, &app)
+}
+
+// uploadForApp assembles and persists a new version for an already-loaded
+// app. Shared by the JWT-admin upload and the API-key upload (which resolves
+// the app from the URL path instead of the form). The multipart body is
+// parsed by the caller.
+func (s *Server) uploadForApp(w http.ResponseWriter, r *http.Request, app *model.App) {
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		web.SendError(w, web.CodeBadRequest, "缺少文件")
+		return
+	}
+	defer file.Close()
+
+	versionCode, _ := strconv.Atoi(r.FormValue("version_code"))
+	versionName := r.FormValue("version_name")
 	if versionName == "" {
 		web.SendError(w, web.CodeBadRequest, "version_name 必填")
 		return
@@ -363,7 +372,7 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 	// the same appid (+ the app's platform, which is already enforced), so an
 	// app can never silently accumulate versions of unrelated apps. An app
 	// without a lock stays unlocked when the package exposes no appid.
-	pkg := strings.TrimSpace(r.FormValue("package_name"))
+	pkg := strings.TrimSpace(r.FormValue("appid"))
 	if app.PackageName == nil || *app.PackageName == "" {
 		if pkg != "" {
 			var n int64
@@ -375,7 +384,7 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			app.PackageName = &pkg
-			if err := s.DB.Save(&app).Error; err != nil {
+			if err := s.DB.Save(app).Error; err != nil {
 				// Belt-and-suspenders for a concurrent duplicate lock.
 				if strings.Contains(err.Error(), "UNIQUE") {
 					web.SendError(w, web.CodeBadRequest, "该平台下已存在相同包名（appid）的应用")
@@ -398,7 +407,7 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 	// platform than its app.
 	fileType := model.FileType(header.Filename)
 	v := model.Version{
-		AppID:          appID,
+		AppID:          app.ID,
 		ReleaseType:    r.FormValue("release_type"),
 		Platform:       app.Platform,
 		Arch:           r.FormValue("arch"),
@@ -417,7 +426,7 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Compute sha256 + size while writing to storage.
-	key := storage.Key(appID, v.ID, header.Filename)
+	key := storage.Key(app.ID, v.ID, header.Filename)
 	hr := newHashReader(file)
 	if _, err := s.Storage.Save(r.Context(), key, hr); err != nil {
 		s.DB.Delete(&v)
@@ -435,7 +444,7 @@ func (s *Server) UploadVersion(w http.ResponseWriter, r *http.Request) {
 	// so this works for both local and COS backends.
 	if icon, _, err := r.FormFile("icon"); err == nil {
 		defer icon.Close()
-		iconKey := storage.Key(appID, v.ID, "icon.png")
+		iconKey := storage.Key(app.ID, v.ID, "icon.png")
 		if _, err := s.Storage.Save(r.Context(), iconKey, icon); err != nil {
 			log.Printf("store icon failed: %v", err)
 		} else {
@@ -491,6 +500,72 @@ func storageBackendName(s *Server) string {
 		return "local"
 	}
 	return s.Config.Storage.Backend
+}
+
+// AppMembersAdmin lists the app's members (users who can manage it).
+func (s *Server) AppMembersAdmin(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var app model.App
+	if err := s.DB.First(&app, id).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "应用不存在")
+		return
+	}
+	var rows []model.AppMember
+	s.DB.Where("app_id = ?", app.ID).Find(&rows)
+	uids := make([]int64, 0, len(rows))
+	for _, row := range rows {
+		uids = append(uids, row.UserID)
+	}
+	web.SendJson(w, uids)
+}
+
+// SetAppMembersAdmin replaces the app's member list. Only the super-admin may
+// manage membership; other admins keep their own access and cannot add/remove
+// anyone.
+func (s *Server) SetAppMembersAdmin(w http.ResponseWriter, r *http.Request) {
+	user := userFrom(r)
+	if user == nil || user.UserID != SuperAdminUID {
+		web.SendError(w, web.CodeForbidden, "仅超管可管理成员")
+		return
+	}
+	id := r.PathValue("id")
+	var app model.App
+	if err := s.DB.First(&app, id).Error; err != nil {
+		web.SendError(w, web.CodeNotFound, "应用不存在")
+		return
+	}
+	var uids []int64
+	if err := json.NewDecoder(r.Body).Decode(&uids); err != nil {
+		web.SendError(w, web.CodeBadRequest, "bad request")
+		return
+	}
+	// Reject unknown user ids so a bad client can't create dangling rows.
+	if len(uids) > 0 {
+		var n int64
+		s.DB.Model(&model.User{}).Where("id IN ?", uids).Count(&n)
+		if n != int64(len(uids)) {
+			web.SendError(w, web.CodeBadRequest, "用户不存在")
+			return
+		}
+	}
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("app_id = ?", app.ID).Delete(&model.AppMember{}).Error; err != nil {
+			return err
+		}
+		if len(uids) > 0 {
+			rows := make([]model.AppMember, 0, len(uids))
+			for _, uid := range uids {
+				rows = append(rows, model.AppMember{UserID: uid, AppID: app.ID})
+			}
+			return tx.Create(&rows).Error
+		}
+		return nil
+	})
+	if err != nil {
+		web.SendError(w, web.CodeInternal, "保存失败")
+		return
+	}
+	web.SendJson(w, uids)
 }
 
 // UsersList returns all non-super-admin accounts.

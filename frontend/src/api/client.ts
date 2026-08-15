@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { useAuth } from '../composables/useAuth'
-import type { ApiResp, AppDetail, AppItem, DownloadsTimeSeries, Platform, User, Version } from './types'
+import type { ApiKey, ApiResp, AppDetail, AppItem, DownloadsTimeSeries, KeyScope, Platform, User, Version } from './types'
 
 const client = axios.create({ baseURL: '/api/v1', timeout: 60000 })
 
@@ -45,7 +45,7 @@ export const api = {
 
   adminApps: () => client.get<ApiResp<AppItem[]>>('/admin/apps').then((r) => r.data.data),
   adminAppDetail: (id: number) => client.get<ApiResp<AppDetail>>(`/admin/apps/${id}`).then((r) => r.data.data),
-  createApp: (data: { name: string; description?: string; platform: Platform; icon?: string; package_name?: string }) =>
+  createApp: (data: { name: string; description?: string; platform: Platform; icon?: string; appid?: string }) =>
     client.post<ApiResp<AppItem>>('/admin/apps', data).then((r) => r.data.data),
   updateApp: (id: number, data: Partial<AppItem> & { password?: string }) =>
     client.put<ApiResp<AppItem>>(`/admin/apps/${id}`, data),
@@ -64,6 +64,9 @@ export const api = {
       .delete<ApiResp<AppItem>>(`/admin/apps/${id}/screenshots`, { params: { url } })
       .then((r) => r.data.data),
   deleteApp: (id: number) => client.delete<ApiResp<unknown>>(`/admin/apps/${id}`),
+  appMembers: (id: number) => client.get<ApiResp<number[]>>(`/admin/apps/${id}/members`).then((r) => r.data.data),
+  setAppMembers: (id: number, uids: number[]) =>
+    client.put<ApiResp<number[]>>(`/admin/apps/${id}/members`, uids).then((r) => r.data.data),
   appDownloads: (id: number, params?: { platform?: string; version_id?: number }) =>
     client
       .get<ApiResp<DownloadsTimeSeries>>(`/admin/apps/${id}/downloads`, { params })
@@ -84,4 +87,12 @@ export const api = {
   updateUser: (id: number, data: { username?: string; password?: string }) =>
     client.put<ApiResp<User>>(`/admin/users/${id}`, data),
   deleteUser: (id: number) => client.delete<ApiResp<unknown>>(`/admin/users/${id}`),
+
+  manageableApps: () => client.get<ApiResp<AppItem[]>>('/admin/apps/manageable').then((r) => r.data.data),
+  adminKeys: () => client.get<ApiResp<ApiKey[]>>('/admin/keys').then((r) => r.data.data),
+  createKey: (data: { name: string; scope: KeyScope; expires_at?: string | null }) =>
+    client.post<ApiResp<ApiKey>>('/admin/keys', data).then((r) => r.data.data),
+  updateKey: (id: number, data: { name?: string; scope?: KeyScope; expires_at?: string | null }) =>
+    client.put<ApiResp<ApiKey>>(`/admin/keys/${id}`, data),
+  deleteKey: (id: number) => client.delete<ApiResp<unknown>>(`/admin/keys/${id}`),
 }

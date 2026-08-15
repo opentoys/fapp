@@ -10,7 +10,7 @@ export interface AppItem {
   id: number
   name: string
   platform: Platform
-  package_name: string | null
+  appid: string | null
   icon: string
   description: string
   screenshots: string[]
@@ -36,7 +36,7 @@ export interface Version {
   file_type: string
   file_name: string
   file_size: number
-  package_name: string
+  appid: string
   app_name: string
   icon_url: string
   sha256: string
@@ -49,6 +49,19 @@ export interface Version {
 export interface AppDetail {
   app: AppItem
   versions: Version[]
+}
+
+export type KeyScope = 'read' | 'run'
+
+export interface ApiKey {
+  id: number
+  name: string
+  key: string
+  user_id: number
+  scope: KeyScope
+  expires_at: string | null
+  last_used_at: string | null
+  created_at: string
 }
 
 export interface ApiResp<T> {

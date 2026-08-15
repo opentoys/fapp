@@ -54,8 +54,8 @@ function fmtSize(n: number): string {
 
     <div>
       <div class="font-semibold">{{ appName }}</div>
-      <div v-if="version.package_name" class="text-muted-foreground text-xs">
-        <code>{{ version.package_name }}</code>
+      <div v-if="version.appid" class="text-muted-foreground text-xs">
+        <code>{{ version.appid }}</code>
       </div>
     </div>
 

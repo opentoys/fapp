@@ -122,8 +122,11 @@ func TestDownloadCounts(t *testing.T) {
 		} `json:"data"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &res)
-	if res.Code != 0 || !strings.HasPrefix(res.Data.URL, "/api/v1/files/") {
+	if res.Code != 0 || !strings.Contains(res.Data.URL, "/api/v1/files/") {
 		t.Fatalf("res = %s", w.Body.String())
+	}
+	if !strings.Contains(res.Data.URL, "://") {
+		t.Fatalf("res = %s (want absolute URL)", w.Body.String())
 	}
 
 	var reload model.Version
