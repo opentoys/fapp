@@ -42,6 +42,23 @@ backend/
 .github/workflows/release.yml   tag push → cross-compiled GitHub Release
 ```
 
+## Screenshots
+
+Public download page (no login needed, `/` app list → app detail):
+
+![Public download page](docs/screenshots/public-app.png)
+
+Admin console (app list):
+
+![Admin console](docs/screenshots/admin-home.png)
+
+API key management:
+
+![API keys](docs/screenshots/admin-keys.png)
+
+More in [docs/screenshots/](docs/screenshots/): login page, app detail, user
+management, API reference, and more.
+
 ## Quick start
 
 ```bash

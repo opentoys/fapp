@@ -34,6 +34,22 @@ backend/
 .github/workflows/release.yml   tag 推送 → 跨平台编译并发布 GitHub Release
 ```
 
+## 界面截图
+
+公开下载页（无需登录，`/` 应用列表 → 应用详情页）：
+
+![公开下载页](docs/screenshots/public-app.png)
+
+管理后台（应用列表）：
+
+![管理后台](docs/screenshots/admin-home.png)
+
+API Key 管理：
+
+![API Key](docs/screenshots/admin-keys.png)
+
+更多截图见 [docs/screenshots/](docs/screenshots/)：登录页、应用详情、用户管理、API 参考文档等。
+
 ## 快速开始
 
 ```bash
