@@ -3,6 +3,7 @@
 .agent/
 .agents/
 .superpowers/
+docs/superpowers/
 skills-lock.json
 bin/
 data/
