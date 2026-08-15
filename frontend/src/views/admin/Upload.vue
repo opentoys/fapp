@@ -85,12 +85,12 @@ const mismatch = computed(() => {
   return parsed.value.platform !== selectedApp.value.platform
 })
 
-// The app's appid (package_name) is locked on its first version upload. A
+// The app's appid is locked on its first version upload. A
 // locked app may only receive packages exposing the exact same appid — the
 // server enforces this, and we surface it up front like the platform check.
 const appidMismatch = computed(() => {
   if (mode.value !== 'existing') return false
-  const locked = selectedApp.value?.package_name
+  const locked = selectedApp.value?.appid
   if (!locked || !parsed.value) return false
   return (parsed.value.package || '') !== locked
 })
@@ -208,7 +208,7 @@ async function submit() {
         name,
         platform: parsed.value!.platform,
         icon: parsed.value?.iconDataUri || undefined,
-        package_name: parsed.value?.package || undefined,
+        appid: parsed.value?.package || undefined,
       })
       targetAppId = app.id
     } catch (e) {
@@ -226,7 +226,7 @@ async function submit() {
   if (versionCode.value) form.append('version_code', String(versionCode.value))
   form.append('changelog', changelog.value)
   if (parsed.value) {
-    if (parsed.value.package) form.append('package_name', parsed.value.package)
+    if (parsed.value.package) form.append('appid', parsed.value.package)
     if (parsed.value.appName) form.append('app_name', parsed.value.appName)
     if (parsed.value.iconDataUri) {
       form.append('icon', dataUriToBlob(parsed.value.iconDataUri), 'icon.png')
@@ -306,7 +306,7 @@ async function submit() {
 
           <div v-if="mode === 'existing' && selectedApp" class="flex items-center gap-2 text-sm">
             <span class="text-muted-foreground">{{ t('upload.appid') }}:</span>
-            <code v-if="selectedApp.package_name" class="text-xs">{{ selectedApp.package_name }}</code>
+            <code v-if="selectedApp.appid" class="text-xs">{{ selectedApp.appid }}</code>
             <span v-else class="text-muted-foreground text-xs">{{ t('upload.appidUnlocked') }}</span>
           </div>
           <Alert v-if="appidMismatch" variant="warning">{{ t('upload.appidMismatch') }}</Alert>

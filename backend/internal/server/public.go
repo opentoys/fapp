@@ -141,12 +141,35 @@ func (s *Server) VerifyAccess(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, map[string]any{"ok": true})
 }
 
+// absURL prefixes an absolute scheme+host onto a Storage-returned path. The
+// host comes from the request Host header (so reverse proxies must forward the
+// real host), falling back to X-Forwarded-Host / Forwarded when present.
+func absURL(r *http.Request, path string) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	host := r.Host
+	if fh := r.Header.Get("X-Forwarded-Host"); fh != "" {
+		host = fh
+	}
+	if host == "" {
+		return path
+	}
+	return scheme + "://" + host + path
+}
+
+// downloadURL returns an absolute download URL for the request host.
 func (s *Server) downloadURL(r *http.Request, v *model.Version) (string, error) {
 	pwd := r.URL.Query().Get("password")
 	if err := s.checkAccess(v, pwd); err != nil {
 		return "", err
 	}
-	return s.Storage.DownloadURL(r.Context(), v.StorageKey, v.FileName, 15*time.Minute)
+	rel, err := s.Storage.DownloadURL(r.Context(), v.StorageKey, v.FileName, 15*time.Minute)
+	if err != nil {
+		return "", err
+	}
+	return absURL(r, rel), nil
 }
 
 // Download returns download URL, increments download_count and logs.

@@ -44,6 +44,8 @@ func (s *Server) Routes(dist fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/v1/admin/apps/{id}/screenshots", web.Chain(admin...)(s.UploadAppScreenshot))
 	mux.HandleFunc("DELETE /api/v1/admin/apps/{id}/screenshots", web.Chain(admin...)(s.DeleteAppScreenshot))
 	mux.HandleFunc("DELETE /api/v1/admin/apps/{id}", web.Chain(admin...)(s.DeleteApp))
+	mux.HandleFunc("GET /api/v1/admin/apps/{id}/members", web.Chain(admin...)(s.AppMembersAdmin))
+	mux.HandleFunc("PUT /api/v1/admin/apps/{id}/members", web.Chain(admin...)(s.SetAppMembersAdmin))
 	mux.HandleFunc("GET /api/v1/admin/apps/{id}/downloads", web.Chain(admin...)(s.DownloadsTimeSeries))
 	mux.HandleFunc("GET /api/v1/admin/users", web.Chain(admin...)(s.UsersList))
 	mux.HandleFunc("POST /api/v1/admin/users", web.Chain(admin...)(s.CreateUser))
@@ -53,6 +55,20 @@ func (s *Server) Routes(dist fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/v1/admin/versions", web.Chain(admin...)(s.UploadVersion))
 	mux.HandleFunc("DELETE /api/v1/admin/versions/{id}", web.Chain(admin...)(s.DeleteVersion))
 	mux.HandleFunc("GET /api/v1/admin/versions/{id}/stats", web.Chain(admin...)(s.VersionStats))
+
+	// API key management (JWT-authenticated).
+	mux.HandleFunc("GET /api/v1/admin/apps/manageable", web.Chain(admin...)(s.ManageableApps))
+	mux.HandleFunc("GET /api/v1/admin/keys", web.Chain(admin...)(s.KeysList))
+	mux.HandleFunc("POST /api/v1/admin/keys", web.Chain(admin...)(s.CreateKey))
+	mux.HandleFunc("PUT /api/v1/admin/keys/{id}", web.Chain(admin...)(s.UpdateKey))
+	mux.HandleFunc("DELETE /api/v1/admin/keys/{id}", web.Chain(admin...)(s.DeleteKey))
+
+	// API-key-authenticated programmatic endpoints (key via `?apikey=`).
+	mux.HandleFunc("POST /api/v1/keys/{app_id}/versions", web.Chain(pub...)(s.UploadKeyVersion))
+	mux.HandleFunc("POST /api/v1/keys/{app_id}/current", web.Chain(pub...)(s.SetKeyCurrentVersion))
+	mux.HandleFunc("GET /api/v1/keys/{app_id}/versions", web.Chain(pub...)(s.KeyVersionsList))
+	mux.HandleFunc("GET /api/v1/keys/{app_id}/current", web.Chain(pub...)(s.KeyCurrentVersion))
+	mux.HandleFunc("GET /api/v1/keys/{app_id}/current/download", web.Chain(pub...)(s.KeyCurrentDownload))
 
 	if dist != nil {
 		mux.Handle("/", staticHandler(dist))

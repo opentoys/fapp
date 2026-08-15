@@ -1,7 +1,7 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes: [
     { path: '/', component: () => import('../views/Home.vue') },
     { path: '/app/:name', component: () => import('../views/AppDetail.vue') },
@@ -24,6 +24,16 @@ const router = createRouter({
     {
       path: '/admin/users',
       component: () => import('../views/admin/Users.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/admin/keys',
+      component: () => import('../views/admin/Keys.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/admin/keys/doc',
+      component: () => import('../views/admin/KeysDoc.vue'),
       meta: { requiresAuth: true },
     },
   ],

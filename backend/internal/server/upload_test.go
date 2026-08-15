@@ -170,7 +170,7 @@ func TestUploadVersionLocksAppidOnFirstUpload(t *testing.T) {
 	req := uploadVersionReq(t, map[string]string{
 		"app_id":       itoa(app.ID),
 		"version_name": "1.0.0",
-		"package_name": "com.example.app",
+		"appid": "com.example.app",
 	}, "app.apk", []byte("apk"))
 	s.UploadVersion(httptest.NewRecorder(), req)
 
@@ -202,10 +202,10 @@ func TestUploadVersionRejectsMismatchedAppid(t *testing.T) {
 		return res.Code
 	}
 
-	if code := upload(map[string]string{"package_name": "com.example.app"}); code != 0 {
+	if code := upload(map[string]string{"appid": "com.example.app"}); code != 0 {
 		t.Fatalf("matching appid rejected: %d", code)
 	}
-	if code := upload(map[string]string{"package_name": "com.other.app"}); code == 0 {
+	if code := upload(map[string]string{"appid": "com.other.app"}); code == 0 {
 		t.Fatal("mismatched appid must be rejected")
 	}
 	if code := upload(nil); code == 0 {
@@ -225,7 +225,7 @@ func TestUploadVersionLockRespectsUnique(t *testing.T) {
 	upload := func(appID int64, pkg string) int {
 		fields := map[string]string{"app_id": itoa(appID), "version_name": "1.0.0"}
 		if pkg != "" {
-			fields["package_name"] = pkg
+			fields["appid"] = pkg
 		}
 		req := uploadVersionReq(t, fields, "app.apk", []byte("apk"))
 		w := httptest.NewRecorder()
@@ -318,7 +318,7 @@ func TestUploadVersionMetadata(t *testing.T) {
 	mw.WriteField("app_id", itoa(app.ID))
 	mw.WriteField("version_name", "2.0.0")
 	mw.WriteField("version_code", "200")
-	mw.WriteField("package_name", "com.test.app")
+	mw.WriteField("appid", "com.test.app")
 	mw.WriteField("app_name", "Test App")
 	fw, _ := mw.CreateFormFile("file", "app.apk")
 	fw.Write([]byte("apk"))
@@ -337,7 +337,7 @@ func TestUploadVersionMetadata(t *testing.T) {
 			ID          int64  `json:"id"`
 			VersionName string `json:"version_name"`
 			VersionCode int    `json:"version_code"`
-			PackageName string `json:"package_name"`
+			PackageName string `json:"appid"`
 			AppName     string `json:"app_name"`
 			IconURL     string `json:"icon_url"`
 		} `json:"data"`
