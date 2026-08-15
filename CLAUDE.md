@@ -20,7 +20,7 @@ for the integrated binary.
 cd frontend && npm run build
 
 # Backend build + test
-cd backend && go build -o bin/disapp ./cmd/server && go test ./...
+cd backend && go build -o bin/disapp . && go test ./...
 
 # Wipe local DB (dev only)
 make reset
@@ -31,7 +31,7 @@ make reset
 Two terminals, one command each:
 
 ```bash
-cd backend && APP_CONFIG=../config.json go run ./cmd/server    # :8080
+cd backend && APP_CONFIG=../config.json go run .    # :8080
 cd frontend && npm run dev                                      # :5173 → proxy /api → :8080
 ```
 

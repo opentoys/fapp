@@ -1,4 +1,4 @@
-package server
+package controller
 
 import (
 	"bytes"
@@ -14,15 +14,15 @@ import (
 )
 
 // setAppAccess applies the app-level access scope for the test app.
-func setAppAccess(s *Server, app *model.App, mode, secret string, expiresAt *time.Time) {
+func setAppAccess(s *Controller, app *model.App, mode, secret string, expiresAt *time.Time) {
 	m := map[string]any{"access_mode": mode}
 	if expiresAt != nil {
 		m["expires_at"] = expiresAt
 	}
-	s.DB.Model(app).Updates(m)
+	s.SVC.DB.Model(app).Updates(m)
 	if secret != "" {
 		h, salt := pwd.Hash(secret)
-		s.DB.Model(app).Updates(map[string]any{"password_hash": h, "salt": salt})
+		s.SVC.DB.Model(app).Updates(map[string]any{"password_hash": h, "salt": salt})
 	}
 }
 
@@ -34,9 +34,9 @@ func TestVerifyPassword(t *testing.T) {
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", StorageKey: "1/3/a.apk",
 	}
-	s.DB.Create(&v)
+	s.SVC.DB.Create(&v)
 	// Access checks only apply to the app's current version.
-	s.DB.Model(app).Update("current_version_id", v.ID)
+	s.SVC.DB.Model(app).Update("current_version_id", v.ID)
 
 	body := bytes.NewBufferString(`{"password":"abc"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/versions/"+itoa(v.ID)+"/verify", body)
@@ -60,8 +60,8 @@ func TestDownloadWrongPassword(t *testing.T) {
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", StorageKey: "1/3/a.apk",
 	}
-	s.DB.Create(&v)
-	s.DB.Model(app).Update("current_version_id", v.ID)
+	s.SVC.DB.Create(&v)
+	s.SVC.DB.Model(app).Update("current_version_id", v.ID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/versions/"+itoa(v.ID)+"/download?password=wrong", nil)
 	req.SetPathValue("id", itoa(v.ID))
@@ -85,8 +85,8 @@ func TestDownloadExpired(t *testing.T) {
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", StorageKey: "1/3/a.apk",
 	}
-	s.DB.Create(&v)
-	s.DB.Model(app).Update("current_version_id", v.ID)
+	s.SVC.DB.Create(&v)
+	s.SVC.DB.Model(app).Update("current_version_id", v.ID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/versions/"+itoa(v.ID)+"/download", nil)
 	req.SetPathValue("id", itoa(v.ID))
@@ -108,8 +108,8 @@ func TestDownloadCounts(t *testing.T) {
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", StorageKey: "1/3/a.apk",
 	}
-	s.DB.Create(&v)
-	s.DB.Model(app).Update("current_version_id", v.ID)
+	s.SVC.DB.Create(&v)
+	s.SVC.DB.Model(app).Update("current_version_id", v.ID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/versions/"+itoa(v.ID)+"/download", nil)
 	req.SetPathValue("id", itoa(v.ID))
@@ -130,12 +130,12 @@ func TestDownloadCounts(t *testing.T) {
 	}
 
 	var reload model.Version
-	s.DB.First(&reload, v.ID)
+	s.SVC.DB.First(&reload, v.ID)
 	if reload.DownloadCount != 1 {
 		t.Fatalf("download_count = %d", reload.DownloadCount)
 	}
 	var logs []model.DownloadLog
-	s.DB.Find(&logs, "version_id = ?", v.ID)
+	s.SVC.DB.Find(&logs, "version_id = ?", v.ID)
 	if len(logs) != 1 {
 		t.Fatalf("logs = %d", len(logs))
 	}
@@ -148,8 +148,8 @@ func TestInstallCounts(t *testing.T) {
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", StorageKey: "1/3/a.apk",
 	}
-	s.DB.Create(&v)
-	s.DB.Model(app).Update("current_version_id", v.ID)
+	s.SVC.DB.Create(&v)
+	s.SVC.DB.Model(app).Update("current_version_id", v.ID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/versions/"+itoa(v.ID)+"/install", nil)
 	req.SetPathValue("id", itoa(v.ID))
@@ -159,7 +159,7 @@ func TestInstallCounts(t *testing.T) {
 		t.Fatalf("code = %d", w.Code)
 	}
 	var reload model.Version
-	s.DB.First(&reload, v.ID)
+	s.SVC.DB.First(&reload, v.ID)
 	if reload.InstallCount != 1 {
 		t.Fatalf("install_count = %d", reload.InstallCount)
 	}
@@ -174,7 +174,7 @@ func TestDownloadNonCurrentVersionForbidden(t *testing.T) {
 		AppID: app.ID, VersionName: "0.9.0", VersionCode: 9, FileName: "old.apk",
 		FileType: "apk", StorageKey: "1/9/old.apk",
 	}
-	s.DB.Create(&other)
+	s.SVC.DB.Create(&other)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/versions/"+itoa(other.ID)+"/download", nil)
 	req.SetPathValue("id", itoa(other.ID))
@@ -197,9 +197,9 @@ func TestDownloadUnpublishedAppNotFound(t *testing.T) {
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 1, FileName: "a.apk",
 		FileType: "apk", StorageKey: "1/3/a.apk",
 	}
-	s.DB.Create(&v)
-	s.DB.Model(app).Update("current_version_id", v.ID)
-	s.DB.Model(app).Update("published", false)
+	s.SVC.DB.Create(&v)
+	s.SVC.DB.Model(app).Update("current_version_id", v.ID)
+	s.SVC.DB.Model(app).Update("published", false)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/versions/"+itoa(v.ID)+"/download", nil)
 	req.SetPathValue("id", itoa(v.ID))
@@ -216,7 +216,7 @@ func TestDownloadUnpublishedAppNotFound(t *testing.T) {
 
 func TestFileProxy(t *testing.T) {
 	s := testServer(t)
-	if _, err := s.Storage.Save(nil, "1/2/app.apk", strings.NewReader("binary-data")); err != nil {
+	if _, err := s.SVC.Storage.Save(nil, "1/2/app.apk", strings.NewReader("binary-data")); err != nil {
 		t.Fatal(err)
 	}
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/1/2/app.apk", nil)

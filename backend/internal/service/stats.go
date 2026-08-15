@@ -1,41 +1,22 @@
-package server
+package service
 
 import (
-	"net/http"
+	"context"
 	"sort"
-	"strconv"
 	"time"
 
 	"disapp/internal/resources/store/model"
-	"disapp/pkg/web"
 )
 
 // DownloadsTimeSeries returns daily download counts for an app, optionally
-// filtered by version (apps are single-platform, so there is no platform
-// filter). "total" aggregates all of the app's versions; "selected" is the
-// filtered subset (null when no filter is set). Dates are zero-filled across
-// the app's full download history so the two series always share the same x
-// axis.
-//
-// The driver stores created_at as RFC3339 text and reformats any date-like
-// string it scans, so day bucketing happens in Go on the parsed time.Time
-// (which GORM restores with the server's local location).
-func (s *Server) DownloadsTimeSeries(w http.ResponseWriter, r *http.Request) {
-	appID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		web.SendError(w, web.CodeBadRequest, "bad request")
-		return
-	}
+// filtered by version. "total" aggregates all versions; "selected" is the
+// filtered subset (null when no filter). Dates are zero-filled across the
+// app's full download history.
+func (s *Service) DownloadsTimeSeries(ctx context.Context, appID, versionID int64) (map[string]any, error) {
 	var app model.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
-		web.SendError(w, web.CodeNotFound, "应用不存在")
-		return
+		return nil, &Error{StatusNotFound, "应用不存在"}
 	}
-
-	versionID, _ := strconv.ParseInt(r.URL.Query().Get("version_id"), 10, 64)
-
-	// Each call starts a fresh query chain; GORM shares the statement across
-	// chained calls, so reusing one base would accumulate JOIN/WHERE clauses.
 	query := func(versionID int64) map[string]int {
 		q := s.DB.Table("download_logs l").
 			Joins("JOIN versions v ON v.id = l.version_id").
@@ -58,29 +39,25 @@ func (s *Server) DownloadsTimeSeries(w http.ResponseWriter, r *http.Request) {
 
 	total := query(0)
 	if total == nil {
-		web.SendError(w, web.CodeInternal, "查询失败")
-		return
+		return nil, &Error{StatusInternal, "查询失败"}
 	}
-
 	selected := map[string]int(nil)
 	if versionID != 0 {
 		selected = query(versionID)
 		if selected == nil {
-			web.SendError(w, web.CodeInternal, "查询失败")
-			return
+			return nil, &Error{StatusInternal, "查询失败"}
 		}
 	}
-
 	dates, totals, sels := buildDailySeries(total, selected)
-	web.SendJson(w, map[string]any{
+	return map[string]any{
 		"dates":    dates,
 		"total":    totals,
-		"selected": sels, // null when no version filter active
-	})
+		"selected": sels,
+	}, nil
 }
 
 // buildDailySeries zero-fills the map from its earliest to its latest day.
-// sel is nil when the chart should only show the total line.
+// sel is nil when only the total line should be shown.
 func buildDailySeries(total, sel map[string]int) (dates []string, totals, sels []int) {
 	if len(total) == 0 {
 		return []string{}, []int{}, nil

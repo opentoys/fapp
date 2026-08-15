@@ -1,4 +1,4 @@
-package server
+package controller
 
 import (
 	"encoding/json"
@@ -9,10 +9,10 @@ import (
 	"disapp/internal/resources/store/model"
 )
 
-func seedApp(t *testing.T, s *Server) *model.App {
+func seedApp(t *testing.T, s *Controller) *model.App {
 	t.Helper()
 	app := model.App{Name: "测试应用", Description: "desc", Published: true}
-	if err := s.DB.Create(&app).Error; err != nil {
+	if err := s.SVC.DB.Create(&app).Error; err != nil {
 		t.Fatal(err)
 	}
 	current := model.Version{
@@ -20,14 +20,14 @@ func seedApp(t *testing.T, s *Server) *model.App {
 		FileName: "app.apk", FileType: "apk", FileSize: 100,
 		StorageKey: "1/2/app.apk", StorageBackend: "local",
 	}
-	if err := s.DB.Create(&current).Error; err != nil {
+	if err := s.SVC.DB.Create(&current).Error; err != nil {
 		t.Fatal(err)
 	}
 	old := model.Version{
 		AppID: app.ID, VersionName: "0.9.0", VersionCode: 0,
 		FileName: "old.apk", FileType: "apk",
 	}
-	if err := s.DB.Create(&old).Error; err != nil {
+	if err := s.SVC.DB.Create(&old).Error; err != nil {
 		t.Fatal(err)
 	}
 	newer := model.Version{
@@ -35,11 +35,11 @@ func seedApp(t *testing.T, s *Server) *model.App {
 		FileName: "new.apk", FileType: "apk",
 		StorageKey: "1/4/new.apk", StorageBackend: "local",
 	}
-	if err := s.DB.Create(&newer).Error; err != nil {
+	if err := s.SVC.DB.Create(&newer).Error; err != nil {
 		t.Fatal(err)
 	}
 	// 1.0.0 is the current version; 0.9.0 and 2.0.0 stay hidden publicly.
-	s.DB.Model(&app).Update("current_version_id", current.ID)
+	s.SVC.DB.Model(&app).Update("current_version_id", current.ID)
 	return &app
 }
 
@@ -73,7 +73,7 @@ func TestPublicApps(t *testing.T) {
 func TestPublicAppsHideUnpublished(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
-	s.DB.Model(app).Update("published", false)
+	s.SVC.DB.Model(app).Update("published", false)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/apps", nil)
 	w := httptest.NewRecorder()
@@ -118,7 +118,7 @@ func TestPublicAppDetailShowsOnlyCurrent(t *testing.T) {
 func TestPublicAppUnpublishedNotFound(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
-	s.DB.Model(app).Update("published", false)
+	s.SVC.DB.Model(app).Update("published", false)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/apps/"+itoa(app.ID), nil)
 	req.SetPathValue("id", itoa(app.ID))
@@ -138,7 +138,7 @@ func TestPublicAppDetailNoCurrentVersion(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
 	// Remove the current version pointer; app stays published.
-	s.DB.Model(app).Update("current_version_id", 0)
+	s.SVC.DB.Model(app).Update("current_version_id", 0)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/apps/"+itoa(app.ID), nil)
 	req.SetPathValue("id", itoa(app.ID))

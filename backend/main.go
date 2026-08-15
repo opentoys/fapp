@@ -7,12 +7,14 @@ import (
 	"os"
 	"path/filepath"
 
+	"disapp/internal/controller"
 	"disapp/internal/resources/config"
+	"disapp/internal/router"
 	"disapp/internal/resources/storage"
 	"disapp/internal/resources/storage/cos"
 	"disapp/internal/resources/storage/local"
 	"disapp/internal/resources/store/db"
-	"disapp/internal/server"
+	"disapp/internal/service"
 	"disapp/static"
 )
 
@@ -64,14 +66,15 @@ func main() {
 		st = loc
 	}
 
-	srv := server.New(gdb, st, cfg)
+	svc := service.New(gdb, st, cfg)
+	ctrl := controller.New(svc)
 	// The embed.FS is rooted at the static package dir; re-root to "dist" so
 	// http.FileServerFS can find index.html at the FS root.
 	distRoot, err := fs.Sub(static.Dist, "dist")
 	if err != nil {
 		log.Fatalf("sub dist: %v", err)
 	}
-	handler := srv.Routes(distRoot)
+	handler := router.Routes(ctrl, distRoot)
 
 	log.Printf("app-dist listening on %s (storage: %s)", cfg.Server.Addr, cfg.Storage.Backend)
 	if err := http.ListenAndServe(cfg.Server.Addr, handler); err != nil {

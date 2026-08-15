@@ -36,8 +36,12 @@ CI pipelines.
 ```
 frontend/      Vue 3 + Vite + TS + Tailwind v4 + shadcn-vue
 backend/
-  cmd/server/  entry point: wires config/DB/storage/routes
-  internal/    server handlers · auth · config · db · model · storage · web (middleware/json)
+  main.go       entry point: wires config/DB/storage/service
+  internal/
+    controller/ HTTP handlers (thin: parse → service → JSON)
+    service/     business logic (DB/storage/validation)
+    router/      Routes + static files
+    resources/   config · store/{db,model} · storage/{local,cos}
   static/      embed.FS root — frontend dist is copied here at build time
 .github/workflows/release.yml   tag push → cross-compiled GitHub Release
 ```
@@ -66,7 +70,7 @@ management, API reference, and more.
 cd frontend && npm install && npm run build
 
 # Backend build + test
-cd backend && go build -o ../bin/disapp ./cmd/server && go test ./...
+cd backend && go build -o ../bin/disapp . && go test ./...
 
 # Wipe local DB (dev only)
 make reset
@@ -77,7 +81,7 @@ make reset
 Two terminals:
 
 ```bash
-cd backend && APP_CONFIG=../config.json go run ./cmd/server    # :8080
+cd backend && APP_CONFIG=../config.json go run .    # :8080
 cd frontend && npm run dev                                      # :5173 → proxy /api → :8080
 ```
 

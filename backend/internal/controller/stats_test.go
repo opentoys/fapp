@@ -1,4 +1,4 @@
-package server
+package controller
 
 import (
 	"encoding/json"
@@ -12,10 +12,10 @@ import (
 
 // seedDownloads creates an app with two versions and download logs spread
 // over a few days, returning the app and the two versions.
-func seedDownloads(t *testing.T, s *Server) (*model.App, *model.Version, *model.Version) {
+func seedDownloads(t *testing.T, s *Controller) (*model.App, *model.Version, *model.Version) {
 	t.Helper()
 	app := model.App{Name: "统计测试"}
-	if err := s.DB.Create(&app).Error; err != nil {
+	if err := s.SVC.DB.Create(&app).Error; err != nil {
 		t.Fatal(err)
 	}
 	android := model.Version{
@@ -26,10 +26,10 @@ func seedDownloads(t *testing.T, s *Server) (*model.App, *model.Version, *model.
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 1, Platform: "ios",
 		FileName: "a.ipa", FileType: "ipa",
 	}
-	if err := s.DB.Create(&android).Error; err != nil {
+	if err := s.SVC.DB.Create(&android).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DB.Create(&ios).Error; err != nil {
+	if err := s.SVC.DB.Create(&ios).Error; err != nil {
 		t.Fatal(err)
 	}
 
@@ -45,7 +45,7 @@ func seedDownloads(t *testing.T, s *Server) (*model.App, *model.Version, *model.
 		{VersionID: android.ID, CreatedAt: day(14)},
 	}
 	for i := range logs {
-		if err := s.DB.Create(&logs[i]).Error; err != nil {
+		if err := s.SVC.DB.Create(&logs[i]).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -97,7 +97,7 @@ func TestDownloadsTimeSeries(t *testing.T) {
 	// Empty app → empty series, selected null.
 	s2 := testServer(t)
 	empty := model.App{Name: "empty"}
-	s2.DB.Create(&empty)
+	s2.SVC.DB.Create(&empty)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/apps/"+itoa(empty.ID)+"/downloads", nil)
 	req.SetPathValue("id", itoa(empty.ID))
 	w := httptest.NewRecorder()

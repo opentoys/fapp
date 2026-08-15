@@ -1,4 +1,4 @@
-package server
+package controller
 
 import (
 	"bytes"
@@ -14,10 +14,10 @@ import (
 	"disapp/pkg/pwd"
 )
 
-func adminLogin(t *testing.T, s *Server) string {
+func adminLogin(t *testing.T, s *Controller) string {
 	t.Helper()
 	hash, salt := pwd.Hash("pass123")
-	s.DB.Create(&model.User{Username: "admin", PasswordHash: hash, Salt: salt})
+	s.SVC.DB.Create(&model.User{Username: "admin", PasswordHash: hash, Salt: salt})
 	body := bytes.NewBufferString(`{"username":"admin","password":"pass123"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", body)
 	w := httptest.NewRecorder()
@@ -52,12 +52,12 @@ func TestAdminCreateApp(t *testing.T) {
 	s.CreateApp(w, req)
 
 	var count int64
-	s.DB.Model(&model.App{}).Count(&count)
+	s.SVC.DB.Model(&model.App{}).Count(&count)
 	if count != 1 {
 		t.Fatalf("apps = %d", count)
 	}
 	var app model.App
-	s.DB.First(&app)
+	s.SVC.DB.First(&app)
 	if app.Platform != "android" {
 		t.Fatalf("platform = %q", app.Platform)
 	}
@@ -156,15 +156,15 @@ func TestAdminAppDetailIncludesDrafts(t *testing.T) {
 func TestSetCurrentVersion(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a", Platform: "android"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 	other := model.App{Name: "b", Platform: "android"}
-	s.DB.Create(&other)
+	s.SVC.DB.Create(&other)
 	v1 := model.Version{AppID: app.ID, VersionName: "1.0.0"}
 	v2 := model.Version{AppID: app.ID, VersionName: "2.0.0"}
-	s.DB.Create(&v1)
-	s.DB.Create(&v2)
+	s.SVC.DB.Create(&v1)
+	s.SVC.DB.Create(&v2)
 	foreign := model.Version{AppID: other.ID, VersionName: "1.0.0"}
-	s.DB.Create(&foreign)
+	s.SVC.DB.Create(&foreign)
 
 	set := func(id, body string) int {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/apps/"+id+"/current", strings.NewReader(body))
@@ -182,7 +182,7 @@ func TestSetCurrentVersion(t *testing.T) {
 		t.Fatalf("set current failed: %d", code)
 	}
 	var reload model.App
-	s.DB.First(&reload, app.ID)
+	s.SVC.DB.First(&reload, app.ID)
 	if reload.CurrentVersionID != v1.ID {
 		t.Fatalf("current_version_id = %d", reload.CurrentVersionID)
 	}
@@ -191,7 +191,7 @@ func TestSetCurrentVersion(t *testing.T) {
 	if code := set(itoa(app.ID), `{"version_id":`+itoa(v2.ID)+`}`); code != 0 {
 		t.Fatalf("switch current failed: %d", code)
 	}
-	s.DB.First(&reload, app.ID)
+	s.SVC.DB.First(&reload, app.ID)
 	if reload.CurrentVersionID != v2.ID {
 		t.Fatalf("current_version_id after switch = %d", reload.CurrentVersionID)
 	}
@@ -209,12 +209,12 @@ func TestSetCurrentVersion(t *testing.T) {
 func TestUpdateAppPublished(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	pub := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"published":true}`))
 	pub.SetPathValue("id", itoa(app.ID))
 	s.UpdateApp(httptest.NewRecorder(), pub)
-	s.DB.First(&app, app.ID)
+	s.SVC.DB.First(&app, app.ID)
 	if !app.Published {
 		t.Fatal("app should be published")
 	}
@@ -222,7 +222,7 @@ func TestUpdateAppPublished(t *testing.T) {
 	down := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"published":false}`))
 	down.SetPathValue("id", itoa(app.ID))
 	s.UpdateApp(httptest.NewRecorder(), down)
-	s.DB.First(&app, app.ID)
+	s.SVC.DB.First(&app, app.ID)
 	if app.Published {
 		t.Fatal("app should be unpublished")
 	}
@@ -242,7 +242,7 @@ func TestAdminAppsListAndDelete(t *testing.T) {
 	s := testServer(t)
 	token := adminLogin(t, s)
 	app := model.App{Name: "a"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	req := authReq(http.MethodGet, "/api/v1/admin/apps", token, nil)
 	rec := httptest.NewRecorder()
@@ -263,7 +263,7 @@ func TestAdminAppsListAndDelete(t *testing.T) {
 	delRec := httptest.NewRecorder()
 	s.DeleteApp(delRec, delReq)
 	var count int64
-	s.DB.Model(&model.App{}).Count(&count)
+	s.SVC.DB.Model(&model.App{}).Count(&count)
 	if count != 0 {
 		t.Fatalf("apps after delete = %d", count)
 	}
@@ -272,7 +272,7 @@ func TestAdminAppsListAndDelete(t *testing.T) {
 func TestAdminUploadAppIcon(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -302,7 +302,7 @@ func TestAdminUploadAppIcon(t *testing.T) {
 
 	// Bytes stored at the exposed key.
 	key := strings.TrimPrefix(res.Data.Icon, "/api/v1/files/")
-	rc, err := s.Storage.Open(nil, key)
+	rc, err := s.SVC.Storage.Open(nil, key)
 	if err != nil {
 		t.Fatalf("icon not stored: %v", err)
 	}
@@ -316,7 +316,7 @@ func TestAdminUploadAppIcon(t *testing.T) {
 	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/apps/"+itoa(app.ID), nil)
 	delReq.SetPathValue("id", itoa(app.ID))
 	s.DeleteApp(httptest.NewRecorder(), delReq)
-	if _, err := s.Storage.Open(nil, key); err == nil {
+	if _, err := s.SVC.Storage.Open(nil, key); err == nil {
 		t.Fatal("icon file should be deleted with the app")
 	}
 }
@@ -324,7 +324,7 @@ func TestAdminUploadAppIcon(t *testing.T) {
 func TestUpdateAppAccessPassword(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	// Set password scope; the credential must be hashed and stored.
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"access_mode":"password","password":"secret"}`))
@@ -339,7 +339,7 @@ func TestUpdateAppAccessPassword(t *testing.T) {
 		t.Fatalf("res = %s", w.Body.String())
 	}
 	var reload model.App
-	s.DB.First(&reload, app.ID)
+	s.SVC.DB.First(&reload, app.ID)
 	if reload.AccessMode != model.AccessPassword || reload.PasswordHash == "" {
 		t.Fatalf("reload = %+v", reload)
 	}
@@ -348,7 +348,7 @@ func TestUpdateAppAccessPassword(t *testing.T) {
 	req2 := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"access_mode":"public"}`))
 	req2.SetPathValue("id", itoa(app.ID))
 	s.UpdateApp(httptest.NewRecorder(), req2)
-	s.DB.First(&reload, app.ID)
+	s.SVC.DB.First(&reload, app.ID)
 	if reload.AccessMode != model.AccessPublic || reload.PasswordHash != "" || reload.Salt != "" {
 		t.Fatalf("reload after public = %+v", reload)
 	}
@@ -357,7 +357,7 @@ func TestUpdateAppAccessPassword(t *testing.T) {
 func TestAdminScreenshotUploadAndDelete(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	// Upload a screenshot.
 	var buf bytes.Buffer
@@ -382,7 +382,7 @@ func TestAdminScreenshotUploadAndDelete(t *testing.T) {
 	}
 	url := res.Data.Screenshots[0]
 	key := strings.TrimPrefix(url, "/api/v1/files/")
-	if rc, err := s.Storage.Open(nil, key); err != nil {
+	if rc, err := s.SVC.Storage.Open(nil, key); err != nil {
 		t.Fatalf("screenshot not stored: %v", err)
 	} else {
 		got, _ := io.ReadAll(rc)
@@ -396,7 +396,7 @@ func TestAdminScreenshotUploadAndDelete(t *testing.T) {
 	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/apps/"+itoa(app.ID), nil)
 	delReq.SetPathValue("id", itoa(app.ID))
 	s.DeleteApp(httptest.NewRecorder(), delReq)
-	if _, err := s.Storage.Open(nil, key); err == nil {
+	if _, err := s.SVC.Storage.Open(nil, key); err == nil {
 		t.Fatal("screenshot file should be deleted with the app")
 	}
 }
@@ -404,7 +404,7 @@ func TestAdminScreenshotUploadAndDelete(t *testing.T) {
 func TestAdminDeleteAppScreenshot(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	// Upload two, delete one.
 	urls := []string{}
@@ -449,7 +449,7 @@ func TestAdminDeleteAppScreenshot(t *testing.T) {
 	if res.Code != 0 || len(res.Data.Screenshots) != 1 || res.Data.Screenshots[0] != urls[1] {
 		t.Fatalf("res = %s", w.Body.String())
 	}
-	if _, err := s.Storage.Open(nil, strings.TrimPrefix(urls[0], "/api/v1/files/")); err == nil {
+	if _, err := s.SVC.Storage.Open(nil, strings.TrimPrefix(urls[0], "/api/v1/files/")); err == nil {
 		t.Fatal("deleted screenshot file should be gone")
 	}
 }
@@ -457,7 +457,7 @@ func TestAdminDeleteAppScreenshot(t *testing.T) {
 func TestAdminUploadAppIconRejectsNonImage(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)

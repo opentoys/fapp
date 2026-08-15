@@ -6,7 +6,7 @@ frontend:
 build: frontend
 	rm -rf backend/static/dist
 	cp -r frontend/dist backend/static/dist
-	cd backend && go build -o ../bin/disapp ./cmd/server
+	cd backend && go build -o ../bin/disapp .
 
 run: build
 	./bin/disapp
@@ -25,4 +25,4 @@ dev-fe:
 	cd frontend && npm run dev
 
 dev-api:
-	cd backend && APP_CONFIG=../config.json go run ./cmd/server
+	cd backend && APP_CONFIG=../config.json go run .

@@ -1,4 +1,4 @@
-package server
+package controller
 
 import (
 	"bytes"
@@ -43,7 +43,7 @@ func uploadVersionReq(t *testing.T, fields map[string]string, filename string, d
 func TestUploadVersion(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a", Platform: "android"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -83,14 +83,14 @@ func TestUploadVersion(t *testing.T) {
 	}
 
 	var v model.Version
-	s.DB.Last(&v)
+	s.SVC.DB.Last(&v)
 	// The version's platform is forced from the app (single-platform apps),
 	// regardless of any platform value the client sends.
 	if v.ReleaseType != "production" || v.Platform != "android" || v.Arch != "arm64,x86_64" {
 		t.Fatalf("release_type/platform/arch not stored: %+v", v)
 	}
 	// Verify file was actually written to local storage
-	rc, err := s.Storage.Open(nil, itoa(app.ID)+"/"+itoa(v.ID)+"/app.apk")
+	rc, err := s.SVC.Storage.Open(nil, itoa(app.ID)+"/"+itoa(v.ID)+"/app.apk")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestUploadVersion(t *testing.T) {
 func TestUploadVersionForcesAppPlatform(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a", Platform: "ios"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	// Client sends a conflicting platform; the server must ignore it and use
 	// the app's platform.
@@ -117,7 +117,7 @@ func TestUploadVersionForcesAppPlatform(t *testing.T) {
 	s.UploadVersion(w, req)
 
 	var v model.Version
-	s.DB.Last(&v)
+	s.SVC.DB.Last(&v)
 	if v.Platform != "ios" {
 		t.Fatalf("platform = %q, want ios", v.Platform)
 	}
@@ -126,7 +126,7 @@ func TestUploadVersionForcesAppPlatform(t *testing.T) {
 func TestUploadVersionIgnoresAccessFields(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -154,7 +154,7 @@ func TestUploadVersionIgnoresAccessFields(t *testing.T) {
 
 	// Access fields from the multipart body must be ignored; the access
 	// scope is configured at the app level, never per version.
-	s.DB.First(&app, app.ID)
+	s.SVC.DB.First(&app, app.ID)
 	if app.AccessMode != "" {
 		t.Fatalf("upload must not touch app access, got %+v", app)
 	}
@@ -165,7 +165,7 @@ func TestUploadVersionIgnoresAccessFields(t *testing.T) {
 func TestUploadVersionLocksAppidOnFirstUpload(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a", Platform: "android"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	req := uploadVersionReq(t, map[string]string{
 		"app_id":       itoa(app.ID),
@@ -174,7 +174,7 @@ func TestUploadVersionLocksAppidOnFirstUpload(t *testing.T) {
 	}, "app.apk", []byte("apk"))
 	s.UploadVersion(httptest.NewRecorder(), req)
 
-	s.DB.First(&app, app.ID)
+	s.SVC.DB.First(&app, app.ID)
 	if app.PackageName == nil || *app.PackageName != "com.example.app" {
 		t.Fatalf("appid not locked: %v", app.PackageName)
 	}
@@ -185,7 +185,7 @@ func TestUploadVersionRejectsMismatchedAppid(t *testing.T) {
 	s := testServer(t)
 	pkg := "com.example.app"
 	app := model.App{Name: "a", Platform: "android", PackageName: &pkg}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	upload := func(extra map[string]string) int {
 		fields := map[string]string{"app_id": itoa(app.ID), "version_name": "1.0.0"}
@@ -218,9 +218,9 @@ func TestUploadVersionRejectsMismatchedAppid(t *testing.T) {
 func TestUploadVersionLockRespectsUnique(t *testing.T) {
 	s := testServer(t)
 	app1 := model.App{Name: "a", Platform: "android"}
-	s.DB.Create(&app1)
+	s.SVC.DB.Create(&app1)
 	app2 := model.App{Name: "b", Platform: "android"}
-	s.DB.Create(&app2)
+	s.SVC.DB.Create(&app2)
 
 	upload := func(appID int64, pkg string) int {
 		fields := map[string]string{"app_id": itoa(appID), "version_name": "1.0.0"}
@@ -251,7 +251,7 @@ func TestUploadVersionLockRespectsUnique(t *testing.T) {
 func TestUpdateAppNormalizesExpiryTZ(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	// The client sends an absolute instant in UTC; the server should store it
 	// with the server's default timezone offset (not UTC) so the frontend shows
@@ -266,7 +266,7 @@ func TestUpdateAppNormalizesExpiryTZ(t *testing.T) {
 	}
 
 	var reload model.App
-	s.DB.First(&reload, app.ID)
+	s.SVC.DB.First(&reload, app.ID)
 	if reload.AccessMode != model.AccessExpiry || reload.ExpiresAt == nil {
 		t.Fatalf("reload = %+v", reload)
 	}
@@ -289,19 +289,19 @@ func TestDeleteVersion(t *testing.T) {
 		AppID: 1, VersionName: "1.0", VersionCode: 1,
 		StorageKey: "1/2/a.apk",
 	}
-	s.DB.Create(&v)
-	s.Storage.Save(nil, "1/2/a.apk", strings.NewReader("x"))
+	s.SVC.DB.Create(&v)
+	s.SVC.Storage.Save(nil, "1/2/a.apk", strings.NewReader("x"))
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/versions/"+itoa(v.ID)+"?delete_file=true", nil)
 	req.SetPathValue("id", itoa(v.ID))
 	w := httptest.NewRecorder()
 	s.DeleteVersion(w, req)
 	var count int64
-	s.DB.Model(&model.Version{}).Count(&count)
+	s.SVC.DB.Model(&model.Version{}).Count(&count)
 	if count != 0 {
 		t.Fatalf("versions = %d", count)
 	}
-	if _, err := s.Storage.Open(nil, "1/2/a.apk"); err == nil {
+	if _, err := s.SVC.Storage.Open(nil, "1/2/a.apk"); err == nil {
 		t.Fatal("file should be deleted")
 	}
 }
@@ -309,7 +309,7 @@ func TestDeleteVersion(t *testing.T) {
 func TestUploadVersionMetadata(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	// The browser sends parsed package/app_name as fields and the icon as a
 	// separate multipart file (always PNG). The handler just stores them.
@@ -356,7 +356,7 @@ func TestUploadVersionMetadata(t *testing.T) {
 
 	// Icon bytes must be stored at the exposed key.
 	key := strings.TrimPrefix(res.Data.IconURL, "/api/v1/files/")
-	rc, err := s.Storage.Open(nil, key)
+	rc, err := s.SVC.Storage.Open(nil, key)
 	if err != nil {
 		t.Fatalf("icon not stored: %v", err)
 	}
@@ -368,7 +368,7 @@ func TestUploadVersionMetadata(t *testing.T) {
 
 	// DB row persists the fields.
 	var v model.Version
-	s.DB.First(&v, res.Data.ID)
+	s.SVC.DB.First(&v, res.Data.ID)
 	if v.PackageName != "com.test.app" || v.AppName != "Test App" || v.IconURL != res.Data.IconURL {
 		t.Fatalf("db row = %+v", v)
 	}
@@ -377,7 +377,7 @@ func TestUploadVersionMetadata(t *testing.T) {
 func TestUploadVersionWithoutIcon(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	// No icon part -> upload succeeds with an empty icon_url.
 	req := uploadVersionReq(t, map[string]string{
@@ -405,7 +405,7 @@ func TestUploadVersionWithoutIcon(t *testing.T) {
 func TestUploadVersionRequiresVersionName(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
-	s.DB.Create(&app)
+	s.SVC.DB.Create(&app)
 
 	req := uploadVersionReq(t, map[string]string{"app_id": itoa(app.ID)}, "app.apk", []byte("apk"))
 	w := httptest.NewRecorder()
@@ -425,8 +425,8 @@ func TestVersionStats(t *testing.T) {
 		AppID: 1, VersionName: "1.0", VersionCode: 1,
 		StorageKey: "1/2/a.apk", DownloadCount: 3, InstallCount: 1,
 	}
-	s.DB.Create(&v)
-	s.DB.Create(&model.DownloadLog{VersionID: v.ID, IP: "1.2.3.4", UserAgent: "curl"})
+	s.SVC.DB.Create(&v)
+	s.SVC.DB.Create(&model.DownloadLog{VersionID: v.ID, IP: "1.2.3.4", UserAgent: "curl"})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/versions/"+itoa(v.ID)+"/stats", nil)
 	req.SetPathValue("id", itoa(v.ID))

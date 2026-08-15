@@ -28,8 +28,12 @@
 ```
 frontend/      Vue 3 + Vite + TS + Tailwind v4 + shadcn-vue
 backend/
-  cmd/server/  入口：组装 config/DB/storage/routes
-  internal/    server 处理器 · auth · config · db · model · storage · web（中间件/json）
+  main.go       入口：组装 config/DB/storage/service
+  internal/
+    controller/ HTTP 处理器（薄：解析 → 调 service → 写 JSON）
+    service/     业务逻辑（DB/存储/校验）
+    router/      Routes + 静态文件
+    resources/   config · store/{db,model} · storage/{local,cos}
   static/      embed.FS 根 —— 构建时把前端 dist 拷贝到此
 .github/workflows/release.yml   tag 推送 → 跨平台编译并发布 GitHub Release
 ```
@@ -57,7 +61,7 @@ API Key 管理：
 cd frontend && npm install && npm run build
 
 # 后端构建 + 测试
-cd backend && go build -o ../bin/disapp ./cmd/server && go test ./...
+cd backend && go build -o ../bin/disapp . && go test ./...
 
 # 重置本地数据库（仅开发）
 make reset
@@ -68,7 +72,7 @@ make reset
 两个终端：
 
 ```bash
-cd backend && APP_CONFIG=../config.json go run ./cmd/server    # :8080
+cd backend && APP_CONFIG=../config.json go run .    # :8080
 cd frontend && npm run dev                                      # :5173 → 代理 /api → :8080
 ```
 

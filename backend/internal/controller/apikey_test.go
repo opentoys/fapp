@@ -1,4 +1,4 @@
-package server
+package controller
 
 import (
 	"bytes"
@@ -10,19 +10,20 @@ import (
 	"time"
 
 	"disapp/internal/resources/store/model"
+	"disapp/internal/service"
 )
 
 // seedMember binds userID to appID in app_members.
-func seedMember(t *testing.T, s *Server, userID, appID int64) {
+func seedMember(t *testing.T, s *Controller, userID, appID int64) {
 	t.Helper()
-	if err := s.DB.Create(&model.AppMember{UserID: userID, AppID: appID}).Error; err != nil {
+	if err := s.SVC.DB.Create(&model.AppMember{UserID: userID, AppID: appID}).Error; err != nil {
 		t.Fatal(err)
 	}
 }
 
 // callKeys invokes a key-management handler behind RequireAuth (the real
 // middleware that fills the user context) and returns the JSON body.
-func callKeys(t *testing.T, s *Server, h http.HandlerFunc, method, path, token string, body []byte) (int, []byte) {
+func callKeys(t *testing.T, s *Controller, h http.HandlerFunc, method, path, token string, body []byte) (int, []byte) {
 	t.Helper()
 	req := authReq(method, path, token, body)
 	// Last path segment is the {id} param for PUT/DELETE routes.
@@ -35,10 +36,10 @@ func callKeys(t *testing.T, s *Server, h http.HandlerFunc, method, path, token s
 }
 
 // makeKey creates a key directly in DB (helper) and returns plain text.
-func makeKey(t *testing.T, s *Server, name, scope string, uid int64) string {
+func makeKey(t *testing.T, s *Controller, name, scope string, uid int64) string {
 	t.Helper()
 	k := model.ApiKey{Name: name, Key: "dk_" + name, UserID: uid, Scope: scope}
-	if err := s.DB.Create(&k).Error; err != nil {
+	if err := s.SVC.DB.Create(&k).Error; err != nil {
 		t.Fatal(err)
 	}
 	return k.Key
@@ -64,8 +65,8 @@ func TestCreateKeyValidatesScopeAndReturnsPlaintext(t *testing.T) {
 	if res.Code != 0 || res.Data.Key == "" || len(res.Data.Key) < 10 {
 		t.Fatalf("res=%s", body)
 	}
-	if !bytes.HasPrefix([]byte(res.Data.Key), []byte(keyPrefix)) {
-		t.Fatalf("key must start with %s, got %q", keyPrefix, res.Data.Key)
+	if !bytes.HasPrefix([]byte(res.Data.Key), []byte(service.KeyPrefix)) {
+		t.Fatalf("key must start with %s, got %q", service.KeyPrefix, res.Data.Key)
 	}
 
 	// Invalid scope rejected.
@@ -84,7 +85,7 @@ func TestKeysVisibility(t *testing.T) {
 	s := testServer(t)
 	admin := adminLogin(t, s) // adminLogin creates a DB user "admin"
 	var u model.User
-	s.DB.Where("username = ?", "admin").First(&u)
+	s.SVC.DB.Where("username = ?", "admin").First(&u)
 
 	makeKey(t, s, "k1", model.KeyScopeRun, u.ID)
 	makeKey(t, s, "k2", model.KeyScopeRead, 999) // other user
@@ -107,13 +108,13 @@ func TestKeyOwnershipEdit(t *testing.T) {
 	s := testServer(t)
 	admin := adminLogin(t, s)
 	var u model.User
-	s.DB.Where("username = ?", "admin").First(&u)
+	s.SVC.DB.Where("username = ?", "admin").First(&u)
 
 	k := model.ApiKey{Name: "ci", Key: "dk_ci", UserID: u.ID, Scope: model.KeyScopeRun}
-	s.DB.Create(&k)
+	s.SVC.DB.Create(&k)
 	// Other user's key.
 	other := model.ApiKey{Name: "other", Key: "dk_other", UserID: 555, Scope: model.KeyScopeRun}
-	s.DB.Create(&other)
+	s.SVC.DB.Create(&other)
 
 	// Owner edits own key.
 	code, body := callKeys(t, s, s.UpdateKey, http.MethodPut, "/api/v1/admin/keys/"+itoa(k.ID), admin,
@@ -139,7 +140,7 @@ func TestKeyOwnershipEdit(t *testing.T) {
 func TestKeyApiScopeGating(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
-	readKey := makeKey(t, s, "read", model.KeyScopeRead, SuperAdminUID)
+	readKey := makeKey(t, s, "read", model.KeyScopeRead, service.SuperAdminUID)
 
 	// Super-admin can manage everything; read-scope key cannot write.
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/keys/"+itoa(app.ID)+"/current?apikey="+readKey,
@@ -178,8 +179,8 @@ func TestKeyApiExpiredHashed(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
 	past := time.Now().Add(-time.Hour)
-	k := model.ApiKey{Name: "old", Key: "dk_old", UserID: SuperAdminUID, Scope: model.KeyScopeRun, ExpiresAt: &past}
-	s.DB.Create(&k)
+	k := model.ApiKey{Name: "old", Key: "dk_old", UserID: service.SuperAdminUID, Scope: model.KeyScopeRun, ExpiresAt: &past}
+	s.SVC.DB.Create(&k)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/keys/"+itoa(app.ID)+"/current?apikey=dk_old", nil)
 	req.SetPathValue("app_id", itoa(app.ID))
@@ -197,12 +198,12 @@ func TestKeyApiExpiredHashed(t *testing.T) {
 func TestKeyApiSetCurrentAndTouch(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
-	runKey := makeKey(t, s, "run", model.KeyScopeRun, SuperAdminUID)
+	runKey := makeKey(t, s, "run", model.KeyScopeRun, service.SuperAdminUID)
 	var k model.ApiKey
-	s.DB.Where("key = ?", runKey).First(&k)
+	s.SVC.DB.Where("key = ?", runKey).First(&k)
 
 	v := model.Version{AppID: app.ID, VersionName: "1.0.0", VersionCode: 1, FileName: "a.apk", FileType: "apk", StorageKey: "1/2/a.apk"}
-	s.DB.Create(&v)
+	s.SVC.DB.Create(&v)
 
 	body := `{"version_id":` + itoa(v.ID) + `}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/keys/"+itoa(app.ID)+"/current?apikey="+runKey, bytes.NewBufferString(body))
@@ -218,11 +219,11 @@ func TestKeyApiSetCurrentAndTouch(t *testing.T) {
 	}
 
 	var reload model.App
-	s.DB.First(&reload, app.ID)
+	s.SVC.DB.First(&reload, app.ID)
 	if reload.CurrentVersionID != v.ID {
 		t.Fatalf("current_version_id = %d", reload.CurrentVersionID)
 	}
-	s.DB.First(&k, k.ID)
+	s.SVC.DB.First(&k, k.ID)
 	if k.LastUsedAt == nil {
 		t.Fatal("last_used_at should be touched")
 	}
@@ -231,7 +232,7 @@ func TestKeyApiSetCurrentAndTouch(t *testing.T) {
 func TestKeyApiVersionsList(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
-	runKey := makeKey(t, s, "run", model.KeyScopeRun, SuperAdminUID)
+	runKey := makeKey(t, s, "run", model.KeyScopeRun, service.SuperAdminUID)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/keys/"+itoa(app.ID)+"/versions?apikey="+runKey, nil)
 	req.SetPathValue("app_id", itoa(app.ID))

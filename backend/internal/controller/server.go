@@ -1,24 +1,20 @@
-package server
+package controller
 
 import (
 	"context"
 	"net/http"
 
+	"disapp/internal/service"
 	"disapp/pkg/token"
-	"disapp/internal/resources/config"
-	"disapp/internal/resources/storage"
-
-	"gorm.io/gorm"
 )
 
-type Server struct {
-	DB      *gorm.DB
-	Storage storage.Storage
-	Config  config.Config
+// Controller holds HTTP handlers. Business logic lives in Service.
+type Controller struct {
+	SVC *service.Service
 }
 
-func New(gdb *gorm.DB, st storage.Storage, cfg config.Config) *Server {
-	return &Server{DB: gdb, Storage: st, Config: cfg}
+func New(svc *service.Service) *Controller {
+	return &Controller{SVC: svc}
 }
 
 type ctxKey int
