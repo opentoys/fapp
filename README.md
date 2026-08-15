@@ -34,7 +34,7 @@ backend/
     service/     业务逻辑（DB/存储/校验）
     router/      Routes + 静态文件
     resources/   config · store/{db,model} · storage/{local,cos}
-  static/      embed.FS 根 —— 构建时把前端 dist 拷贝到此
+  static/      可选 —— 加 `-tags dist` 才内嵌前端 dist
 .github/workflows/release.yml   tag 推送 → 跨平台编译并发布 GitHub Release
 ```
 
@@ -60,7 +60,7 @@ API Key 管理：
 # 前端构建
 cd frontend && npm install && npm run build
 
-# 后端构建 + 测试
+# 后端构建 + 测试（默认不内嵌前端；`-tags dist` 才内嵌）
 cd backend && go build -o ../bin/disapp . && go test ./...
 
 # 重置本地数据库（仅开发）

@@ -1,6 +1,7 @@
 package static
 
-import "embed"
+import "io/fs"
 
-//go:embed all:dist
-var Dist embed.FS
+// Dist holds the embedded frontend build when compiled with `-tags dist`,
+// otherwise nil (dev/API-only binaries serve no static files).
+var Dist fs.FS

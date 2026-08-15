@@ -42,7 +42,7 @@ backend/
     service/     business logic (DB/storage/validation)
     router/      Routes + static files
     resources/   config · store/{db,model} · storage/{local,cos}
-  static/      embed.FS root — frontend dist is copied here at build time
+  static/      optional — frontend dist embedded only with `-tags dist`
 .github/workflows/release.yml   tag push → cross-compiled GitHub Release
 ```
 
@@ -69,7 +69,7 @@ management, API reference, and more.
 # Frontend type-check + build
 cd frontend && npm install && npm run build
 
-# Backend build + test
+# Backend build + test (default: no embedded frontend; use -tags dist to embed)
 cd backend && go build -o ../bin/disapp . && go test ./...
 
 # Wipe local DB (dev only)

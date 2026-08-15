@@ -19,8 +19,11 @@ for the integrated binary.
 # Frontend type-check + build
 cd frontend && npm run build
 
-# Backend build + test
+# Backend build + test (default build has NO embedded frontend)
 cd backend && go build -o bin/disapp . && go test ./...
+
+# Build with embedded frontend dist
+cd backend && go build -tags dist -o bin/disapp .
 
 # Wipe local DB (dev only)
 make reset

@@ -6,8 +6,11 @@ GORM + SQLite, JWT auth (golang-jwt/jwt/v5).
 ## Commands
 
 ```bash
-# Build (from backend/)
+# Build (from backend/). Default: no embedded frontend dist.
 go build -o bin/disapp .
+
+# Build with the frontend dist embedded (requires frontend/dist at static/dist)
+go build -tags dist -o bin/disapp .
 
 # Run with config
 APP_CONFIG=../config.json go run .
@@ -31,7 +34,7 @@ internal/resources/   config loader · store/{db,model} · storage/{local,cos}
 pkg/web/              JSON response helpers + middleware (recoverer, logger, rate limit)
 pkg/token/            JWT create/parse
 pkg/pwd/              sha256 hash/salt
-static/               embed.FS root — frontend dist is copied here by `make build`
+static/               Optional embed: static/dist is baked in only with `-tags dist`
 ```
 
 ## Key conventions
