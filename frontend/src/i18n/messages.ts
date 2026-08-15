@@ -110,6 +110,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'adminApp.setCurrentVersion': 'Set as current',
     'adminApp.currentVersionSaved': 'Set as current version',
     'adminApp.versionsEmpty': 'No versions yet.',
+    'adminApp.appid': 'App ID',
+    'adminApp.appidUnlocked': 'Locked on first version upload',
     'adminApp.downloadLink': 'Download link',
     'adminApp.copyLink': 'Copy link',
     'adminApp.linkCopied': 'Link copied',
@@ -177,6 +179,9 @@ export const messages: Record<Locale, Record<string, string>> = {
     'upload.parseHint': 'Version, app name, icon and platform are parsed automatically from the package on file select; you can edit them before uploading.',
     'upload.parsing': 'Parsing package…',
     'upload.parseFailed': 'Failed to parse the package. Fill in the version fields manually.',
+    'upload.appid': 'App ID',
+    'upload.appidUnlocked': 'Locked on first version upload',
+    'upload.appidMismatch': 'The package appid does not match this app.',
 
     // Release type / platform
     'release.production': 'Production',
@@ -304,6 +309,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'adminApp.setCurrentVersion': '设为当前版本',
     'adminApp.currentVersionSaved': '已设为当前版本',
     'adminApp.versionsEmpty': '暂无版本。',
+    'adminApp.appid': 'appid',
+    'adminApp.appidUnlocked': '上传首个版本后锁定',
     'adminApp.downloadLink': '下载链接',
     'adminApp.copyLink': '复制链接',
     'adminApp.linkCopied': '链接已复制',
@@ -371,6 +378,9 @@ export const messages: Record<Locale, Record<string, string>> = {
     'upload.parseHint': '选择安装包后会自动解析版本号、应用名、图标和平台，上传前可手动修改。',
     'upload.parsing': '正在解析安装包…',
     'upload.parseFailed': '解析安装包失败，请手动填写版本信息。',
+    'upload.appid': 'appid',
+    'upload.appidUnlocked': '上传首个版本后锁定',
+    'upload.appidMismatch': '安装包 appid 与该应用不一致。',
 
     // Release type / platform
     'release.production': '正式',

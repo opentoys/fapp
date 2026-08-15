@@ -456,6 +456,13 @@ function fmtSize(n: number): string {
               <Label for="info-name">{{ t('admin.appName') }}</Label>
               <Input id="info-name" v-model="infoName" />
             </div>
+            <div class="grid gap-1">
+              <Label>{{ t('adminApp.appid') }}</Label>
+              <div class="text-sm">
+                <code v-if="data?.app.package_name" class="text-xs">{{ data?.app.package_name }}</code>
+                <span v-else class="text-muted-foreground text-xs">{{ t('adminApp.appidUnlocked') }}</span>
+              </div>
+            </div>
             <div class="grid gap-2">
               <Label for="info-description">{{ t('adminApp.appDescription') }}</Label>
               <Textarea id="info-description" v-model="infoDescription" rows="2" />
