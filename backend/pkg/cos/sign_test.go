@@ -2,11 +2,27 @@ package cos
 
 import (
 	"context"
+	"crypto/sha1"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 )
+
+// TestPresignURLGolden locks the httpString layout (method\npath\nquery\nheaders\n)
+// against a known COS string-to-sign hash. The hash must equal the value COS
+// itself reported when it rejected the old malformed signature.
+func TestPresignURLGolden(t *testing.T) {
+	// Locks the httpString layout (method\npath\nquery\nheaders\n) against a
+	// known COS string-to-sign hash. The hash must equal the value COS itself
+	// reported when it rejected the old malformed signature.
+	seg := "/7/0/1786846530268470000-tvbox.apk"
+	http := "put\n" + seg + "\n\n\n"
+	if got := fmt.Sprintf("%x", sha1.Sum([]byte(http))); got != "5d8723c495fee093b6365a78da70b2fa963448d4" {
+		t.Fatalf("httpString sha1 = %s", got)
+	}
+}
 
 func TestPresignURLShape(t *testing.T) {
 	c := &client{
@@ -14,7 +30,7 @@ func TestPresignURLShape(t *testing.T) {
 		secretKey: "SECRET",
 		baseURL:   "https://test-1250000000.cos.ap-guangzhou.myqcloud.com",
 	}
-	u, err := c.presignURL(context.Background(), "put", "exampleobject", nil, time.Hour)
+	u, err := c.presignURL(context.Background(), "put", "exampleobject", nil, time.Hour, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,9 +59,35 @@ func TestPresignURLShape(t *testing.T) {
 	}
 }
 
+func TestPresignURLAddsSessionToken(t *testing.T) {
+	c := &client{secretID: "AKID", secretKey: "SECRET", baseURL: "https://b.cos.region.myqcloud.com"}
+	u, _ := c.presignURL(context.Background(), "put", "1/0/a.apk", nil, time.Hour,
+		&stsCredentials{secretID: "tmpAK", secretKey: "tmpSK", sessionToken: "v4/sessionfoo"})
+	q, _ := url.ParseQuery(u.RawQuery)
+	if got := q.Get("x-cos-security-token"); got != "v4/sessionfoo" {
+		t.Fatalf("token = %q", got)
+	}
+	if got := q.Get("q-ak"); got != "tmpAK" {
+		t.Fatalf("q-ak = %q (must be the temp id)", got)
+	}
+	// The token is a signed (non-q-*) param: it must appear in q-url-param-list.
+	if !strings.Contains(q.Get("q-url-param-list"), "x-cos-security-token") {
+		t.Fatalf("token not in param list: %q", q.Get("q-url-param-list"))
+	}
+}
+
+func TestPresignURLNoTokenByDefault(t *testing.T) {
+	c := &client{secretID: "AKID", secretKey: "SECRET", baseURL: "https://b.cos.region.myqcloud.com"}
+	u, _ := c.presignURL(context.Background(), "put", "1/0/a.apk", nil, time.Hour, nil)
+	q, _ := url.ParseQuery(u.RawQuery)
+	if _, ok := q["x-cos-security-token"]; ok {
+		t.Fatal("token present without session credentials")
+	}
+}
+
 func TestPresignURLEncodesPathSegments(t *testing.T) {
 	c := &client{secretID: "AKID", secretKey: "SECRET", baseURL: "https://b.cos.region.myqcloud.com"}
-	u, _ := c.presignURL(context.Background(), "get", "1/0/a b.png", nil, time.Hour)
+	u, _ := c.presignURL(context.Background(), "get", "1/0/a b.png", nil, time.Hour, nil)
 	if u.Path != "/1/0/a%20b.png" {
 		t.Fatalf("path = %q", u.Path)
 	}
@@ -54,7 +96,7 @@ func TestPresignURLEncodesPathSegments(t *testing.T) {
 func TestPresignURLCoversExtraParams(t *testing.T) {
 	c := &client{secretID: "AKID", secretKey: "SECRET", baseURL: "https://b.cos.region.myqcloud.com"}
 	extra := url.Values{"response-content-disposition": {"attachment; filename=\"a.png\""}}
-	u, _ := c.presignURL(context.Background(), "get", "1/0/a.png", extra, time.Hour)
+	u, _ := c.presignURL(context.Background(), "get", "1/0/a.png", extra, time.Hour, nil)
 	q, _ := url.ParseQuery(u.RawQuery)
 	if got := q.Get("response-content-disposition"); !strings.Contains(got, "a.png") {
 		t.Fatalf("extra param = %q", got)
@@ -66,6 +108,9 @@ func TestPresignURLCoversExtraParams(t *testing.T) {
 
 func TestDownloadURLSignsParam(t *testing.T) {
 	c := &client{secretID: "AKID", secretKey: "SECRET", baseURL: "https://b.cos.region.myqcloud.com"}
+	c.fetchSts = func(context.Context) (*stsCredentials, error) {
+		return &stsCredentials{secretID: "AKID", secretKey: "SECRET", sessionToken: ""}, nil
+	}
 	u, err := c.DownloadURL(context.Background(), "1/0/a.png", "a.png", time.Hour)
 	if err != nil {
 		t.Fatal(err)

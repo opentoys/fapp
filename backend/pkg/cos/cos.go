@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 )
 
@@ -22,13 +23,24 @@ type Store interface {
 type client struct {
 	secretID  string
 	secretKey string
+	bucket    string
+	region    string
 	baseURL   string
 	host      string
 	hc        *http.Client
+	now       func() time.Time
+
+	mu      sync.Mutex
+	sts     *stsCredentials
+	fetchSts func(ctx context.Context) (*stsCredentials, error) // test hook
 }
 
-// NewFromConfig builds the COS client. Keys sign request URLs directly (no
-// STS exchange). baseURL is optional; when empty it derives from bucket+region.
+// NewFromConfig builds the COS client. Keys are the permanent Tencent Cloud
+// API keys; each presign call first exchanges them for STS temporary
+// credentials via the GetFederationToken API, so the returned URLs carry the
+// matching x-cos-security-token. baseURL is optional; when empty it derives
+// from bucket+region. region must be the classic tencent region, not the
+// gz/etc short code (STS call is regional).
 func NewFromConfig(secretID, secretKey, bucket, region, baseURL string) (Store, error) {
 	if secretID == "" || secretKey == "" {
 		return nil, fmt.Errorf("cos SecretID and SecretKey are required")
@@ -47,6 +59,8 @@ func NewFromConfig(secretID, secretKey, bucket, region, baseURL string) (Store, 
 	return &client{
 		secretID:  secretID,
 		secretKey: secretKey,
+		bucket:    bucket,
+		region:    region,
 		baseURL:   base,
 		host:      u.Host,
 		hc:        &http.Client{Timeout: 30 * time.Second},
@@ -56,7 +70,11 @@ func NewFromConfig(secretID, secretKey, bucket, region, baseURL string) (Store, 
 // UploadURL presigns a PUT for the client to push bytes straight to storage.
 // Non-q-* query params are signed into the URL so extra params are covered.
 func (c *client) UploadURL(ctx context.Context, key, contentType string, expire time.Duration) (string, error) {
-	u, err := c.presignURL(ctx, "put", key, nil, expire)
+	creds, err := c.credentials(ctx)
+	if err != nil {
+		return "", err
+	}
+	u, err := c.presignURL(ctx, "put", key, nil, expire, creds)
 	if err != nil {
 		return "", err
 	}
@@ -66,7 +84,11 @@ func (c *client) UploadURL(ctx context.Context, key, contentType string, expire 
 // Delete removes the object with a DELETE issued by the server, signed into
 // the URL and executed over HTTPS.
 func (c *client) Delete(ctx context.Context, key string) error {
-	u, err := c.presignURL(ctx, "delete", key, nil, 5*time.Minute)
+	creds, err := c.credentials(ctx)
+	if err != nil {
+		return err
+	}
+	u, err := c.presignURL(ctx, "delete", key, nil, 5*time.Minute, creds)
 	if err != nil {
 		return err
 	}
@@ -90,7 +112,11 @@ func (c *client) Delete(ctx context.Context, key string) error {
 func (c *client) DownloadURL(ctx context.Context, key, filename string, expire time.Duration) (string, error) {
 	params := url.Values{}
 	params.Set("response-content-disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	u, err := c.presignURL(ctx, "get", key, params, expire)
+	creds, err := c.credentials(ctx)
+	if err != nil {
+		return "", err
+	}
+	u, err := c.presignURL(ctx, "get", key, params, expire, creds)
 	if err != nil {
 		return "", err
 	}

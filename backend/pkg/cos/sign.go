@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha1"
-	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"sort"
@@ -15,12 +15,16 @@ import (
 // presignURL builds a COS presigned (query-signed) URL for the given object
 // key. method is the lowercase HTTP verb. extra are additional query params
 // that must be covered by the signature (e.g. response-content-disposition).
-func (c *client) presignURL(ctx context.Context, method, key string, extra url.Values, expire time.Duration) (*url.URL, error) {
+// creds carries the STS session (temp secretID/secretKey + token).
+func (c *client) presignURL(ctx context.Context, method, key string, extra url.Values, expire time.Duration, creds *stsCredentials) (*url.URL, error) {
 	if method == "" {
 		method = "get"
 	}
 	path := objectPath(key)
 	start := time.Now().Unix()
+	if c.now != nil {
+		start = c.now().Unix()
+	}
 	end := start + int64(expire.Seconds())
 	signTime := fmt.Sprintf("%d;%d", start, end)
 
@@ -30,23 +34,37 @@ func (c *client) presignURL(ctx context.Context, method, key string, extra url.V
 			query.Add(k, v)
 		}
 	}
+	// STS credentials require the session token as a signed query param.
+	if creds != nil && creds.sessionToken != "" {
+		query.Set("x-cos-security-token", creds.sessionToken)
+	}
 	// Params owned by the caller must be listed in q-url-param-list and
 	// signed. The q-* params we add below are appended after signing.
 	paramList := sortedParamNames(query)
 
-	httpString := method + "\n" + path + "\n" + encodeQuery(query) + "\n\n"
-	stringToSign := "sha1\n" + signTime + "\n" + httpString
-	signKey := hmacSHA1(c.secretKey, signTime)
-	signature := hmacSHA1(string(signKey), stringToSign)
+	// FormatString = method\npath\n<query>\n<headers>\n. COS presigning always
+	// signs the host header, so headers is "host=<bucket-host>". The SDK signs
+	// the SHA1 hex of the formatString (with a trailing newline), not the
+	// formatString itself.
+	headerBlock := "host=" + c.host
+	formatString := method + "\n" + path + "\n" + encodeQuery(query) + "\n" + headerBlock + "\n"
+	stringToSign := "sha1\n" + signTime + "\n" + sha1Hex(formatString) + "\n"
+	// Sign with the STS temp keys so COS accepts the token that matches them.
+	credentialID, credentialKey := c.secretID, c.secretKey
+	if creds != nil {
+		credentialID, credentialKey = creds.secretID, creds.secretKey
+	}
+	signKey := hex.EncodeToString(hmacSHA1(credentialKey, signTime))
+	signature := hex.EncodeToString(hmacSHA1(signKey, stringToSign))
 
 	q := url.Values{}
 	q.Set("q-sign-algorithm", "sha1")
-	q.Set("q-ak", c.secretID)
+	q.Set("q-ak", credentialID)
 	q.Set("q-sign-time", signTime)
 	q.Set("q-key-time", signTime)
-	q.Set("q-header-list", "")
+	q.Set("q-header-list", "host")
 	q.Set("q-url-param-list", paramList)
-	q.Set("q-signature", base64.StdEncoding.EncodeToString(signature))
+	q.Set("q-signature", signature)
 
 	base, err := url.Parse(c.baseURL)
 	if err != nil {
@@ -82,15 +100,21 @@ func objectPath(key string) string {
 }
 
 // encodeQuery renders key=value pairs sorted by key, no trailing newline.
+// COS canonical form uses %20 for spaces, not the '+' of QueryEscape.
 func encodeQuery(v url.Values) string {
 	parts := make([]string, 0, len(v))
 	for k, vv := range v {
 		for _, val := range vv {
-			parts = append(parts, url.QueryEscape(k)+"="+url.QueryEscape(val))
+			parts = append(parts, cosQueryEscape(k)+"="+cosQueryEscape(val))
 		}
 	}
 	sort.Strings(parts)
 	return strings.Join(parts, "&")
+}
+
+// cosQueryEscape URI-encodes with space as %20 per the COS sign spec.
+func cosQueryEscape(s string) string {
+	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
 }
 
 // sortedParamNames returns the comma-joined, sorted, URL-escaped key list.
@@ -111,4 +135,9 @@ func hmacSHA1(key, data string) []byte {
 	m := hmac.New(sha1.New, []byte(key))
 	m.Write([]byte(data))
 	return m.Sum(nil)
+}
+
+func sha1Hex(s string) string {
+	h := sha1.Sum([]byte(s))
+	return hex.EncodeToString(h[:])
 }
