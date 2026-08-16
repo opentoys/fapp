@@ -35,14 +35,16 @@ func Routes(c *controller.Controller, dist fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/v1/versions/{id}/verify", web.Chain(verify...)(c.VerifyAccess))
 	mux.HandleFunc("GET /api/v1/versions/{id}/install", web.Chain(pub...)(c.Install))
 	mux.HandleFunc("GET /api/v1/versions/{id}/download", web.Chain(pub...)(c.Download))
-	mux.HandleFunc("GET /api/v1/files/{key...}", web.Chain(pub...)(c.File))
+	mux.HandleFunc("POST /api/v1/files", web.Chain(admin...)(c.PresignFile))
+	mux.HandleFunc("POST /api/v1/files/upload", web.Chain(pub...)(c.FileUpload))
+	mux.HandleFunc("GET /api/v1/files/preview", web.Chain(pub...)(c.FilePreview))
+	// Authenticated display variant (icons/screenshots) behind the admin chain.
+	mux.HandleFunc("GET /api/v1/admin/files/preview", web.Chain(admin...)(c.FilePreview))
 
 	mux.HandleFunc("GET /api/v1/admin/apps", web.Chain(admin...)(c.AppsList))
 	mux.HandleFunc("GET /api/v1/admin/apps/{id}", web.Chain(admin...)(c.AppDetailAdmin))
 	mux.HandleFunc("POST /api/v1/admin/apps", web.Chain(admin...)(c.CreateApp))
 	mux.HandleFunc("PUT /api/v1/admin/apps/{id}", web.Chain(admin...)(c.UpdateApp))
-	mux.HandleFunc("POST /api/v1/admin/apps/{id}/icon", web.Chain(admin...)(c.UploadAppIcon))
-	mux.HandleFunc("POST /api/v1/admin/apps/{id}/screenshots", web.Chain(admin...)(c.UploadAppScreenshot))
 	mux.HandleFunc("DELETE /api/v1/admin/apps/{id}/screenshots", web.Chain(admin...)(c.DeleteAppScreenshot))
 	mux.HandleFunc("DELETE /api/v1/admin/apps/{id}", web.Chain(admin...)(c.DeleteApp))
 	mux.HandleFunc("GET /api/v1/admin/apps/{id}/members", web.Chain(admin...)(c.AppMembersAdmin))
@@ -53,7 +55,7 @@ func Routes(c *controller.Controller, dist fs.FS) http.Handler {
 	mux.HandleFunc("PUT /api/v1/admin/users/{id}", web.Chain(admin...)(c.UpdateUser))
 	mux.HandleFunc("DELETE /api/v1/admin/users/{id}", web.Chain(admin...)(c.DeleteUser))
 	mux.HandleFunc("POST /api/v1/admin/apps/{id}/current", web.Chain(admin...)(c.SetCurrentVersion))
-	mux.HandleFunc("POST /api/v1/admin/versions", web.Chain(admin...)(c.UploadVersion))
+	mux.HandleFunc("POST /api/v1/admin/versions", web.Chain(admin...)(c.CreateVersion))
 	mux.HandleFunc("DELETE /api/v1/admin/versions/{id}", web.Chain(admin...)(c.DeleteVersion))
 	mux.HandleFunc("GET /api/v1/admin/versions/{id}/stats", web.Chain(admin...)(c.VersionStats))
 

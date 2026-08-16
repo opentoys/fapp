@@ -1,11 +1,13 @@
 package controller
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"disapp/internal/resources/storage/local"
 	"disapp/internal/resources/store/model"
 )
 
@@ -177,6 +179,18 @@ func TestPublicAppDetailResolvesByName(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &res)
 	if res.Code != 0 || res.Data.App.ID != app.ID || res.Data.App.Name != app.Name {
 		t.Fatalf("res = %s", w.Body.String())
+	}
+}
+
+// storeBytes writes bytes at key through the local storage concrete method.
+func storeBytes(t *testing.T, s *Controller, key string, data []byte) {
+	t.Helper()
+	loc, ok := s.SVC.Storage.(*local.LocalStorage)
+	if !ok {
+		t.Fatal("test requires local storage")
+	}
+	if _, err := loc.Save(nil, key, bytes.NewReader(data)); err != nil {
+		t.Fatalf("store bytes: %v", err)
 	}
 }
 

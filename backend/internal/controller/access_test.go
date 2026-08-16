@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"disapp/internal/resources/storage/local"
 	"disapp/internal/resources/store/model"
 	"disapp/pkg/pwd"
 )
@@ -214,27 +215,39 @@ func TestDownloadUnpublishedAppNotFound(t *testing.T) {
 	}
 }
 
-func TestFileProxy(t *testing.T) {
+func TestFilePreviewStreamsSignedKey(t *testing.T) {
 	s := testServer(t)
-	if _, err := s.SVC.Storage.Save(nil, "1/2/app.apk", strings.NewReader("binary-data")); err != nil {
+	storeBytes(t, s, "1/2/app.apk", []byte("binary-data"))
+	loc, _ := s.SVC.Storage.(*local.LocalStorage)
+	u, err := loc.DownloadURL(nil, "1/2/app.apk", "app.apk", time.Hour)
+	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/1/2/app.apk", nil)
-	req.SetPathValue("key", "1/2/app.apk")
+	req := httptest.NewRequest(http.MethodGet, u, nil)
 	w := httptest.NewRecorder()
-	s.File(w, req)
+	s.FilePreview(w, req)
 	if w.Code != http.StatusOK || w.Body.String() != "binary-data" {
 		t.Fatalf("code=%d body=%q", w.Code, w.Body.String())
 	}
 }
 
-func TestFileProxyRejectsTraversal(t *testing.T) {
+func TestFilePreviewRejectsBadSign(t *testing.T) {
 	s := testServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/../../etc/passwd", nil)
-	req.SetPathValue("key", "../../etc/passwd")
+	storeBytes(t, s, "1/2/app.apk", []byte("binary-data"))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/preview?key=1/2/app.apk&ttl=9999999999&sign=deadbeef", nil)
 	w := httptest.NewRecorder()
-	s.File(w, req)
-	if w.Code == http.StatusOK {
+	s.FilePreview(w, req)
+	if codeOf(w) == 0 {
+		t.Fatal("tampered sign must be rejected")
+	}
+}
+
+func TestFilePreviewRejectsTraversal(t *testing.T) {
+	s := testServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/preview?key=../../etc/passwd&ttl=9999999999&sign=x", nil)
+	w := httptest.NewRecorder()
+	s.FilePreview(w, req)
+	if codeOf(w) == 0 {
 		t.Fatal("traversal must be rejected")
 	}
 }

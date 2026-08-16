@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"disapp/internal/service"
 	"disapp/pkg/web"
 )
 
@@ -21,9 +22,8 @@ func (c *Controller) authKeyApp(w http.ResponseWriter, r *http.Request, appID in
 	return key.ID, true
 }
 
-// UploadKeyVersion uploads a new version for an app via API key (scope run).
-// Multipart shape matches the JWT-admin upload except app_id comes from the
-// URL path.
+// UploadKeyVersion records a version via API key (scope run). The bytes were
+// already pushed to the submitted storage key.
 func (c *Controller) UploadKeyVersion(w http.ResponseWriter, r *http.Request) {
 	appID, err := strconv.ParseInt(r.PathValue("app_id"), 10, 64)
 	if err != nil {
@@ -33,11 +33,43 @@ func (c *Controller) UploadKeyVersion(w http.ResponseWriter, r *http.Request) {
 	if _, ok := c.authKeyApp(w, r, appID, true); !ok {
 		return
 	}
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		web.SendError(w, web.CodeBadRequest, "multipart 解析失败")
+	var req struct {
+		VersionCode int    `json:"version_code"`
+		VersionName string `json:"version_name"`
+		ReleaseType string `json:"release_type"`
+		Arch        string `json:"arch"`
+		Appid       string `json:"appid"`
+		AppName     string `json:"app_name"`
+		Changelog   string `json:"changelog"`
+		FileName    string `json:"file_name"`
+		ContentType string `json:"content_type"`
+		SHA256      string `json:"sha256"`
+		FileSize    int64  `json:"file_size"`
+		Key         string `json:"key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		web.SendError(w, web.CodeBadRequest, "bad request")
 		return
 	}
-	c.uploadForApp(w, r, appID)
+	v, err := c.SVC.CreateVersion(r.Context(), appID, service.CreateVersionInput{
+		VersionCode: req.VersionCode,
+		VersionName: req.VersionName,
+		ReleaseType: req.ReleaseType,
+		Arch:        req.Arch,
+		PackageName: req.Appid,
+		AppName:     req.AppName,
+		Changelog:   req.Changelog,
+		FileName:    req.FileName,
+		ContentType: req.ContentType,
+		SHA256:      req.SHA256,
+		FileSize:    req.FileSize,
+		StorageKey:  req.Key,
+	})
+	if err != nil {
+		sendErr(w, err)
+		return
+	}
+	web.SendJson(w, v)
 }
 
 // SetKeyCurrentVersion sets the app's current version via API key (scope run).

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api } from '../../api/client'
+import { api, sha256Hex, uploadViaURL } from '../../api/client'
 import { useI18n } from '../../composables/useI18n'
 import { detectPlatformFromName } from '../../constants/platform'
 import { Alert } from '../../components/ui/alert'
@@ -191,50 +191,56 @@ async function submit() {
   }
   error.value = ''
   loading.value = true
+  const f = file.value as File
 
-  // New-app mode: create the app first, then upload its first version.
+  // New-app mode: create the app first, then attach its parsed icon.
   let targetAppId: number
-  if (mode.value === 'existing') {
-    targetAppId = appId.value as number
-  } else {
-    const name = newAppName.value.trim()
-    if (!name) {
-      error.value = t('upload.appNameRequired')
-      loading.value = false
-      return
-    }
-    try {
+  try {
+    if (mode.value === 'existing') {
+      targetAppId = appId.value as number
+    } else {
+      const name = newAppName.value.trim()
+      if (!name) {
+        error.value = t('upload.appNameRequired')
+        loading.value = false
+        return
+      }
       const app = await api.createApp({
         name,
         platform: parsed.value!.platform,
-        icon: parsed.value?.iconDataUri || undefined,
         appid: parsed.value?.package || undefined,
       })
       targetAppId = app.id
-    } catch (e) {
-      error.value = (e as Error).message
-      loading.value = false
-      return
     }
-  }
 
-  const form = new FormData()
-  form.append('file', file.value)
-  form.append('app_id', String(targetAppId))
-  form.append('release_type', releaseType.value)
-  if (versionName.value) form.append('version_name', versionName.value)
-  if (versionCode.value) form.append('version_code', String(versionCode.value))
-  form.append('changelog', changelog.value)
-  if (parsed.value) {
-    if (parsed.value.package) form.append('appid', parsed.value.package)
-    if (parsed.value.appName) form.append('app_name', parsed.value.appName)
-    if (parsed.value.iconDataUri) {
-      form.append('icon', dataUriToBlob(parsed.value.iconDataUri), 'icon.png')
+    // Upload the package bytes to the presigned url, then submit metadata
+    // (including the key, size and sha256) to persist the version.
+    const ticket = await api.presignFile(targetAppId, f.name)
+    await uploadViaURL(ticket.url, f)
+    const [sha256, fileSize] = await Promise.all([sha256Hex(f), Promise.resolve(f.size)])
+    await api.createVersion({
+      app_id: targetAppId,
+      version_code: versionCode.value ?? 0,
+      version_name: versionName.value,
+      release_type: releaseType.value,
+      changelog: changelog.value,
+      file_name: f.name,
+      content_type: f.type,
+      sha256,
+      file_size: fileSize,
+      key: ticket.key,
+      ...(parsed.value?.package ? { appid: parsed.value.package } : {}),
+      ...(parsed.value?.appName ? { app_name: parsed.value.appName } : {}),
+    })
+
+    // New-app mode: push the parsed icon to storage and record its key on the app.
+    if (mode.value === 'new' && parsed.value?.iconDataUri) {
+      const iconBlob = dataUriToBlob(parsed.value.iconDataUri)
+      const iconTicket = await api.presignFile(targetAppId, 'icon.png')
+      await uploadViaURL(iconTicket.url, new File([iconBlob], 'icon.png'))
+      await api.updateApp(targetAppId, { icon: iconTicket.key })
     }
-  }
 
-  try {
-    await api.uploadVersion(form)
     router.push(`/admin/app/${targetAppId}`)
   } catch (e) {
     error.value = (e as Error).message

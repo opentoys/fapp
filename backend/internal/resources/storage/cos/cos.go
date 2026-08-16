@@ -1,10 +1,8 @@
 package cos
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -16,24 +14,23 @@ import (
 
 // objectClient is a narrow interface for cos object operations, for test mocking.
 type objectClient interface {
-	Put(ctx context.Context, key string, r io.Reader, opt *cos.ObjectPutOptions) (*cos.Response, error)
-	Get(ctx context.Context, key string, opt *cos.ObjectGetOptions, id ...string) (*cos.Response, error)
 	Delete(ctx context.Context, key string, opt ...*cos.ObjectDeleteOptions) (*cos.Response, error)
-	GetPresignedURL(ctx context.Context, method, key, akID, skID string, exp time.Duration, opt interface{}, signHost ...bool) (*url.URL, error)
+	GetPresignedURL2(ctx context.Context, httpMethod, key string, expired time.Duration, opt interface{}, signHost ...bool) (*url.URL, error)
+	Head(ctx context.Context, key string, opt *cos.ObjectHeadOptions, id ...string) (*cos.Response, error)
 }
 
 type COSStorage struct {
-	client    objectClient
-	secretID  string
-	secretKey string
-	baseURL   string
+	client  objectClient
+	baseURL string
 }
 
-func NewCOS(client objectClient, secretID, secretKey, bucket, baseURL string) *COSStorage {
-	return &COSStorage{client: client, secretID: secretID, secretKey: secretKey, baseURL: baseURL}
+func NewCOS(client objectClient, bucket, baseURL string) *COSStorage {
+	return &COSStorage{client: client, baseURL: baseURL}
 }
 
-// NewCOSFromConfig creates COSStorage from config parameters.
+// NewCOSFromConfig creates COSStorage from config parameters. The underlying
+// client uses a StsCredentialTransport so presigned URLs are signed with
+// short-lived temporary credentials (no server-side file writes needed).
 func NewCOSFromConfig(secretID, secretKey, bucket, region, baseURL string) (*COSStorage, error) {
 	if bucket == "" || region == "" {
 		return nil, fmt.Errorf("cos bucket and region are required")
@@ -46,38 +43,25 @@ func NewCOSFromConfig(secretID, secretKey, bucket, region, baseURL string) (*COS
 	if err != nil {
 		return nil, err
 	}
-	transport := &cos.AuthorizationTransport{
+	transport := &cos.StsCredentialTransport{
 		SecretID:  secretID,
 		SecretKey: secretKey,
 		Transport: http.DefaultTransport,
+		Region:    region,
 	}
 	client := cos.NewClient(&cos.BaseURL{BucketURL: u}, &http.Client{Transport: transport})
-	return NewCOS(client.Object, secretID, secretKey, bucket, base), nil
+	return NewCOS(client.Object, bucket, base), nil
 }
 
-func (s *COSStorage) Save(ctx context.Context, key string, r io.Reader) (int64, error) {
+func (s *COSStorage) UploadURL(ctx context.Context, key, contentType string, expire time.Duration) (string, error) {
 	if !storage.ValidKey(key) {
-		return 0, fmt.Errorf("invalid key %q", key)
+		return "", fmt.Errorf("invalid key %q", key)
 	}
-	// Read all content to get size, then re-upload from buffer
-	data, err := io.ReadAll(r)
+	u, err := s.client.GetPresignedURL2(ctx, http.MethodPut, key, expire, nil)
 	if err != nil {
-		return 0, err
+		return "", err
 	}
-	size := int64(len(data))
-	_, err = s.client.Put(ctx, key, bytes.NewReader(data), &cos.ObjectPutOptions{ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{ContentLength: size}})
-	return size, err
-}
-
-func (s *COSStorage) Open(ctx context.Context, key string) (io.ReadCloser, error) {
-	if !storage.ValidKey(key) {
-		return nil, fmt.Errorf("invalid key %q", key)
-	}
-	resp, err := s.client.Get(ctx, key, nil)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Body, nil
+	return u.String(), nil
 }
 
 func (s *COSStorage) Delete(ctx context.Context, key string) error {
@@ -96,9 +80,24 @@ func (s *COSStorage) DownloadURL(ctx context.Context, key, filename string, expi
 		fmt.Sprintf("attachment; filename=%q", filename),
 	}}
 	opt := &cos.PresignedURLOptions{Query: &query}
-	u, err := s.client.GetPresignedURL(ctx, http.MethodGet, key, s.secretID, s.secretKey, expire, opt)
+	u, err := s.client.GetPresignedURL2(ctx, http.MethodGet, key, expire, opt)
 	if err != nil {
 		return "", err
 	}
 	return u.String(), nil
+}
+
+// Size returns the object's content length via HEAD.
+func (s *COSStorage) Size(ctx context.Context, key string) (int64, error) {
+	if !storage.ValidKey(key) {
+		return 0, fmt.Errorf("invalid key %q", key)
+	}
+	resp, err := s.client.Head(ctx, key, nil)
+	if err != nil {
+		return 0, err
+	}
+	if resp != nil && resp.Response != nil && resp.StatusCode == http.StatusOK {
+		return resp.ContentLength, nil
+	}
+	return 0, fmt.Errorf("head %s: unexpected status", key)
 }

@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { useAuth } from '../composables/useAuth'
-import type { ApiKey, ApiResp, AppDetail, AppItem, DownloadsTimeSeries, KeyScope, Platform, User, Version } from './types'
+import type { ApiKey, ApiResp, AppDetail, AppItem, DownloadsTimeSeries, KeyScope, Platform, User, Version, VersionMeta, UploadTicket } from './types'
 
 const client = axios.create({ baseURL: '/api/v1', timeout: 60000 })
 
@@ -49,16 +49,10 @@ export const api = {
     client.post<ApiResp<AppItem>>('/admin/apps', data).then((r) => r.data.data),
   updateApp: (id: number, data: Partial<AppItem> & { password?: string }) =>
     client.put<ApiResp<AppItem>>(`/admin/apps/${id}`, data),
-  uploadAppIcon: (id: number, file: File) => {
-    const form = new FormData()
-    form.append('icon', file)
-    return client.post<ApiResp<AppItem>>(`/admin/apps/${id}/icon`, form).then((r) => r.data.data)
-  },
-  uploadAppScreenshot: (id: number, file: File) => {
-    const form = new FormData()
-    form.append('screenshot', file)
-    return client.post<ApiResp<AppItem>>(`/admin/apps/${id}/screenshots`, form).then((r) => r.data.data)
-  },
+  // presignFile is the single presigned-upload endpoint for every file kind
+  // (version package, icon, screenshot): {app_id, file_name} → {url, key}.
+  presignFile: (appId: number, fileName: string) =>
+    client.post<ApiResp<UploadTicket>>('/files', { app_id: appId, file_name: fileName }).then((r) => r.data.data),
   deleteAppScreenshot: (id: number, url: string) =>
     client
       .delete<ApiResp<AppItem>>(`/admin/apps/${id}/screenshots`, { params: { url } })
@@ -71,7 +65,7 @@ export const api = {
     client
       .get<ApiResp<DownloadsTimeSeries>>(`/admin/apps/${id}/downloads`, { params })
       .then((r) => r.data.data),
-  uploadVersion: (form: FormData) => client.post<ApiResp<Version>>('/admin/versions', form),
+  createVersion: (meta: VersionMeta) => client.post<ApiResp<Version>>('/admin/versions', meta).then((r) => r.data.data),
   setCurrentVersion: (appId: number, versionId: number) =>
     client.post<ApiResp<AppItem>>(`/admin/apps/${appId}/current`, { version_id: versionId }).then((r) => r.data.data),
   deleteVersion: (id: number, deleteFile = true) =>
@@ -95,4 +89,25 @@ export const api = {
   updateKey: (id: number, data: { name?: string; scope?: KeyScope; expires_at?: string | null }) =>
     client.put<ApiResp<ApiKey>>(`/admin/keys/${id}`, data),
   deleteKey: (id: number) => client.delete<ApiResp<unknown>>(`/admin/keys/${id}`),
+}
+
+// uploadViaURL pushes the file body straight to the presigned url returned by a
+// presign endpoint ({key,url}). COS takes a PUT, local takes a POST.
+export async function uploadViaURL(url: string, file: File, method: 'PUT' | 'POST' = 'PUT'): Promise<void> {
+  const res = await fetch(url, { method, body: file })
+  if (!res.ok) throw new Error(`upload failed: ${res.status}`)
+}
+
+// fileURL wraps a bare storage key (admin-side responses) into the authenticated
+// preview URL that 307s to the actual signed stream.
+export function fileURL(key: string): string {
+  return `/api/v1/files/preview?key=${encodeURIComponent(key)}&dl=1`
+}
+
+// sha256Hex computes the hex SHA-256 of a file in the browser.
+export async function sha256Hex(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
 }

@@ -2,9 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/hex"
-	"io"
-	"log"
 	"strings"
 	"time"
 
@@ -12,8 +9,11 @@ import (
 	"disapp/internal/resources/store/model"
 )
 
-// SaveVersionInput groups the multipart-derived fields for a new version.
-type SaveVersionInput struct {
+// CreateVersionInput carries the JSON metadata for a new version. The file
+// itself is pushed directly to a presigned URL obtained separately (POST
+// /api/v1/files); sha256 + size + the storage key are computed/assigned
+// client-side and submitted here together.
+type CreateVersionInput struct {
 	VersionCode int
 	VersionName string
 	ReleaseType string
@@ -22,21 +22,31 @@ type SaveVersionInput struct {
 	AppName     string
 	Changelog   string
 	FileName    string
-	File        io.Reader
-	Icon        io.Reader
+	ContentType string
+	SHA256      string
+	FileSize    int64
+	StorageKey  string
 }
 
-// SaveVersion persists a new version for an app. It locks the app's appid on
-// the first upload that carries one, creates a draft, writes the file to
-// storage (computing sha256+size), and rolls back on write failure. Best-effort
-// stores the parsed icon.
-func (s *Service) SaveVersion(ctx context.Context, appID int64, in SaveVersionInput) (*model.Version, error) {
+// UploadExpiry bounds how long a presigned upload URL stays valid.
+const UploadExpiry = 30 * time.Minute
+
+// CreateVersion records a new version whose bytes were already uploaded to the
+// client-supplied storage key. It locks the app's appid on the first upload
+// that carries one.
+func (s *Service) CreateVersion(ctx context.Context, appID int64, in CreateVersionInput) (*model.Version, error) {
 	var app model.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
 		return nil, &Error{StatusNotFound, "应用不存在"}
 	}
 	if in.VersionName == "" {
 		return nil, &Error{StatusBadRequest, "version_name 必填"}
+	}
+	if in.FileName == "" {
+		return nil, &Error{StatusBadRequest, "file_name 必填"}
+	}
+	if !storage.ValidKey(in.StorageKey) {
+		return nil, &Error{StatusBadRequest, "无效的上传 key"}
 	}
 	pkg := strings.TrimSpace(in.PackageName)
 	if app.PackageName == nil || *app.PackageName == "" {
@@ -72,34 +82,14 @@ func (s *Service) SaveVersion(ctx context.Context, appID int64, in SaveVersionIn
 		FileName:       in.FileName,
 		FileType:       model.FileType(in.FileName),
 		Changelog:      in.Changelog,
+		StorageKey:     in.StorageKey,
+		FileSize:       in.FileSize,
+		SHA256:         in.SHA256,
 		StorageBackend: storageBackendName(s),
 	}
 	if err := s.DB.Create(&v).Error; err != nil {
 		return nil, &Error{StatusInternal, "创建版本失败"}
 	}
-
-	key := storage.Key(app.ID, v.ID, in.FileName)
-	hr := newHashReader(in.File)
-	if _, err := s.Storage.Save(ctx, key, hr); err != nil {
-		s.DB.Delete(&v)
-		return nil, &Error{StatusInternal, "存储写入失败"}
-	}
-	s.DB.Model(&v).Updates(map[string]any{
-		"storage_key": key,
-		"file_size":   hr.n,
-		"sha256":      hex.EncodeToString(hr.h.Sum(nil)),
-	})
-
-	if in.Icon != nil {
-		iconKey := storage.Key(app.ID, v.ID, "icon.png")
-		if _, err := s.Storage.Save(ctx, iconKey, in.Icon); err != nil {
-			log.Printf("store icon failed: %v", err)
-		} else {
-			v.IconURL = "/api/v1/files/" + iconKey
-			s.DB.Model(&v).Update("icon_url", v.IconURL)
-		}
-	}
-
 	return &v, nil
 }
 
@@ -167,6 +157,16 @@ func (s *Service) CurrentDownloadURL(ctx context.Context, appID int64) (string, 
 		return "", &Error{StatusNotFound, "当前版本不存在"}
 	}
 	rel, err := s.Storage.DownloadURL(ctx, v.StorageKey, v.FileName, 15*time.Minute)
+	if err != nil {
+		return "", &Error{StatusInternal, "生成下载链接失败"}
+	}
+	return rel, nil
+}
+
+// PreviewURL returns a fresh signed download URL for a storage key (used by
+// the admin ?dl redirect). filename derives from the key.
+func (s *Service) PreviewURL(ctx context.Context, key string) (string, error) {
+	rel, err := s.Storage.DownloadURL(ctx, key, key[strings.LastIndex(key, "/")+1:], 15*time.Minute)
 	if err != nil {
 		return "", &Error{StatusInternal, "生成下载链接失败"}
 	}

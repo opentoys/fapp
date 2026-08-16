@@ -2,16 +2,21 @@ package storage
 
 import (
 	"context"
-	"io"
 	"regexp"
 	"time"
 )
 
-// Storage is the file storage abstraction.
+// Storage is the file storage abstraction. All access goes through URLs:
+// uploads are pushed directly to UploadURL, downloads read via DownloadURL.
 type Storage interface {
-	Save(ctx context.Context, key string, r io.Reader) (int64, error)
-	Open(ctx context.Context, key string) (io.ReadCloser, error)
+	// UploadURL returns a URL the client can push bytes to directly. COS: a
+	// presigned PUT URL. local: a server upload endpoint that writes the
+	// request body under the given key.
+	UploadURL(ctx context.Context, key, contentType string, expire time.Duration) (string, error)
+	// Delete removes the object at key.
 	Delete(ctx context.Context, key string) error
+	// DownloadURL returns a signed URL to read the object at key. local
+	// returns a signed /api/v1/files/preview URL that streams the file.
 	DownloadURL(ctx context.Context, key, filename string, expire time.Duration) (string, error)
 }
 

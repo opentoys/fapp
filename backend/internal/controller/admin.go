@@ -2,10 +2,13 @@ package controller
 
 import (
 	"encoding/json"
-	"io"
+	"fmt"
 	"net/http"
+	"path"
 	"strconv"
+	"time"
 
+	"disapp/internal/resources/storage"
 	"disapp/internal/service"
 	"disapp/pkg/web"
 )
@@ -119,46 +122,85 @@ func (c *Controller) DeleteApp(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, map[string]any{"ok": true})
 }
 
-// UploadAppIcon stores the app-level icon (multipart file "icon").
-func (c *Controller) UploadAppIcon(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		web.SendError(w, web.CodeBadRequest, "bad request")
-		return
-	}
-	file, header, err := r.FormFile("icon")
-	if err != nil {
-		web.SendError(w, web.CodeBadRequest, "缺少图标文件")
-		return
-	}
-	defer file.Close()
-	app, err := c.SVC.SaveAppIcon(r.Context(), id, header.Header.Get("Content-Type"), header.Filename, file)
-	if err != nil {
-		sendErr(w, err)
-		return
-	}
-	web.SendJson(w, app)
+// uploadTicket is the shared {url, key} response for presigned uploads.
+type uploadTicket struct {
+	URL string `json:"url"`
+	Key string `json:"key"`
 }
 
-// UploadAppScreenshot stores one app screenshot (multipart file "screenshot").
-func (c *Controller) UploadAppScreenshot(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
+// PresignFile is the single presigned-upload endpoint for every file kind
+// (version package, icon, screenshot). The caller sends the target app id and
+// the upload file name; it gets back {url, key} where key is
+// {app_id}/0/{file_name}. The caller pushes the bytes to url, then submits
+// key (with size + sha256) when saving the entity it belongs to.
+func (c *Controller) PresignFile(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		AppID    int64  `json:"app_id"`
+		FileName string `json:"file_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		web.SendError(w, web.CodeBadRequest, "bad request")
 		return
 	}
-	file, header, err := r.FormFile("screenshot")
-	if err != nil {
-		web.SendError(w, web.CodeBadRequest, "缺少截图文件")
+	if req.AppID <= 0 {
+		web.SendError(w, web.CodeBadRequest, "app_id 必填")
 		return
 	}
-	defer file.Close()
-	app, err := c.SVC.SaveAppScreenshot(r.Context(), id, header.Header.Get("Content-Type"), header.Filename, file)
+	name := fmt.Sprintf("%d-%s", time.Now().UnixNano(), path.Base(req.FileName))
+	key := storage.Key(req.AppID, 0, name)
+	if !storage.ValidKey(key) {
+		web.SendError(w, web.CodeBadRequest, "无效的 file_name")
+		return
+	}
+	url, err := c.SVC.Storage.UploadURL(r.Context(), key, "", service.UploadExpiry)
 	if err != nil {
 		sendErr(w, err)
 		return
 	}
-	web.SendJson(w, app)
+	web.SendJson(w, uploadTicket{URL: url, Key: key})
+}
+
+// CreateVersion records a version whose bytes were already uploaded to the
+// client-submitted storage key.
+func (c *Controller) CreateVersion(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		AppID       int64  `json:"app_id"`
+		VersionCode int    `json:"version_code"`
+		VersionName string `json:"version_name"`
+		ReleaseType string `json:"release_type"`
+		Arch        string `json:"arch"`
+		Appid       string `json:"appid"`
+		AppName     string `json:"app_name"`
+		Changelog   string `json:"changelog"`
+		FileName    string `json:"file_name"`
+		ContentType string `json:"content_type"`
+		SHA256      string `json:"sha256"`
+		FileSize    int64  `json:"file_size"`
+		Key         string `json:"key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		web.SendError(w, web.CodeBadRequest, "bad request")
+		return
+	}
+	v, err := c.SVC.CreateVersion(r.Context(), req.AppID, service.CreateVersionInput{
+		VersionCode: req.VersionCode,
+		VersionName: req.VersionName,
+		ReleaseType: req.ReleaseType,
+		Arch:        req.Arch,
+		PackageName: req.Appid,
+		AppName:     req.AppName,
+		Changelog:   req.Changelog,
+		FileName:    req.FileName,
+		ContentType: req.ContentType,
+		SHA256:      req.SHA256,
+		FileSize:    req.FileSize,
+		StorageKey:  req.Key,
+	})
+	if err != nil {
+		sendErr(w, err)
+		return
+	}
+	web.SendJson(w, v)
 }
 
 // DeleteAppScreenshot removes a screenshot by its exposed URL.
@@ -174,56 +216,6 @@ func (c *Controller) DeleteAppScreenshot(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	web.SendJson(w, app)
-}
-
-// UploadVersion handles multipart file upload for a new version.
-func (c *Controller) UploadVersion(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		web.SendError(w, web.CodeBadRequest, "multipart 解析失败")
-		return
-	}
-	appID, _ := strconv.ParseInt(r.FormValue("app_id"), 10, 64)
-	if appID == 0 {
-		web.SendError(w, web.CodeBadRequest, "app_id 必填")
-		return
-	}
-	c.uploadForApp(w, r, appID)
-}
-
-// uploadForApp assembles and persists a new version. The multipart body is
-// parsed by the caller (JWT-admin upload and API-key upload share this).
-func (c *Controller) uploadForApp(w http.ResponseWriter, r *http.Request, appID int64) {
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		web.SendError(w, web.CodeBadRequest, "缺少文件")
-		return
-	}
-	defer file.Close()
-
-	versionCode, _ := strconv.Atoi(r.FormValue("version_code"))
-
-	var icon io.Reader
-	if iconFile, _, err := r.FormFile("icon"); err == nil {
-		defer iconFile.Close()
-		icon = iconFile
-	}
-	v, err := c.SVC.SaveVersion(r.Context(), appID, service.SaveVersionInput{
-		VersionCode: versionCode,
-		VersionName: r.FormValue("version_name"),
-		ReleaseType: r.FormValue("release_type"),
-		Arch:        r.FormValue("arch"),
-		PackageName: r.FormValue("appid"),
-		AppName:     r.FormValue("app_name"),
-		Changelog:   r.FormValue("changelog"),
-		FileName:    header.Filename,
-		File:        file,
-		Icon:        icon,
-	})
-	if err != nil {
-		sendErr(w, err)
-		return
-	}
-	web.SendJson(w, v)
 }
 
 // DeleteVersion deletes a version, optionally deleting the storage file.

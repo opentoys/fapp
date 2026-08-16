@@ -2,9 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
-	"io"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -57,13 +54,14 @@ func (s *Service) CreateApp(ctx context.Context, in CreateAppInput) (*model.App,
 
 // UpdateAppInput carries the pointer-based PATCH fields.
 type UpdateAppInput struct {
-	Name        *string    `json:"name"`
-	Icon        *string    `json:"icon"`
-	Description *string    `json:"description"`
-	AccessMode  *string    `json:"access_mode"`
-	Password    *string    `json:"password"`
+	Name        *string   `json:"name"`
+	Icon        *string   `json:"icon"`
+	Screenshots []string  `json:"screenshots"`
+	Description *string   `json:"description"`
+	AccessMode  *string   `json:"access_mode"`
+	Password    *string   `json:"password"`
 	ExpiresAt   *time.Time `json:"expires_at"`
-	Published   *bool      `json:"published"`
+	Published   *bool     `json:"published"`
 }
 
 func (s *Service) UpdateApp(ctx context.Context, id int64, in UpdateAppInput) (*model.App, error) {
@@ -76,6 +74,9 @@ func (s *Service) UpdateApp(ctx context.Context, id int64, in UpdateAppInput) (*
 	}
 	if in.Icon != nil {
 		app.Icon = *in.Icon
+	}
+	if in.Screenshots != nil {
+		app.Screenshots = in.Screenshots
 	}
 	if in.Description != nil {
 		app.Description = *in.Description
@@ -108,13 +109,11 @@ func (s *Service) DeleteApp(ctx context.Context, appID int64) error {
 	if err := s.DB.First(&app, appID).Error; err != nil {
 		return &Error{StatusNotFound, "应用不存在"}
 	}
-	if key := strings.TrimPrefix(app.Icon, "/api/v1/files/"); key != app.Icon {
+	for _, key := range app.Screenshots {
 		s.Storage.Delete(ctx, key)
 	}
-	for _, url := range app.Screenshots {
-		if key := strings.TrimPrefix(url, "/api/v1/files/"); key != url {
-			s.Storage.Delete(ctx, key)
-		}
+	if app.Icon != "" {
+		s.Storage.Delete(ctx, app.Icon)
 	}
 	if err := s.DB.Delete(&model.App{}, appID).Error; err != nil {
 		return &Error{StatusInternal, "删除失败"}
@@ -217,76 +216,20 @@ func (s *Service) SetCurrentVersion(ctx context.Context, appID, versionID int64)
 	return &app, nil
 }
 
-// isImageUpload reports whether a multipart upload is an image, by content type
-// or extension.
-func isImageUpload(contentType, filename string) bool {
-	if strings.HasPrefix(contentType, "image/") {
-		return true
-	}
-	switch strings.ToLower(filepath.Ext(filename)) {
-	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg":
-		return true
-	}
-	return false
-}
-
-// SaveAppIcon stores the app-level icon under the fixed key {app_id}/0/icon.png
-// so re-uploads overwrite the previous file.
-func (s *Service) SaveAppIcon(ctx context.Context, appID int64, contentType, filename string, file io.Reader) (*model.App, error) {
+// DeleteAppScreenshot removes a screenshot by its storage key and deletes the
+// underlying file.
+func (s *Service) DeleteAppScreenshot(ctx context.Context, appID int64, key string) (*model.App, error) {
 	var app model.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
 		return nil, &Error{StatusNotFound, "应用不存在"}
 	}
-	if !isImageUpload(contentType, filename) {
-		return nil, &Error{StatusBadRequest, "仅支持图片文件"}
-	}
-	key := storage.Key(app.ID, 0, "icon.png")
-	if _, err := s.Storage.Save(ctx, key, file); err != nil {
-		return nil, &Error{StatusInternal, "存储失败"}
-	}
-	app.Icon = "/api/v1/files/" + key
-	if err := s.DB.Model(&app).Update("icon", app.Icon).Error; err != nil {
-		return nil, &Error{StatusInternal, "保存失败"}
-	}
-	return &app, nil
-}
-
-// SaveAppScreenshot stores one app screenshot under {app_id}/0/shot-<nano>.ext
-// and appends its URL to App.Screenshots.
-func (s *Service) SaveAppScreenshot(ctx context.Context, appID int64, contentType, filename string, file io.Reader) (*model.App, error) {
-	var app model.App
-	if err := s.DB.First(&app, appID).Error; err != nil {
-		return nil, &Error{StatusNotFound, "应用不存在"}
-	}
-	if !isImageUpload(contentType, filename) {
-		return nil, &Error{StatusBadRequest, "仅支持图片文件"}
-	}
-	key := storage.Key(app.ID, 0, fmt.Sprintf("shot-%d%s", time.Now().UnixNano(), filepath.Ext(filename)))
-	if _, err := s.Storage.Save(ctx, key, file); err != nil {
-		return nil, &Error{StatusInternal, "存储失败"}
-	}
-	app.Screenshots = append(app.Screenshots, "/api/v1/files/"+key)
-	if err := s.DB.Model(&app).Update("screenshots", app.Screenshots).Error; err != nil {
-		return nil, &Error{StatusInternal, "保存失败"}
-	}
-	return &app, nil
-}
-
-// DeleteAppScreenshot removes a screenshot by its exposed URL and deletes the
-// underlying storage file.
-func (s *Service) DeleteAppScreenshot(ctx context.Context, appID int64, rawURL string) (*model.App, error) {
-	var app model.App
-	if err := s.DB.First(&app, appID).Error; err != nil {
-		return nil, &Error{StatusNotFound, "应用不存在"}
-	}
-	key := strings.TrimPrefix(rawURL, "/api/v1/files/")
-	if key == rawURL || key == "" {
+	if key == "" || !storage.ValidKey(key) {
 		return nil, &Error{StatusBadRequest, "无效的截图地址"}
 	}
 	kept := app.Screenshots[:0]
-	for _, u := range app.Screenshots {
-		if u != rawURL {
-			kept = append(kept, u)
+	for _, k := range app.Screenshots {
+		if k != key {
+			kept = append(kept, k)
 		}
 	}
 	app.Screenshots = kept
@@ -296,3 +239,4 @@ func (s *Service) DeleteAppScreenshot(ctx context.Context, appID int64, rawURL s
 	}
 	return &app, nil
 }
+

@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Copy, Upload as UploadIcon, X } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
-import { api } from '../../api/client'
+import { api, fileURL, uploadViaURL } from '../../api/client'
 import { useAuth } from '../../composables/useAuth'
 import { useI18n } from '../../composables/useI18n'
 import { formatArch } from '../../constants/platform'
@@ -190,7 +190,7 @@ function syncOverview() {
   infoName.value = app.name
   infoDescription.value = app.description ?? ''
   infoIcon.value = null
-  infoIconPreview.value = app.icon || ''
+  infoIconPreview.value = app.icon ? fileURL(app.icon) : ''
   accessMode.value = app.access_mode || 'public'
   accessPassword.value = ''
   accessExpiresAt.value = toLocalInput(app.expires_at ?? null)
@@ -199,7 +199,14 @@ function syncOverview() {
 function onInfoIconChange(f: File | File[] | null) {
   const file = Array.isArray(f) ? f[0] ?? null : f
   infoIcon.value = file
-  infoIconPreview.value = file ? URL.createObjectURL(file) : (data.value?.app.icon ?? '')
+  infoIconPreview.value = file ? URL.createObjectURL(file) : (data.value?.app.icon ? fileURL(data.value.app.icon) : '')
+}
+
+// presignUpload presigns, pushes bytes to the url, and returns the key.
+async function presignUpload(presign: () => Promise<{ key: string; url: string }>, file: File): Promise<string> {
+  const ticket = await presign()
+  await uploadViaURL(ticket.url, file)
+  return ticket.key
 }
 
 async function saveInfo() {
@@ -214,7 +221,15 @@ async function saveInfo() {
   const id = data.value.app.id
   try {
     await api.updateApp(id, { name: infoName.value.trim(), description: infoDescription.value })
-    if (infoIcon.value) await api.uploadAppIcon(id, infoIcon.value)
+    const icon = infoIcon.value
+    if (icon) {
+      const key = await presignUpload(
+        () => api.presignFile(id, icon.name),
+        icon,
+      )
+      await api.updateApp(id, { icon: key })
+      if (data.value) data.value.app.icon = key
+    }
     await load()
     syncOverview()
     showSnack(t('adminApp.infoSaved'))
@@ -232,9 +247,15 @@ async function onScreenshotsChange(files: File[] | File | null) {
   shotsUploading.value = true
   const id = data.value.app.id
   try {
+    const keys: string[] = []
     for (const f of list) {
-      await api.uploadAppScreenshot(id, f)
+      const key = await presignUpload(
+        () => api.presignFile(id, f.name),
+        f,
+      )
+      keys.push(key)
     }
+    await api.updateApp(id, { screenshots: [...(data.value.app.screenshots), ...keys] })
     await load()
     showSnack(t('adminApp.screenshotUploaded'))
   } catch (e) {
@@ -490,7 +511,7 @@ function fmtSize(n: number): string {
   <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
     <div v-if="data" class="mb-6 flex items-center justify-between gap-3">
       <div class="flex items-center gap-3">
-        <Avatar :src="data.app.icon" :fallback="data.app.name.charAt(0).toUpperCase()" class="size-10" />
+        <Avatar :src="fileURL(data.app.icon)" :fallback="data.app.name.charAt(0).toUpperCase()" class="size-10" />
         <h1 class="text-2xl font-semibold tracking-tight">{{ data.app.name }}</h1>
       </div>
       <Button @click="goUpload">
@@ -612,7 +633,7 @@ function fmtSize(n: number): string {
           <Alert v-if="shotsError" variant="destructive" class="mb-2">{{ shotsError }}</Alert>
           <div v-if="data && data.app.screenshots.length" class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
             <div v-for="url in data.app.screenshots" :key="url" class="overflow-hidden rounded-lg border">
-              <img :src="url" class="aspect-[9/16] w-full object-cover" />
+              <img :src="fileURL(url)" class="aspect-[9/16] w-full object-cover" />
               <div class="flex justify-end p-1">
                 <Button variant="ghost" size="sm" class="text-destructive hover:text-destructive" @click="deleteScreenshot(url)">{{ t('common.delete') }}</Button>
               </div>
@@ -647,7 +668,7 @@ function fmtSize(n: number): string {
                 <TableRow v-for="v in filteredVersions" :key="v.id">
                   <TableCell>
                     <div class="flex items-center gap-2">
-                      <Avatar :src="v.icon_url" :fallback="(v.app_name || v.version_name || '?').charAt(0).toUpperCase()" class="size-7" />
+                      <Avatar :src="fileURL(v.icon_url)" :fallback="(v.app_name || v.version_name || '?').charAt(0).toUpperCase()" class="size-7" />
                       <code>{{ v.version_name }}</code>
                       <Badge v-if="isCurrent(v)" variant="success">{{ t('adminApp.currentVersion') }}</Badge>
                       <span class="text-muted-foreground text-xs">{{ t('detail.code') }} {{ v.version_code }}</span>

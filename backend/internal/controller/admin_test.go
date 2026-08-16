@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"disapp/internal/resources/storage/local"
 	"disapp/internal/resources/store/model"
 	"disapp/pkg/pwd"
 )
@@ -269,40 +269,41 @@ func TestAdminAppsListAndDelete(t *testing.T) {
 	}
 }
 
-func TestAdminUploadAppIcon(t *testing.T) {
+func TestAdminUploadAndSetIcon(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
 	s.SVC.DB.Create(&app)
 
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	fw, _ := mw.CreateFormFile("icon", "icon.png")
-	fw.Write(pngData)
-	mw.Close()
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/apps/"+itoa(app.ID)+"/icon", &buf)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	req.SetPathValue("id", itoa(app.ID))
+	// The single /files presign returns a key scoped to the app; bytes are
+	// pushed there by the client, then the icon key is submitted on update.
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/files", strings.NewReader(`{"app_id":`+itoa(app.ID)+`,"file_name":"icon.png"}`))
 	w := httptest.NewRecorder()
-	s.UploadAppIcon(w, req)
+	s.PresignFile(w, req)
 
 	var res struct {
-		Code int `json:"code"`
-		Data struct {
-			Icon string `json:"icon"`
-		} `json:"data"`
+		Code int    `json:"code"`
+		Data ticket `json:"data"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &res)
 	if res.Code != 0 {
 		t.Fatalf("res = %s", w.Body.String())
 	}
-	if res.Data.Icon == "" {
-		t.Fatal("icon url missing")
+	if res.Data.URL == "" || res.Data.Key == "" {
+		t.Fatalf("ticket missing fields: %+v", res.Data)
 	}
+	loc, _ := s.SVC.Storage.(*local.LocalStorage)
+	storeBytes(t, s, res.Data.Key, pngData)
 
-	// Bytes stored at the exposed key.
-	key := strings.TrimPrefix(res.Data.Icon, "/api/v1/files/")
-	rc, err := s.SVC.Storage.Open(nil, key)
+	upReq := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"icon":"`+res.Data.Key+`"}`))
+	upReq.SetPathValue("id", itoa(app.ID))
+	s.UpdateApp(httptest.NewRecorder(), upReq)
+
+	var reload model.App
+	s.SVC.DB.First(&reload, app.ID)
+	if reload.Icon != res.Data.Key {
+		t.Fatalf("icon key = %q, want %q", reload.Icon, res.Data.Key)
+	}
+	rc, err := loc.Open(nil, res.Data.Key)
 	if err != nil {
 		t.Fatalf("icon not stored: %v", err)
 	}
@@ -316,8 +317,18 @@ func TestAdminUploadAppIcon(t *testing.T) {
 	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/apps/"+itoa(app.ID), nil)
 	delReq.SetPathValue("id", itoa(app.ID))
 	s.DeleteApp(httptest.NewRecorder(), delReq)
-	if _, err := s.SVC.Storage.Open(nil, key); err == nil {
+	if _, err := loc.Open(nil, res.Data.Key); err == nil {
 		t.Fatal("icon file should be deleted with the app")
+	}
+}
+
+func TestAdminPresignRejectsMissingAppID(t *testing.T) {
+	s := testServer(t)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/files", strings.NewReader(`{"file_name":"icon.png"}`))
+	w := httptest.NewRecorder()
+	s.PresignFile(w, req)
+	if codeOf(w) == 0 {
+		t.Fatalf("expected rejection, res = %s", w.Body.String())
 	}
 }
 
@@ -354,35 +365,27 @@ func TestUpdateAppAccessPassword(t *testing.T) {
 	}
 }
 
-func TestAdminScreenshotUploadAndDelete(t *testing.T) {
+func TestAdminScreenshotPresignAndDelete(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
 	s.SVC.DB.Create(&app)
+	loc, _ := s.SVC.Storage.(*local.LocalStorage)
 
-	// Upload a screenshot.
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	fw, _ := mw.CreateFormFile("screenshot", "shot.png")
-	fw.Write(pngData)
-	mw.Close()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/apps/"+itoa(app.ID)+"/screenshots", &buf)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	req.SetPathValue("id", itoa(app.ID))
+	// Presign + write bytes at the returned key, then submit it on update.
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/files", strings.NewReader(`{"app_id":`+itoa(app.ID)+`,"file_name":"shot.png"}`))
 	w := httptest.NewRecorder()
-	s.UploadAppScreenshot(w, req)
+	s.PresignFile(w, req)
 	var res struct {
-		Code int `json:"code"`
-		Data struct {
-			Screenshots []string `json:"screenshots"`
-		} `json:"data"`
+		Code int    `json:"code"`
+		Data ticket `json:"data"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &res)
-	if res.Code != 0 || len(res.Data.Screenshots) != 1 {
+	if res.Code != 0 || res.Data.Key == "" {
 		t.Fatalf("res = %s", w.Body.String())
 	}
-	url := res.Data.Screenshots[0]
-	key := strings.TrimPrefix(url, "/api/v1/files/")
-	if rc, err := s.SVC.Storage.Open(nil, key); err != nil {
+	key := res.Data.Key
+	storeBytes(t, s, key, pngData)
+	if rc, err := loc.Open(nil, key); err != nil {
 		t.Fatalf("screenshot not stored: %v", err)
 	} else {
 		got, _ := io.ReadAll(rc)
@@ -391,12 +394,20 @@ func TestAdminScreenshotUploadAndDelete(t *testing.T) {
 			t.Fatalf("screenshot bytes mismatch: got %d bytes", len(got))
 		}
 	}
+	upReq := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"screenshots":["`+key+`"]}`))
+	upReq.SetPathValue("id", itoa(app.ID))
+	s.UpdateApp(httptest.NewRecorder(), upReq)
+	var reload model.App
+	s.SVC.DB.First(&reload, app.ID)
+	if len(reload.Screenshots) != 1 || reload.Screenshots[0] != key {
+		t.Fatalf("screenshots = %v", reload.Screenshots)
+	}
 
 	// Deleting the app removes the screenshot file too.
 	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/apps/"+itoa(app.ID), nil)
 	delReq.SetPathValue("id", itoa(app.ID))
 	s.DeleteApp(httptest.NewRecorder(), delReq)
-	if _, err := s.SVC.Storage.Open(nil, key); err == nil {
+	if _, err := loc.Open(nil, key); err == nil {
 		t.Fatal("screenshot file should be deleted with the app")
 	}
 }
@@ -405,37 +416,38 @@ func TestAdminDeleteAppScreenshot(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
 	s.SVC.DB.Create(&app)
+	loc, _ := s.SVC.Storage.(*local.LocalStorage)
 
-	// Upload two, delete one.
-	urls := []string{}
+	// Presign two, write bytes, submit both, then delete one by key.
+	keys := []string{}
 	for i := 0; i < 2; i++ {
-		var buf bytes.Buffer
-		mw := multipart.NewWriter(&buf)
-		fw, _ := mw.CreateFormFile("screenshot", "shot.png")
-		fw.Write(pngData)
-		mw.Close()
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/apps/"+itoa(app.ID)+"/screenshots", &buf)
-		req.Header.Set("Content-Type", mw.FormDataContentType())
-		req.SetPathValue("id", itoa(app.ID))
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/files", strings.NewReader(`{"app_id":`+itoa(app.ID)+`,"file_name":"shot.png"}`))
 		w := httptest.NewRecorder()
-		s.UploadAppScreenshot(w, req)
+		s.PresignFile(w, req)
 		var res struct {
-			Code int `json:"code"`
-			Data struct {
-				Screenshots []string `json:"screenshots"`
-			} `json:"data"`
+			Code int    `json:"code"`
+			Data ticket `json:"data"`
 		}
 		json.Unmarshal(w.Body.Bytes(), &res)
 		if res.Code != 0 {
 			t.Fatalf("res = %s", w.Body.String())
 		}
-		urls = res.Data.Screenshots
+		keys = append(keys, res.Data.Key)
+		storeBytes(t, s, res.Data.Key, pngData)
 	}
-	if len(urls) != 2 {
-		t.Fatalf("screenshots = %d", len(urls))
+	if len(keys) != 2 {
+		t.Fatalf("keys = %d", len(keys))
+	}
+	upReq := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"screenshots":["`+keys[0]+`","`+keys[1]+`"]}`))
+	upReq.SetPathValue("id", itoa(app.ID))
+	s.UpdateApp(httptest.NewRecorder(), upReq)
+	var app2 model.App
+	s.SVC.DB.First(&app2, app.ID)
+	if len(app2.Screenshots) != 2 {
+		t.Fatalf("screenshots = %v", app2.Screenshots)
 	}
 
-	del := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/apps/"+itoa(app.ID)+"/screenshots?url="+urls[0], nil)
+	del := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/apps/"+itoa(app.ID)+"/screenshots?url="+keys[0], nil)
 	del.SetPathValue("id", itoa(app.ID))
 	w := httptest.NewRecorder()
 	s.DeleteAppScreenshot(w, del)
@@ -446,35 +458,10 @@ func TestAdminDeleteAppScreenshot(t *testing.T) {
 		} `json:"data"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &res)
-	if res.Code != 0 || len(res.Data.Screenshots) != 1 || res.Data.Screenshots[0] != urls[1] {
+	if res.Code != 0 || len(res.Data.Screenshots) != 1 || res.Data.Screenshots[0] != keys[1] {
 		t.Fatalf("res = %s", w.Body.String())
 	}
-	if _, err := s.SVC.Storage.Open(nil, strings.TrimPrefix(urls[0], "/api/v1/files/")); err == nil {
+	if _, err := loc.Open(nil, keys[0]); err == nil {
 		t.Fatal("deleted screenshot file should be gone")
-	}
-}
-
-func TestAdminUploadAppIconRejectsNonImage(t *testing.T) {
-	s := testServer(t)
-	app := model.App{Name: "a"}
-	s.SVC.DB.Create(&app)
-
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	fw, _ := mw.CreateFormFile("icon", "app.txt")
-	fw.Write([]byte("not an image"))
-	mw.Close()
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/apps/"+itoa(app.ID)+"/icon", &buf)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	req.SetPathValue("id", itoa(app.ID))
-	w := httptest.NewRecorder()
-	s.UploadAppIcon(w, req)
-	var res struct {
-		Code int `json:"code"`
-	}
-	json.Unmarshal(w.Body.Bytes(), &res)
-	if res.Code == 0 {
-		t.Fatalf("expected rejection, got %s", w.Body.String())
 	}
 }

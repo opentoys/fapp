@@ -3,14 +3,13 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
-	"io"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"disapp/internal/resources/storage/local"
 	"disapp/internal/resources/store/model"
 )
 
@@ -24,97 +23,92 @@ var pngData = []byte{
 	0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 }
 
-func uploadVersionReq(t *testing.T, fields map[string]string, filename string, data []byte) *http.Request {
-	t.Helper()
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	for k, v := range fields {
-		mw.WriteField(k, v)
-	}
-	fw, _ := mw.CreateFormFile("file", filename)
-	fw.Write(data)
-	mw.Close()
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/versions", &buf)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	return req
+// presignFor requests the app icon/screenshot presign and returns the {url,key}.
+type ticket struct {
+	URL string `json:"url"`
+	Key string `json:"key"`
 }
 
-func TestUploadVersion(t *testing.T) {
+// createVersion posts JSON metadata (file already uploaded at key) and returns code.
+func createVersion(t *testing.T, s *Controller, appID int64, extra map[string]string) int {
+	t.Helper()
+	body := map[string]any{
+		"app_id":       appID,
+		"version_name": "1.0.0",
+		"version_code": 100,
+		"file_name":    "app.apk",
+		"key":          "1/2/app.apk",
+		"file_size":    11,
+		"sha256":       "abc",
+	}
+	for k, v := range extra {
+		body[k] = v
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/versions", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+	s.CreateVersion(w, req)
+	return codeOf(w)
+}
+
+func codeOf(w *httptest.ResponseRecorder) int {
+	var res struct {
+		Code int `json:"code"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	return res.Code
+}
+
+func TestCreateVersionSavesMetadata(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a", Platform: "android"}
 	s.SVC.DB.Create(&app)
 
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	mw.WriteField("app_id", itoa(app.ID))
-	mw.WriteField("release_type", "production")
-	mw.WriteField("arch", "arm64,x86_64")
-	mw.WriteField("version_name", "1.2.3")
-	mw.WriteField("version_code", "123")
-	mw.WriteField("changelog", "修复 bug")
-	fw, _ := mw.CreateFormFile("file", "app.apk")
-	fw.Write([]byte("fake-apk-bytes"))
-	mw.Close()
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/versions", &buf)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
+	body := `{"app_id":` + itoa(app.ID) + `,"version_name":"1.2.3","version_code":123,"release_type":"production","arch":"arm64,x86_64","changelog":"修复 bug","file_name":"app.apk","key":"7/8/app.apk","file_size":14,"sha256":"feedbeef"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/versions", strings.NewReader(body))
 	w := httptest.NewRecorder()
-	s.UploadVersion(w, req)
+	s.CreateVersion(w, req)
 
 	var res struct {
 		Code int `json:"code"`
 		Data struct {
-			ID           int64  `json:"id"`
-			VersionName  string `json:"version_name"`
-			FileSize     int64  `json:"file_size"`
-			SHA256       string `json:"sha256"`
+			ID          int64  `json:"id"`
+			VersionName string `json:"version_name"`
+			FileSize    int64  `json:"file_size"`
+			SHA256      string `json:"sha256"`
 		} `json:"data"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &res)
 	if res.Code != 0 {
 		t.Fatalf("res = %s", w.Body.String())
 	}
-	if res.Data.VersionName != "1.2.3" || res.Data.FileSize != int64(len("fake-apk-bytes")) {
+	if res.Data.VersionName != "1.2.3" || res.Data.FileSize != 14 || res.Data.SHA256 != "feedbeef" {
 		t.Fatalf("data = %+v", res.Data)
-	}
-	if res.Data.SHA256 == "" {
-		t.Fatal("sha256 missing")
 	}
 
 	var v model.Version
-	s.SVC.DB.Last(&v)
+	s.SVC.DB.First(&v, res.Data.ID)
 	// The version's platform is forced from the app (single-platform apps),
 	// regardless of any platform value the client sends.
 	if v.ReleaseType != "production" || v.Platform != "android" || v.Arch != "arm64,x86_64" {
 		t.Fatalf("release_type/platform/arch not stored: %+v", v)
 	}
-	// Verify file was actually written to local storage
-	rc, err := s.SVC.Storage.Open(nil, itoa(app.ID)+"/"+itoa(v.ID)+"/app.apk")
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, _ := io.ReadAll(rc)
-	rc.Close()
-	if string(data) != "fake-apk-bytes" {
-		t.Fatalf("stored = %q", data)
+	if v.StorageKey != "7/8/app.apk" {
+		t.Fatalf("storage_key = %q", v.StorageKey)
 	}
 }
 
-func TestUploadVersionForcesAppPlatform(t *testing.T) {
+func TestCreateVersionForcesAppPlatform(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a", Platform: "ios"}
 	s.SVC.DB.Create(&app)
 
 	// Client sends a conflicting platform; the server must ignore it and use
 	// the app's platform.
-	req := uploadVersionReq(t, map[string]string{
-		"app_id":       itoa(app.ID),
-		"version_name": "1.0.0",
-		"platform":     "android",
-	}, "app.ipa", []byte("ipa"))
+	body := `{"app_id":` + itoa(app.ID) + `,"version_name":"1.0.0","platform":"android","file_name":"app.ipa","key":"1/2/app.ipa"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/versions", strings.NewReader(body))
 	w := httptest.NewRecorder()
-	s.UploadVersion(w, req)
+	s.CreateVersion(w, req)
 
 	var v model.Version
 	s.SVC.DB.Last(&v)
@@ -123,56 +117,37 @@ func TestUploadVersionForcesAppPlatform(t *testing.T) {
 	}
 }
 
-func TestUploadVersionIgnoresAccessFields(t *testing.T) {
+func TestCreateVersionRequiresValidKey(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a"}
 	s.SVC.DB.Create(&app)
 
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	mw.WriteField("app_id", itoa(app.ID))
-	mw.WriteField("version_name", "1.0")
-	mw.WriteField("version_code", "10")
-	mw.WriteField("access_mode", "password")
-	mw.WriteField("password", "secret")
-	fw, _ := mw.CreateFormFile("file", "x.apk")
-	fw.Write([]byte("data"))
-	mw.Close()
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/versions", &buf)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	w := httptest.NewRecorder()
-	s.UploadVersion(w, req)
-
-	var res struct {
-		Code int `json:"code"`
-	}
-	json.Unmarshal(w.Body.Bytes(), &res)
-	if res.Code != 0 {
-		t.Fatalf("res = %s", w.Body.String())
-	}
-
-	// Access fields from the multipart body must be ignored; the access
-	// scope is configured at the app level, never per version.
-	s.SVC.DB.First(&app, app.ID)
-	if app.AccessMode != "" {
-		t.Fatalf("upload must not touch app access, got %+v", app)
+	// A storage key that fails ValidKey must be rejected.
+	code := createVersion(t, s, app.ID, map[string]string{"key": "../etc/passwd"})
+	if code == 0 {
+		t.Fatal("invalid key must be rejected")
 	}
 }
 
-// The app's appid (package_name) is locked on the first version upload that
+func TestCreateVersionRequiresVersionName(t *testing.T) {
+	s := testServer(t)
+	app := model.App{Name: "a"}
+	s.SVC.DB.Create(&app)
+
+	code := createVersion(t, s, app.ID, map[string]string{"version_name": ""})
+	if code == 0 {
+		t.Fatal("missing version_name must be rejected")
+	}
+}
+
+// The app's appid (package_name) is locked on the first version create that
 // carries one; afterwards the app row stores it.
-func TestUploadVersionLocksAppidOnFirstUpload(t *testing.T) {
+func TestCreateVersionLocksAppidOnFirstUpload(t *testing.T) {
 	s := testServer(t)
 	app := model.App{Name: "a", Platform: "android"}
 	s.SVC.DB.Create(&app)
 
-	req := uploadVersionReq(t, map[string]string{
-		"app_id":       itoa(app.ID),
-		"version_name": "1.0.0",
-		"appid": "com.example.app",
-	}, "app.apk", []byte("apk"))
-	s.UploadVersion(httptest.NewRecorder(), req)
+	createVersion(t, s, app.ID, map[string]string{"appid": "com.example.app"})
 
 	s.SVC.DB.First(&app, app.ID)
 	if app.PackageName == nil || *app.PackageName != "com.example.app" {
@@ -180,70 +155,40 @@ func TestUploadVersionLocksAppidOnFirstUpload(t *testing.T) {
 	}
 }
 
-// Once locked, an upload carrying a different (or no) appid must be rejected.
-func TestUploadVersionRejectsMismatchedAppid(t *testing.T) {
+// Once locked, a create carrying a different (or no) appid must be rejected.
+func TestCreateVersionRejectsMismatchedAppid(t *testing.T) {
 	s := testServer(t)
 	pkg := "com.example.app"
 	app := model.App{Name: "a", Platform: "android", PackageName: &pkg}
 	s.SVC.DB.Create(&app)
 
-	upload := func(extra map[string]string) int {
-		fields := map[string]string{"app_id": itoa(app.ID), "version_name": "1.0.0"}
-		for k, v := range extra {
-			fields[k] = v
-		}
-		req := uploadVersionReq(t, fields, "app.apk", []byte("apk"))
-		w := httptest.NewRecorder()
-		s.UploadVersion(w, req)
-		var res struct {
-			Code int `json:"code"`
-		}
-		json.Unmarshal(w.Body.Bytes(), &res)
-		return res.Code
-	}
-
-	if code := upload(map[string]string{"appid": "com.example.app"}); code != 0 {
+	if code := createVersion(t, s, app.ID, map[string]string{"appid": "com.example.app"}); code != 0 {
 		t.Fatalf("matching appid rejected: %d", code)
 	}
-	if code := upload(map[string]string{"appid": "com.other.app"}); code == 0 {
+	if code := createVersion(t, s, app.ID, map[string]string{"appid": "com.other.app"}); code == 0 {
 		t.Fatal("mismatched appid must be rejected")
 	}
-	if code := upload(nil); code == 0 {
+	if code := createVersion(t, s, app.ID, nil); code == 0 {
 		t.Fatal("missing appid on a locked app must be rejected")
 	}
 }
 
 // Locking an appid must respect the (platform, appid) uniqueness rule: a second
 // app on the same platform cannot lock the same appid.
-func TestUploadVersionLockRespectsUnique(t *testing.T) {
+func TestCreateVersionLockRespectsUnique(t *testing.T) {
 	s := testServer(t)
 	app1 := model.App{Name: "a", Platform: "android"}
 	s.SVC.DB.Create(&app1)
 	app2 := model.App{Name: "b", Platform: "android"}
 	s.SVC.DB.Create(&app2)
 
-	upload := func(appID int64, pkg string) int {
-		fields := map[string]string{"app_id": itoa(appID), "version_name": "1.0.0"}
-		if pkg != "" {
-			fields["appid"] = pkg
-		}
-		req := uploadVersionReq(t, fields, "app.apk", []byte("apk"))
-		w := httptest.NewRecorder()
-		s.UploadVersion(w, req)
-		var res struct {
-			Code int `json:"code"`
-		}
-		json.Unmarshal(w.Body.Bytes(), &res)
-		return res.Code
-	}
-
-	if code := upload(app1.ID, "com.example.app"); code != 0 {
+	if code := createVersion(t, s, app1.ID, map[string]string{"appid": "com.example.app"}); code != 0 {
 		t.Fatalf("first lock failed: %d", code)
 	}
-	if code := upload(app2.ID, "com.example.app"); code == 0 {
+	if code := createVersion(t, s, app2.ID, map[string]string{"appid": "com.example.app"}); code == 0 {
 		t.Fatal("duplicate appid lock on same platform must be rejected")
 	}
-	if code := upload(app2.ID, "com.other.app"); code != 0 {
+	if code := createVersion(t, s, app2.ID, map[string]string{"appid": "com.other.app"}); code != 0 {
 		t.Fatalf("distinct appid lock failed: %d", code)
 	}
 }
@@ -290,7 +235,7 @@ func TestDeleteVersion(t *testing.T) {
 		StorageKey: "1/2/a.apk",
 	}
 	s.SVC.DB.Create(&v)
-	s.SVC.Storage.Save(nil, "1/2/a.apk", strings.NewReader("x"))
+	storeBytes(t, s, "1/2/a.apk", []byte("x"))
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/versions/"+itoa(v.ID)+"?delete_file=true", nil)
 	req.SetPathValue("id", itoa(v.ID))
@@ -301,121 +246,8 @@ func TestDeleteVersion(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("versions = %d", count)
 	}
-	if _, err := s.SVC.Storage.Open(nil, "1/2/a.apk"); err == nil {
+	if _, err := s.SVC.Storage.(*local.LocalStorage).Open(nil, "1/2/a.apk"); err == nil {
 		t.Fatal("file should be deleted")
-	}
-}
-
-func TestUploadVersionMetadata(t *testing.T) {
-	s := testServer(t)
-	app := model.App{Name: "a"}
-	s.SVC.DB.Create(&app)
-
-	// The browser sends parsed package/app_name as fields and the icon as a
-	// separate multipart file (always PNG). The handler just stores them.
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	mw.WriteField("app_id", itoa(app.ID))
-	mw.WriteField("version_name", "2.0.0")
-	mw.WriteField("version_code", "200")
-	mw.WriteField("appid", "com.test.app")
-	mw.WriteField("app_name", "Test App")
-	fw, _ := mw.CreateFormFile("file", "app.apk")
-	fw.Write([]byte("apk"))
-	icon, _ := mw.CreateFormFile("icon", "icon.png")
-	icon.Write(pngData)
-	mw.Close()
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/versions", &buf)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-	w := httptest.NewRecorder()
-	s.UploadVersion(w, req)
-
-	var res struct {
-		Code int `json:"code"`
-		Data struct {
-			ID          int64  `json:"id"`
-			VersionName string `json:"version_name"`
-			VersionCode int    `json:"version_code"`
-			PackageName string `json:"appid"`
-			AppName     string `json:"app_name"`
-			IconURL     string `json:"icon_url"`
-		} `json:"data"`
-	}
-	json.Unmarshal(w.Body.Bytes(), &res)
-	if res.Code != 0 {
-		t.Fatalf("res = %s", w.Body.String())
-	}
-	if res.Data.VersionName != "2.0.0" || res.Data.VersionCode != 200 ||
-		res.Data.PackageName != "com.test.app" || res.Data.AppName != "Test App" {
-		t.Fatalf("metadata not applied: %+v", res.Data)
-	}
-	if res.Data.IconURL == "" {
-		t.Fatal("icon_url missing")
-	}
-
-	// Icon bytes must be stored at the exposed key.
-	key := strings.TrimPrefix(res.Data.IconURL, "/api/v1/files/")
-	rc, err := s.SVC.Storage.Open(nil, key)
-	if err != nil {
-		t.Fatalf("icon not stored: %v", err)
-	}
-	got, _ := io.ReadAll(rc)
-	rc.Close()
-	if !bytes.Equal(got, pngData) {
-		t.Fatalf("icon bytes mismatch: got %d bytes", len(got))
-	}
-
-	// DB row persists the fields.
-	var v model.Version
-	s.SVC.DB.First(&v, res.Data.ID)
-	if v.PackageName != "com.test.app" || v.AppName != "Test App" || v.IconURL != res.Data.IconURL {
-		t.Fatalf("db row = %+v", v)
-	}
-}
-
-func TestUploadVersionWithoutIcon(t *testing.T) {
-	s := testServer(t)
-	app := model.App{Name: "a"}
-	s.SVC.DB.Create(&app)
-
-	// No icon part -> upload succeeds with an empty icon_url.
-	req := uploadVersionReq(t, map[string]string{
-		"app_id":       itoa(app.ID),
-		"version_name": "1.0.0",
-	}, "app.apk", []byte("apk"))
-	w := httptest.NewRecorder()
-	s.UploadVersion(w, req)
-
-	var res struct {
-		Code int `json:"code"`
-		Data struct {
-			IconURL string `json:"icon_url"`
-		} `json:"data"`
-	}
-	json.Unmarshal(w.Body.Bytes(), &res)
-	if res.Code != 0 {
-		t.Fatalf("res = %s", w.Body.String())
-	}
-	if res.Data.IconURL != "" {
-		t.Fatalf("expected empty icon_url, got %q", res.Data.IconURL)
-	}
-}
-
-func TestUploadVersionRequiresVersionName(t *testing.T) {
-	s := testServer(t)
-	app := model.App{Name: "a"}
-	s.SVC.DB.Create(&app)
-
-	req := uploadVersionReq(t, map[string]string{"app_id": itoa(app.ID)}, "app.apk", []byte("apk"))
-	w := httptest.NewRecorder()
-	s.UploadVersion(w, req)
-	var res struct {
-		Code int `json:"code"`
-	}
-	json.Unmarshal(w.Body.Bytes(), &res)
-	if res.Code == 0 {
-		t.Fatalf("expected failure, got %s", w.Body.String())
 	}
 }
 
@@ -435,8 +267,8 @@ func TestVersionStats(t *testing.T) {
 	var res struct {
 		Code int `json:"code"`
 		Data struct {
-			DownloadCount int64              `json:"download_count"`
-			InstallCount  int64              `json:"install_count"`
+			DownloadCount int64               `json:"download_count"`
+			InstallCount  int64               `json:"install_count"`
 			Recent        []model.DownloadLog `json:"recent"`
 		} `json:"data"`
 	}

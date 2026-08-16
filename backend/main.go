@@ -58,7 +58,7 @@ func main() {
 		}
 		st = cosSt
 	default:
-		loc, err := local.NewLocal(cfg.Storage.Local.Dir)
+		loc, err := local.NewLocal(cfg.Storage.Local.Dir, cfg.JWT.Secret)
 		if err != nil {
 			log.Fatalf("init local storage: %v", err)
 		}

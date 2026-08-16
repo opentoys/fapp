@@ -23,7 +23,7 @@ func testServer(t *testing.T) *Controller {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, err := local.NewLocal(filepath.Join(t.TempDir(), "files"))
+	st, err := local.NewLocal(filepath.Join(t.TempDir(), "files"), config.Default().JWT.Secret)
 	if err != nil {
 		t.Fatal(err)
 	}

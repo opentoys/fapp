@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { Plus, Upload } from 'lucide-vue-next'
-import { api } from '../../api/client'
+import { api, fileURL, uploadViaURL } from '../../api/client'
 import { useI18n } from '../../composables/useI18n'
 import { PLATFORMS } from '../../constants/platform'
 import { fmtDate } from '../../utils/format'
@@ -90,7 +90,9 @@ async function confirmCreate() {
     const app = await api.createApp({ name: newName.value.trim(), platform: newPlatform.value })
     if (createIcon.value) {
       try {
-        await api.uploadAppIcon(app.id, createIcon.value)
+        const ticket = await api.presignFile(app.id, createIcon.value.name)
+        await uploadViaURL(ticket.url, createIcon.value)
+        await api.updateApp(app.id, { icon: ticket.key })
       } catch (e) {
         toast((e as Error).message)
       }
@@ -108,7 +110,7 @@ function openEdit(a: AppItem) {
   editTarget.value = a
   editName.value = a.name
   editIcon.value = null
-  editIconPreview.value = a.icon || ''
+  editIconPreview.value = a.icon ? fileURL(a.icon) : ''
   editError.value = ''
   editDialogOpen.value = true
 }
@@ -131,7 +133,11 @@ async function confirmEdit() {
   const id = editTarget.value.id
   try {
     await api.updateApp(id, { name: editName.value.trim() })
-    if (editIcon.value) await api.uploadAppIcon(id, editIcon.value)
+    if (editIcon.value) {
+      const ticket = await api.presignFile(id, editIcon.value.name)
+      await uploadViaURL(ticket.url, editIcon.value)
+      await api.updateApp(id, { icon: ticket.key })
+    }
     await load()
     editDialogOpen.value = false
     toast(t('admin.appUpdated'))
@@ -184,7 +190,7 @@ async function confirmDelete() {
       <Card v-for="a in apps" :key="a.id" class="gap-0">
         <div class="flex flex-1 cursor-pointer flex-col gap-3 p-5" @click="router.push(`/admin/app/${a.id}`)">
           <div class="flex items-center gap-3">
-            <Avatar :src="a.icon" :fallback="a.name.charAt(0).toUpperCase()" class="size-12" />
+            <Avatar :src="fileURL(a.icon)" :fallback="a.name.charAt(0).toUpperCase()" class="size-12" />
             <span class="truncate font-semibold">{{ a.name }}</span>
           </div>
           <div v-if="a.platform" class="flex items-center gap-2">

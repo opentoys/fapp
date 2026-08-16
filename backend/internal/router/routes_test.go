@@ -18,7 +18,7 @@ func testController(t *testing.T) *controller.Controller {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, err := local.NewLocal(t.TempDir())
+	st, err := local.NewLocal(t.TempDir(), config.Default().JWT.Secret)
 	if err != nil {
 		t.Fatal(err)
 	}

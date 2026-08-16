@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+
 	"disapp/internal/resources/store/model"
 	"disapp/pkg/pwd"
 
@@ -41,14 +42,43 @@ func (s *Service) PublicApps(ctx context.Context) ([]appSummary, error) {
 	out := make([]appSummary, 0, len(apps))
 	for _, a := range apps {
 		sum := appSummary{App: a}
+		s.resolveAppMedia(&sum.App)
 		if id, ok := appCurrent[a.ID]; ok {
 			if v, ok := versions[id]; ok {
+				s.resolveVersionMedia(&v)
 				sum.LatestVersion = &v
 			}
 		}
 		out = append(out, sum)
 	}
 	return out, nil
+}
+
+// resolveVersionMedia replaces a version's bare icon_url key with a signed
+// download URL for public display.
+func (s *Service) resolveVersionMedia(v *model.Version) {
+	if v.IconURL == "" {
+		return
+	}
+	if rel, err := s.Storage.DownloadURL(context.Background(), v.IconURL, "icon.png", time.Hour); err == nil {
+		v.IconURL = rel
+	}
+}
+
+// resolveAppMedia replaces an app's bare icon/screenshot keys with signed
+// download URLs for public display. Non-destructive: mutates the passed copy.
+func (s *Service) resolveAppMedia(a *model.App) {
+	const displayExpire = time.Hour
+	if a.Icon != "" {
+		if rel, err := s.Storage.DownloadURL(context.Background(), a.Icon, "icon.png", displayExpire); err == nil {
+			a.Icon = rel
+		}
+	}
+	for i, k := range a.Screenshots {
+		if rel, err := s.Storage.DownloadURL(context.Background(), k, "shot.png", displayExpire); err == nil {
+			a.Screenshots[i] = rel
+		}
+	}
 }
 
 // PublicAppDetail resolves an app by name (share link) or numeric id. An
@@ -75,6 +105,7 @@ func (s *Service) PublicAppDetail(ctx context.Context, key string) (model.App, [
 			versions = append(versions, v)
 		}
 	}
+	s.resolveAppMedia(&app)
 	return app, versions, nil
 }
 

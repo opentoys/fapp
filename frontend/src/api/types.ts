@@ -51,6 +51,29 @@ export interface AppDetail {
   versions: Version[]
 }
 
+export interface UploadTicket {
+  key: string
+  url: string
+}
+
+// VersionMeta is the JSON body sent to create a version whose bytes were
+// already pushed to the returned key.
+export interface VersionMeta {
+  app_id: number
+  version_code: number
+  version_name: string
+  release_type: ReleaseType
+  arch?: string
+  appid?: string
+  app_name?: string
+  changelog?: string
+  file_name: string
+  content_type?: string
+  sha256: string
+  file_size: number
+  key: string
+}
+
 export type KeyScope = 'read' | 'run'
 
 export interface ApiKey {
