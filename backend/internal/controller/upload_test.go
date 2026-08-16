@@ -96,6 +96,34 @@ func TestCreateVersionSavesMetadata(t *testing.T) {
 	if v.StorageKey != "wechat/7/8/app.apk" {
 		t.Fatalf("storage_key = %q", v.StorageKey)
 	}
+	// The app's first version becomes current automatically.
+	var reload model.App
+	s.SVC.DB.First(&reload, app.ID)
+	if reload.CurrentVersionID != v.ID {
+		t.Fatalf("first version must be set current, got %d want %d", reload.CurrentVersionID, v.ID)
+	}
+}
+
+// A later upload keeps the current pointer on the first version until the admin
+// explicitly promotes a new one.
+func TestCreateVersionKeepsCurrentOnLaterUpload(t *testing.T) {
+	s := testServer(t)
+	app := model.App{Name: "a", Platform: "android"}
+	s.SVC.DB.Create(&app)
+
+	first := `{"app_id":` + itoa(app.ID) + `,"version_name":"1.0.0","version_code":1,"file_name":"a.apk","key":"wechat/1/1/a.apk","file_size":1,"sha256":"a"}`
+	s.CreateVersion(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/v1/admin/versions", strings.NewReader(first)))
+	var app1 model.App
+	s.SVC.DB.First(&app1, app.ID)
+
+	second := `{"app_id":` + itoa(app.ID) + `,"version_name":"2.0.0","version_code":2,"file_name":"b.apk","key":"wechat/1/2/b.apk","file_size":2,"sha256":"b"}`
+	s.CreateVersion(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/v1/admin/versions", strings.NewReader(second)))
+
+	var app2 model.App
+	s.SVC.DB.First(&app2, app.ID)
+	if app2.CurrentVersionID == 0 || app2.CurrentVersionID != app1.CurrentVersionID {
+		t.Fatalf("later upload must keep the first version current, got %d", app2.CurrentVersionID)
+	}
 }
 
 func TestCreateVersionForcesAppPlatform(t *testing.T) {

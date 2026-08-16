@@ -90,6 +90,14 @@ func (s *Service) CreateVersion(ctx context.Context, appID int64, in CreateVersi
 	if err := s.DB.Create(&v).Error; err != nil {
 		return nil, &Error{StatusInternal, "创建版本失败"}
 	}
+	// The app's first version becomes current automatically; later ones need
+	// the explicit "set current" action.
+	if app.CurrentVersionID == 0 {
+		app.CurrentVersionID = v.ID
+		if err := s.DB.Save(&app).Error; err != nil {
+			return nil, &Error{StatusInternal, "保存失败"}
+		}
+	}
 	return &v, nil
 }
 
