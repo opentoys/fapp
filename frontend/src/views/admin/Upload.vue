@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Loader2 } from 'lucide-vue-next'
 import { api, sha256Hex, uploadViaURL } from '../../api/client'
 import { useI18n } from '../../composables/useI18n'
 import { detectPlatformFromName } from '../../constants/platform'
@@ -347,6 +348,7 @@ async function submit() {
       <div class="flex justify-end gap-2">
         <Button variant="outline" @click="router.back()">{{ t('common.cancel') }}</Button>
         <Button type="submit" :disabled="!file || loading">
+          <Loader2 v-if="loading" class="size-4 animate-spin" />
           {{ mode === 'new' ? t('upload.createAndUpload') : t('upload.submit') }}
         </Button>
       </div>

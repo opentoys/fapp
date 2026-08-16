@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Upload } from 'lucide-vue-next'
+import { Loader2, Upload } from 'lucide-vue-next'
 import { cn } from '../lib/utils'
 
 const props = withDefaults(defineProps<{
@@ -9,7 +9,8 @@ const props = withDefaults(defineProps<{
   multiple?: boolean
   dropZone?: boolean
   disabled?: boolean
-}>(), { label: '', accept: '', multiple: false, dropZone: false })
+  loading?: boolean
+}>(), { label: '', accept: '', multiple: false, dropZone: false, loading: false })
 
 const inputEl = ref<HTMLInputElement | null>(null)
 
@@ -31,7 +32,7 @@ function onPick(e: Event) {
 }
 
 function open() {
-  if (!props.disabled) inputEl.value?.click()
+  if (!props.disabled && !props.loading) inputEl.value?.click()
 }
 </script>
 
@@ -47,7 +48,8 @@ function open() {
         props.dropZone ? 'border-dashed h-28 w-full flex-col px-4 py-6 text-center text-muted-foreground' : 'h-9 px-4 py-2',
       )"
     >
-      <Upload class="size-4" />
+      <Loader2 v-if="props.loading" class="size-4 animate-spin" />
+      <Upload v-else class="size-4" />
       <span class="max-w-[220px] truncate">{{ fileName || props.label || 'Choose file' }}</span>
     </button>
   </div>

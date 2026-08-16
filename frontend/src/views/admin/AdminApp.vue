@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Copy, Upload as UploadIcon, X } from 'lucide-vue-next'
+import { Copy, Loader2, Upload as UploadIcon, X } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { api, fileURL, uploadViaURL } from '../../api/client'
 import { useAuth } from '../../composables/useAuth'
@@ -558,7 +558,10 @@ function fmtSize(n: number): string {
             </div>
             <Alert v-if="infoError" variant="destructive">{{ infoError }}</Alert>
             <div class="flex justify-end">
-              <Button :disabled="!infoName.trim() || infoSaving" @click="saveInfo">{{ t('common.save') }}</Button>
+              <Button :disabled="!infoName.trim() || infoSaving" @click="saveInfo">
+            <Loader2 v-if="infoSaving" class="size-4 animate-spin" />
+            {{ t('common.save') }}
+          </Button>
             </div>
           </div>
         </Card>
@@ -628,7 +631,7 @@ function fmtSize(n: number): string {
         <Card class="p-5 md:col-span-2">
           <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
             <CardTitle class="text-base">{{ t('adminApp.overviewScreenshots') }}</CardTitle>
-            <FileUpload :label="t('adminApp.uploadScreenshots')" accept="image/*" multiple @change="onScreenshotsChange" />
+            <FileUpload :label="t('adminApp.uploadScreenshots')" accept="image/*" multiple :loading="shotsUploading" :disabled="shotsUploading" @change="onScreenshotsChange" />
           </div>
           <Alert v-if="shotsError" variant="destructive" class="mb-2">{{ shotsError }}</Alert>
           <div v-if="data && data.app.screenshots.length" class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
