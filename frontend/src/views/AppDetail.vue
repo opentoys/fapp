@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import QRCode from 'qrcode'
 import { Download, Loader2 } from 'lucide-vue-next'
 import { api } from '../api/client'
 import { useI18n } from '../composables/useI18n'
@@ -30,7 +31,20 @@ const passwordError = ref('')
 // The backend exposes only the app's single current version.
 const latest = computed(() => data.value?.versions[0] ?? null)
 
-onMounted(load)
+// Desktop shows a QR code of the page so a phone can scan and download.
+const qrDataUrl = ref('')
+async function genQR() {
+  try {
+    qrDataUrl.value = await QRCode.toDataURL(location.href, { width: 220, margin: 1 })
+  } catch {
+    qrDataUrl.value = ''
+  }
+}
+
+onMounted(() => {
+  load()
+  if (detected.isDesktop) genQR()
+})
 watch(() => route.params.name, (name) => { if (name) load() })
 
 async function load() {
@@ -138,17 +152,25 @@ async function doDownload(versionId: number, pw: string | undefined) {
         />
       </div>
 
-      <!-- Desktop: current version card (the only publicly visible version) -->
+      <!-- Desktop: current version card (the only publicly visible version) + scan-to-download QR -->
       <template v-else-if="latest">
-        <div class="max-w-[560px]">
-          <Card class="p-5">
+        <div class="mx-auto flex flex-col items-center gap-6 sm:flex-row sm:items-start sm:justify-center">
+          <div class="w-full max-w-[560px]">
+            <Card class="p-5">
+              <CardContent class="p-0!">
+                <VersionPanel
+                  :version="latest"
+                  :fallback-name="data.app.name"
+                  :fallback-icon="data.app.icon"
+                  @download="download"
+                />
+              </CardContent>
+            </Card>
+          </div>
+          <Card v-if="qrDataUrl" class="w-56 shrink-0 p-4 text-center">
             <CardContent class="p-0!">
-              <VersionPanel
-                :version="latest"
-                :fallback-name="data.app.name"
-                :fallback-icon="data.app.icon"
-                @download="download"
-              />
+              <img :src="qrDataUrl" alt="QR" class="w-full rounded-md" />
+              <p class="text-muted-foreground mt-3 text-xs">{{ t('detail.scanTip') }}</p>
             </CardContent>
           </Card>
         </div>

@@ -28,7 +28,6 @@ export const api = {
   changePassword: (oldPassword: string, newPassword: string) =>
     client.put<ApiResp<{ ok: boolean }>>('/auth/password', { old_password: oldPassword, new_password: newPassword }),
 
-  apps: () => client.get<ApiResp<AppItem[]>>('/apps').then((r) => r.data.data),
   // The public page is keyed by app name (fallback: numeric id).
   appDetail: (key: string | number) =>
     client.get<ApiResp<AppDetail>>(`/apps/${encodeURIComponent(key)}`).then((r) => r.data.data),
@@ -97,6 +96,7 @@ export const api = {
     client.put<ApiResp<NotificationBot>>(`/admin/subscriptions/${id}`, data).then((r) => r.data.data),
   deleteSubscription: (id: number) => client.delete<ApiResp<unknown>>(`/admin/subscriptions/${id}`),
   testSubscription: (id: number) => client.post<ApiResp<unknown>>(`/admin/subscriptions/${id}/test`),
+  testSubscriptionConfig: (data: BotInput) => client.post<ApiResp<unknown>>('/admin/subscriptions/test', data),
   subscriptionLogs: (id: number, limit = 20) =>
     client.get<ApiResp<NotificationLog[]>>(`/admin/subscriptions/${id}/logs`, { params: { limit } }).then((r) => r.data.data),
 }

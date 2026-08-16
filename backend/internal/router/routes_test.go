@@ -33,12 +33,13 @@ func TestRoutesUnknownAPI(t *testing.T) {
 	// Should not crash; either 404 or a JSON error response
 }
 
-func TestRoutesAppsPath(t *testing.T) {
+// The public app list endpoint was removed; only the detail path remains.
+func TestRoutesAppsListRemoved(t *testing.T) {
 	c := testController(t)
 	h := Routes(c, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/apps", nil))
-	if w.Code != http.StatusOK {
-		t.Fatalf("code = %d", w.Code)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("code = %d, want 404", w.Code)
 	}
 }

@@ -255,7 +255,7 @@ func (s *Service) SetCurrentVersion(ctx context.Context, appID, versionID int64)
 	if err := s.DB.Save(&app).Error; err != nil {
 		return nil, &Error{StatusInternal, "保存失败"}
 	}
-	s.NotifyEventParams(context.Background(), app.ID, model.EventVersionCurrent, app.Name, versionParams(&v))
+	s.NotifyEventParams(context.Background(), app.ID, model.EventVersionCurrent, app.Name, s.versionParams(&v))
 	return &app, nil
 }
 

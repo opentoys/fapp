@@ -9,17 +9,6 @@ import (
 	"disapp/pkg/web"
 )
 
-// Apps returns the published app list; each app's latest_version is its
-// current version (the single publicly downloadable version).
-func (c *Controller) Apps(w http.ResponseWriter, r *http.Request) {
-	apps, err := c.SVC.PublicApps(r.Context())
-	if err != nil {
-		sendErr(w, err)
-		return
-	}
-	web.SendJson(w, apps)
-}
-
 // AppDetail returns app detail. An unpublished app behaves as if it doesn't
 // exist (404).
 func (c *Controller) AppDetail(w http.ResponseWriter, r *http.Request) {
@@ -88,6 +77,16 @@ func (c *Controller) Install(w http.ResponseWriter, r *http.Request) {
 // host comes from the request Host header (so reverse proxies must forward the
 // real host), falling back to X-Forwarded-Host / Forwarded when present.
 func absURL(r *http.Request, path string) string {
+	base := requestBase(r)
+	if base == "" {
+		return path
+	}
+	return base + path
+}
+
+// requestBase returns the scheme://host origin of a request (X-Forwarded-Host
+// wins over Host). Empty when no host is present.
+func requestBase(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
@@ -97,9 +96,9 @@ func absURL(r *http.Request, path string) string {
 		host = fh
 	}
 	if host == "" {
-		return path
+		return ""
 	}
-	return scheme + "://" + host + path
+	return scheme + "://" + host
 }
 
 // clientIP returns the caller IP, honoring X-Forwarded-For.

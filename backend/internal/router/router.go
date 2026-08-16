@@ -30,7 +30,6 @@ func Routes(c *controller.Controller, dist fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/login", web.Chain(login...)(c.Login))
 	mux.HandleFunc("PUT /api/v1/auth/password", web.Chain(admin...)(c.ChangePassword))
 
-	mux.HandleFunc("GET /api/v1/apps", web.Chain(pub...)(c.Apps))
 	mux.HandleFunc("GET /api/v1/apps/{id}", web.Chain(pub...)(c.AppDetail))
 	mux.HandleFunc("POST /api/v1/versions/{id}/verify", web.Chain(verify...)(c.VerifyAccess))
 	mux.HandleFunc("GET /api/v1/versions/{id}/install", web.Chain(pub...)(c.Install))
@@ -72,6 +71,7 @@ func Routes(c *controller.Controller, dist fs.FS) http.Handler {
 	mux.HandleFunc("PUT /api/v1/admin/subscriptions/{id}", web.Chain(admin...)(c.UpdateSubscription))
 	mux.HandleFunc("DELETE /api/v1/admin/subscriptions/{id}", web.Chain(admin...)(c.DeleteSubscription))
 	mux.HandleFunc("POST /api/v1/admin/subscriptions/{id}/test", web.Chain(admin...)(c.TestSubscription))
+	mux.HandleFunc("POST /api/v1/admin/subscriptions/test", web.Chain(admin...)(c.TestSubscriptionConfig))
 	mux.HandleFunc("GET /api/v1/admin/subscriptions/{id}/logs", web.Chain(admin...)(c.SubscriptionLogs))
 
 	// API-key-authenticated programmatic endpoints (key via `?apikey=`).

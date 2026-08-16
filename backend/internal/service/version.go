@@ -99,20 +99,21 @@ func (s *Service) CreateVersion(ctx context.Context, appID int64, in CreateVersi
 		if err := s.DB.Save(&app).Error; err != nil {
 			return nil, &Error{StatusInternal, "保存失败"}
 		}
-		s.NotifyEventParams(ctx, app.ID, model.EventVersionCurrent, app.Name, versionParams(&v))
+		s.NotifyEventParams(ctx, app.ID, model.EventVersionCurrent, app.Name, s.versionParams(&v))
 	}
-	s.NotifyEventParams(ctx, app.ID, model.EventVersionUploaded, app.Name, versionParams(&v))
+	s.NotifyEventParams(ctx, app.ID, model.EventVersionUploaded, app.Name, s.versionParams(&v))
 	return &v, nil
 }
 
 // versionParams fills the version-related notification parameters.
-func versionParams(v *model.Version) NotifyParams {
+func (s *Service) versionParams(v *model.Version) NotifyParams {
 	return NotifyParams{
 		"version_id":   fmt.Sprintf("%d", v.ID),
 		"version_name": v.VersionName,
 		"version_code": strconv.Itoa(v.VersionCode),
 		"file_name":    v.FileName,
 		"file_size":    fmt.Sprintf("%d", v.FileSize),
+		"download_url": s.downloadURL(v.ID),
 	}
 }
 

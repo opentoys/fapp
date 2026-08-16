@@ -12,67 +12,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type appSummary struct {
-	model.App
-	LatestVersion *model.Version `json:"latest_version"`
-}
-
-// PublicApps returns the published app list with each app's current version.
-func (s *Service) PublicApps(ctx context.Context) ([]appSummary, error) {
-	var apps []model.App
-	if err := s.DB.Where("published = ?", true).Order("id desc").Find(&apps).Error; err != nil {
-		return nil, &Error{StatusInternal, "查询失败"}
-	}
-	// Expired apps are hidden from the public list, same as unpublished.
-	visible := apps[:0]
-	for _, a := range apps {
-		if !hiddenApp(&a) {
-			visible = append(visible, a)
-		}
-	}
-	apps = visible
-	versionIDs := make([]int64, 0, len(apps))
-	appCurrent := make(map[int64]int64, len(apps))
-	for _, a := range apps {
-		if a.CurrentVersionID > 0 {
-			appCurrent[a.ID] = a.CurrentVersionID
-			versionIDs = append(versionIDs, a.CurrentVersionID)
-		}
-	}
-	versions := make(map[int64]model.Version)
-	if len(versionIDs) > 0 {
-		var rows []model.Version
-		s.DB.Where("id IN ?", versionIDs).Find(&rows)
-		for _, v := range rows {
-			versions[v.ID] = v
-		}
-	}
-	out := make([]appSummary, 0, len(apps))
-	for _, a := range apps {
-		sum := appSummary{App: a}
-		s.resolveAppMedia(&sum.App)
-		if id, ok := appCurrent[a.ID]; ok {
-			if v, ok := versions[id]; ok {
-				s.resolveVersionMedia(&v)
-				sum.LatestVersion = &v
-			}
-		}
-		out = append(out, sum)
-	}
-	return out, nil
-}
-
-// resolveVersionMedia replaces a version's bare icon_url key with a signed
-// download URL for public display.
-func (s *Service) resolveVersionMedia(v *model.Version) {
-	if v.IconURL == "" {
-		return
-	}
-	if rel, err := s.Storage.DownloadURL(context.Background(), v.IconURL, "icon.png", time.Hour); err == nil {
-		v.IconURL = rel
-	}
-}
-
 // resolveAppMedia replaces an app's bare icon/screenshot keys with signed
 // download URLs for public display. Non-destructive: mutates the passed copy.
 func (s *Service) resolveAppMedia(a *model.App) {

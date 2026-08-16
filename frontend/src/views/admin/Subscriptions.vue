@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { toast } from 'vue-sonner'
-import { Plus, Send, Loader2 } from 'lucide-vue-next'
+import { Plus, Send, Loader2, Info } from 'lucide-vue-next'
 import { api } from '../../api/client'
 import { useI18n } from '../../composables/useI18n'
 import { fmtDate } from '../../utils/format'
@@ -52,6 +52,7 @@ const previewParams = computed(() => {
     file_size: '10485760',
     published: 'true',
     expires_at: '2026-12-31 23:59:59',
+    download_url: location.origin + '/api/v1/versions/42/download',
   }
 })
 
@@ -104,6 +105,18 @@ const eventItems: { value: NotifyEvent; title: string }[] = [
 
 const appItems = computed(() => apps.value.map((a) => ({ value: a.id, title: a.name })))
 
+function buildPayload() {
+  return {
+    name: fName.value.trim(),
+    app_id: fApp.value!,
+    method: fMethod.value,
+    url: fUrl.value.trim(),
+    headers: fHeaders.value.split('\n').map((s) => s.trim()).filter(Boolean),
+    body_template: fBody.value,
+    events: fEvents.value,
+  }
+}
+
 async function save() {
   if (saving.value) return
   if (!fName.value.trim() || !fApp.value || !fUrl.value.trim() || !fEvents.value.length) {
@@ -112,18 +125,9 @@ async function save() {
   }
   dialogError.value = ''
   saving.value = true
-  const payload = {
-    name: fName.value.trim(),
-    app_id: fApp.value,
-    method: fMethod.value,
-    url: fUrl.value.trim(),
-    headers: fHeaders.value.split('\n').map((s) => s.trim()).filter(Boolean),
-    body_template: fBody.value,
-    events: fEvents.value,
-  }
   try {
-    if (editing.value) await api.updateSubscription(editing.value.id, payload)
-    else await api.createSubscription(payload)
+    if (editing.value) await api.updateSubscription(editing.value.id, buildPayload())
+    else await api.createSubscription(buildPayload())
     dialogOpen.value = false
     await load()
     toast(t('notify.saved'))
@@ -131,6 +135,26 @@ async function save() {
     dialogError.value = (e as Error).message
   } finally {
     saving.value = false
+  }
+}
+
+// Test the unsaved form config by firing a sample webhook.
+const testing = ref(false)
+async function testDraft() {
+  if (testing.value) return
+  if (!fName.value.trim() || !fApp.value || !fUrl.value.trim() || !fEvents.value.length) {
+    dialogError.value = t('notify.required')
+    return
+  }
+  dialogError.value = ''
+  testing.value = true
+  try {
+    await api.testSubscriptionConfig(buildPayload())
+    toast(t('notify.testSent'))
+  } catch (e) {
+    dialogError.value = (e as Error).message
+  } finally {
+    testing.value = false
   }
 }
 
@@ -256,22 +280,24 @@ async function load() {
     <!-- Create / edit dialog -->
     <Dialog v-model:open="dialogOpen" :title="editing ? t('notify.edit') : t('notify.new')">
       <div class="grid gap-4">
-        <div class="grid gap-2">
-          <Label>{{ t('notify.fName') }}</Label>
-          <Input v-model="fName" autofocus />
+        <div class="grid gap-2 sm:grid-cols-2">
+          <div class="grid gap-2">
+            <Label>{{ t('notify.fName') }}</Label>
+            <Input v-model="fName" autofocus />
+          </div>
+          <div class="grid gap-2">
+            <Label>{{ t('notify.fApp') }}</Label>
+            <Select v-model="fApp" :items="appItems" :placeholder="t('notify.fAppPlaceholder')" />
+          </div>
         </div>
-        <div class="grid gap-2">
-          <Label>{{ t('notify.fApp') }}</Label>
-          <Select v-model="fApp" :items="appItems" :placeholder="t('notify.fAppPlaceholder')" />
-        </div>
-        <div class="grid gap-2">
-          <Label>{{ t('notify.fMethod') }}</Label>
-          <Select v-model="fMethod" :items="methodItems" />
-          <div class="flex flex-wrap gap-4">
-            <div class="grid gap-2">
-              <Label>{{ t('notify.fUrl') }}</Label>
-              <Input v-model="fUrl" class="min-w-[280px]" placeholder="https://example.com/webhook" />
-            </div>
+        <div class="grid gap-2 sm:grid-cols-2">
+          <div class="grid gap-2">
+            <Label>{{ t('notify.fMethod') }}</Label>
+            <Select v-model="fMethod" :items="methodItems" />
+          </div>
+          <div class="grid gap-2">
+            <Label>{{ t('notify.fUrl') }}</Label>
+            <Input v-model="fUrl" placeholder="https://example.com/webhook" />
           </div>
         </div>
         <div class="grid gap-2">
@@ -279,18 +305,25 @@ async function load() {
           <Textarea v-model="fHeaders" :placeholder="`Authorization: token xxx\nX-App: {{app_name}}`" rows="2" />
         </div>
         <div class="grid gap-2">
-          <Label>{{ t('notify.fBody') }}</Label>
-          <Textarea v-model="fBody" rows="6" class="font-mono text-xs" />
-        </div>
-        <!-- Common parameters reference + live preview -->
-        <div class="grid gap-2 rounded-md border p-3">
-          <div class="text-sm font-semibold">{{ t('notify.paramsTitle') }}</div>
-          <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground sm:grid-cols-3">
-            <code v-for="(v, k) in previewParams" :key="k" class="truncate">
-              {{ paramLabel(k) }} → <span class="text-foreground">{{ v }}</span>
-            </code>
+          <div class="flex items-center gap-1">
+            <Label>{{ t('notify.fBody') }}</Label>
+            <!-- Common parameters reference in a hover tooltip -->
+            <div class="group relative">
+              <span class="text-muted-foreground cursor-help">
+                <Info class="size-3.5" />
+              </span>
+              <div class="pointer-events-auto absolute bottom-full left-0 z-10 mb-2 hidden w-72 rounded-md border bg-popover p-3 text-xs shadow-md group-hover:block after:absolute after:inset-x-0 after:top-full after:h-2">
+                <div class="mb-1 font-semibold">{{ t('notify.paramsTitle') }}</div>
+                <div class="grid gap-y-1 text-muted-foreground">
+                  <code v-for="(v, k) in previewParams" :key="k" class="truncate">
+                    {{ paramLabel(k) }} → <span class="text-foreground">{{ v }}</span>
+                  </code>
+                </div>
+              </div>
+            </div>
           </div>
-          <div v-if="fBody.trim()" class="mt-2">
+          <Textarea v-model="fBody" rows="6" class="font-mono text-xs" />
+          <div v-if="fBody.trim()">
             <div class="text-xs text-muted-foreground mb-1">{{ t('notify.preview') }}</div>
             <pre class="bg-muted rounded-md p-2 text-xs whitespace-pre-wrap break-all">{{ previewRendered }}</pre>
           </div>
@@ -313,6 +346,11 @@ async function load() {
         <Alert v-if="dialogError" variant="destructive">{{ dialogError }}</Alert>
         <div class="flex justify-end gap-2">
           <Button variant="outline" @click="dialogOpen = false">{{ t('common.cancel') }}</Button>
+          <Button variant="outline" :disabled="testing || saving" @click="testDraft">
+            <Loader2 v-if="testing" class="size-4 animate-spin" />
+            <Send v-else class="size-4" />
+            {{ t('notify.testDraft') }}
+          </Button>
           <Button :disabled="saving" @click="save">{{ t('common.save') }}</Button>
         </div>
       </div>

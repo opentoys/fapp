@@ -97,7 +97,31 @@ func (c *Controller) TestSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err := c.SVC.TestBot(r.Context(), id); err != nil {
+	if err := c.SVC.TestBot(r.Context(), id, requestBase(r)); err != nil {
+		sendErr(w, err)
+		return
+	}
+	web.SendJson(w, map[string]any{"ok": true})
+}
+
+// TestSubscriptionConfig fires a sample event to an unsaved bot configuration
+// (the create/edit dialog tests its current form before saving).
+func (c *Controller) TestSubscriptionConfig(w http.ResponseWriter, r *http.Request) {
+	user := userFrom(r)
+	if user == nil {
+		web.SendError(w, web.CodeUnauthorized, "未登录")
+		return
+	}
+	var in service.BotInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		web.SendError(w, web.CodeBadRequest, "bad request")
+		return
+	}
+	if user.UserID != service.SuperAdminUID && !c.SVC.CanManage(user.UserID, in.AppID) {
+		web.SendError(w, web.CodeForbidden, "无权访问该应用")
+		return
+	}
+	if err := c.SVC.TestBotInput(r.Context(), in, requestBase(r)); err != nil {
 		sendErr(w, err)
 		return
 	}

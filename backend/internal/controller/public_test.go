@@ -46,72 +46,14 @@ func seedApp(t *testing.T, s *Controller) *model.App {
 	return &app
 }
 
-func TestPublicApps(t *testing.T) {
-	s := testServer(t)
-	seedApp(t, s)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/apps", nil)
-	w := httptest.NewRecorder()
-	s.Apps(w, req)
-
-	var res struct {
-		Code int `json:"code"`
-		Data []struct {
-			Name          string `json:"name"`
-			LatestVersion *struct {
-				VersionName string `json:"version_name"`
-			} `json:"latest_version"`
-		} `json:"data"`
-	}
-	json.Unmarshal(w.Body.Bytes(), &res)
-	if res.Code != 0 || len(res.Data) != 1 {
-		t.Fatalf("res = %s", w.Body.String())
-	}
-	if res.Data[0].LatestVersion == nil || res.Data[0].LatestVersion.VersionName != "1.0.0" {
-		t.Fatalf("latest version wrong: %+v", res.Data[0].LatestVersion)
-	}
-}
-
-// An unpublished app must be hidden from the public list.
-func TestPublicAppsHideUnpublished(t *testing.T) {
-	s := testServer(t)
-	app := seedApp(t, s)
-	s.SVC.DB.Model(app).Update("published", false)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/apps", nil)
-	w := httptest.NewRecorder()
-	s.Apps(w, req)
-	var res struct {
-		Code int   `json:"code"`
-		Data []any `json:"data"`
-	}
-	json.Unmarshal(w.Body.Bytes(), &res)
-	if res.Code != 0 || len(res.Data) != 0 {
-		t.Fatalf("unpublished app should be hidden, got %s", w.Body.String())
-	}
-}
-
-// An app past its download-link expiry must also be hidden from the public
-// list, matching the unpublished behavior.
-func TestPublicAppsHideExpired(t *testing.T) {
+// An app past its download-link expiry behaves as "应用不存在" on the detail
+// path (the public list endpoint no longer exists).
+func TestPublicAppExpiredNotFound(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
 	past := time.Now().Add(-time.Hour)
 	s.SVC.DB.Model(app).Update("expires_at", past)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/apps", nil)
-	w := httptest.NewRecorder()
-	s.Apps(w, req)
-	var res struct {
-		Code int   `json:"code"`
-		Data []any `json:"data"`
-	}
-	json.Unmarshal(w.Body.Bytes(), &res)
-	if res.Code != 0 || len(res.Data) != 0 {
-		t.Fatalf("expired app should be hidden, got %s", w.Body.String())
-	}
-
-	// Detail path also reports "应用不存在".
 	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/apps/"+itoa(app.ID), nil)
 	req2.SetPathValue("id", itoa(app.ID))
 	w2 := httptest.NewRecorder()

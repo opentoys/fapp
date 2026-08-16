@@ -56,6 +56,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'detail.passwordContinue': 'Continue',
     'detail.passwordGateHint': 'Enter the password to view this app.',
     'detail.empty': 'No versions yet.',
+    'detail.scanTip': 'Scan with your phone to download',
     'detail.arch': 'Architecture',
     'detail.changelog': 'Changelog',
 
@@ -188,6 +189,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'notify.new': 'New webhook',
     'notify.edit': 'Edit webhook',
     'notify.test': 'Test',
+    'notify.testDraft': 'Test push',
     'notify.logs': 'Logs',
     'notify.logsTitle': 'Delivery log — {name}',
     'notify.logsEmpty': 'No delivery records yet.',
@@ -358,6 +360,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'detail.passwordContinue': '继续',
     'detail.passwordGateHint': '输入密码后即可查看该应用。',
     'detail.empty': '暂无版本。',
+    'detail.scanTip': '手机扫码下载',
     'detail.arch': '架构',
     'detail.changelog': '更新说明',
 
@@ -490,6 +493,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'notify.new': '新建机器人',
     'notify.edit': '编辑机器人',
     'notify.test': '测试',
+    'notify.testDraft': '测试推送',
     'notify.logs': '日志',
     'notify.logsTitle': '推送记录 — {name}',
     'notify.logsEmpty': '暂无推送记录。',
