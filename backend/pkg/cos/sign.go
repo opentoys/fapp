@@ -117,7 +117,9 @@ func cosQueryEscape(s string) string {
 	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
 }
 
-// sortedParamNames returns the comma-joined, sorted, URL-escaped key list.
+// sortedParamNames returns the semicolon-joined, sorted, URL-escaped key list.
+// COS splits q-url-param-list on ";", so a comma separator corrupts the list
+// when more than one param is signed.
 func sortedParamNames(v url.Values) string {
 	keys := make([]string, 0, len(v))
 	for k := range v {
@@ -128,7 +130,7 @@ func sortedParamNames(v url.Values) string {
 	for _, k := range keys {
 		esc = append(esc, url.PathEscape(k))
 	}
-	return strings.Join(esc, ",")
+	return strings.Join(esc, ";")
 }
 
 func hmacSHA1(key, data string) []byte {

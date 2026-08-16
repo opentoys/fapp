@@ -337,8 +337,8 @@ func TestUpdateAppAccessPassword(t *testing.T) {
 	app := model.App{Name: "a"}
 	s.SVC.DB.Create(&app)
 
-	// Set password scope; the credential must be hashed and stored.
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"access_mode":"password","password":"secret"}`))
+	// Set the password; the credential must be hashed and stored.
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"password":"secret"}`))
 	req.SetPathValue("id", itoa(app.ID))
 	w := httptest.NewRecorder()
 	s.UpdateApp(w, req)
@@ -351,17 +351,17 @@ func TestUpdateAppAccessPassword(t *testing.T) {
 	}
 	var reload model.App
 	s.SVC.DB.First(&reload, app.ID)
-	if reload.AccessMode != model.AccessPassword || reload.PasswordHash == "" {
+	if reload.PasswordHash == "" || reload.Salt == "" {
 		t.Fatalf("reload = %+v", reload)
 	}
 
-	// Switching back to public clears the stored credential.
-	req2 := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"access_mode":"public"}`))
+	// Clearing the password removes the stored credential.
+	req2 := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(`{"clear_password":true}`))
 	req2.SetPathValue("id", itoa(app.ID))
 	s.UpdateApp(httptest.NewRecorder(), req2)
 	s.SVC.DB.First(&reload, app.ID)
-	if reload.AccessMode != model.AccessPublic || reload.PasswordHash != "" || reload.Salt != "" {
-		t.Fatalf("reload after public = %+v", reload)
+	if reload.PasswordHash != "" || reload.Salt != "" {
+		t.Fatalf("reload after clear = %+v", reload)
 	}
 }
 

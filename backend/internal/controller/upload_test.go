@@ -201,7 +201,7 @@ func TestUpdateAppNormalizesExpiryTZ(t *testing.T) {
 	// The client sends an absolute instant in UTC; the server should store it
 	// with the server's default timezone offset (not UTC) so the frontend shows
 	// server-local wall-clock time.
-	body := `{"access_mode":"expiry","expires_at":"2026-08-20T02:00:00Z"}`
+	body := `{"expires_at":"2026-08-20T02:00:00Z"}`
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/apps/"+itoa(app.ID), strings.NewReader(body))
 	req.SetPathValue("id", itoa(app.ID))
 	w := httptest.NewRecorder()
@@ -212,7 +212,7 @@ func TestUpdateAppNormalizesExpiryTZ(t *testing.T) {
 
 	var reload model.App
 	s.SVC.DB.First(&reload, app.ID)
-	if reload.AccessMode != model.AccessExpiry || reload.ExpiresAt == nil {
+	if reload.ExpiresAt == nil {
 		t.Fatalf("reload = %+v", reload)
 	}
 	// Same absolute instant the client sent.

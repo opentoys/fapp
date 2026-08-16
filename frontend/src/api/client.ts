@@ -101,10 +101,15 @@ export async function uploadViaURL(url: string, file: File): Promise<void> {
   if (!res.ok) throw new Error(`upload failed: ${res.status}`)
 }
 
-// fileURL wraps a bare storage key (admin-side responses) into the authenticated
-// preview URL that 307s to the actual signed stream.
+// fileURL wraps a bare storage key (admin-side responses) into the
+// authenticated preview URL that 307s to the actual signed stream. It uses
+// the admin variant because dl=1 requires the caller to be authenticated;
+// the JWT rides in ?token so <img> tags (no Authorization header) pass auth.
 export function fileURL(key: string): string {
-  return `/api/v1/files/preview?key=${encodeURIComponent(key)}&dl=1`
+  const t = useAuth().token
+  const q = new URLSearchParams({ key, dl: '1' })
+  if (t) q.set('token', t)
+  return `/api/v1/admin/files/preview?${q.toString()}`
 }
 
 // sha256Hex computes the hex SHA-256 of a file in the browser.

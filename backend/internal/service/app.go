@@ -52,16 +52,19 @@ func (s *Service) CreateApp(ctx context.Context, in CreateAppInput) (*model.App,
 	return &app, nil
 }
 
-// UpdateAppInput carries the pointer-based PATCH fields.
+// UpdateAppInput carries the pointer-based PATCH fields. Password and expiry
+// are independent: password sets/clears the download password, ExpiresAt sets
+// (or clears when null, alongside ClearExpiry) the download-link validity.
 type UpdateAppInput struct {
-	Name        *string   `json:"name"`
-	Icon        *string   `json:"icon"`
-	Screenshots []string  `json:"screenshots"`
-	Description *string   `json:"description"`
-	AccessMode  *string   `json:"access_mode"`
-	Password    *string   `json:"password"`
-	ExpiresAt   *time.Time `json:"expires_at"`
-	Published   *bool     `json:"published"`
+	Name         *string    `json:"name"`
+	Icon         *string    `json:"icon"`
+	Screenshots  []string   `json:"screenshots"`
+	Description  *string    `json:"description"`
+	Password     *string    `json:"password"`
+	ClearPassword bool      `json:"clear_password"`
+	ExpiresAt    *time.Time `json:"expires_at"`
+	ClearExpiry  bool       `json:"clear_expiry"`
+	Published    *bool      `json:"published"`
 }
 
 func (s *Service) UpdateApp(ctx context.Context, id int64, in UpdateAppInput) (*model.App, error) {
@@ -84,19 +87,26 @@ func (s *Service) UpdateApp(ctx context.Context, id int64, in UpdateAppInput) (*
 	if in.Published != nil {
 		app.Published = *in.Published
 	}
-	if in.AccessMode != nil {
-		app.AccessMode = *in.AccessMode
-		if app.AccessMode != model.AccessPassword {
-			app.PasswordHash, app.Salt = "", ""
-		}
-	}
 	if in.Password != nil && *in.Password != "" {
 		h, salt := pwd.Hash(*in.Password)
 		app.PasswordHash, app.Salt = h, salt
 	}
+	if in.ClearPassword {
+		app.PasswordHash, app.Salt = "", ""
+	}
+	// AccessMode is derived from password presence (expiry no longer maps to
+	// a mode): password → "password", else "public".
+	if app.PasswordHash != "" {
+		app.AccessMode = model.AccessPassword
+	} else {
+		app.AccessMode = model.AccessPublic
+	}
 	if in.ExpiresAt != nil {
 		at := in.ExpiresAt.In(time.Local)
 		app.ExpiresAt = &at
+	}
+	if in.ClearExpiry {
+		app.ExpiresAt = nil
 	}
 	if err := s.DB.Save(&app).Error; err != nil {
 		return nil, &Error{StatusInternal, "保存失败"}

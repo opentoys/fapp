@@ -45,16 +45,7 @@ async function load() {
 }
 
 const appAccess = computed(() => data.value?.app.access_mode ?? 'public')
-const appExpiresAt = computed(() => data.value?.app.expires_at ?? null)
-
-// appAccess is determined after load; a password-protected app starts
-// locked and shows the password form. Once verified, the password is kept
-// and passed to downloadUrl on every download.
-const appLocked = computed(() => appAccess.value === 'password' && !unlocked.value)
-
-function isExpired(): boolean {
-  return appAccess.value === 'expiry' && !!appExpiresAt.value && new Date(appExpiresAt.value) < new Date()
-}
+const appLocked = computed(() => data.value?.app.access_mode === 'password' && !unlocked.value)
 
 async function unlock() {
   const v = latest.value
@@ -142,8 +133,6 @@ async function doDownload(versionId: number, pw: string | undefined) {
           :version="latest"
           :fallback-name="data.app.name"
           :fallback-icon="data.app.icon"
-          :access-mode="data.app.access_mode"
-          :expires-at="data.app.expires_at"
           :no-download="true"
           @download="download"
         />
@@ -158,8 +147,6 @@ async function doDownload(versionId: number, pw: string | undefined) {
                 :version="latest"
                 :fallback-name="data.app.name"
                 :fallback-icon="data.app.icon"
-                :access-mode="data.app.access_mode"
-                :expires-at="data.app.expires_at"
                 @download="download"
               />
             </CardContent>
@@ -174,7 +161,7 @@ async function doDownload(versionId: number, pw: string | undefined) {
 
     <!-- Floating download button: 80% width, pinned to the viewport bottom -->
     <div v-if="!detected.isDesktop && latest && !error && !appLocked" class="fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 bg-gradient-to-t from-background to-transparent">
-      <Button size="lg" class="w-4/5" :disabled="isExpired()" @click="download(latest)">
+      <Button size="lg" class="w-4/5" @click="download(latest)">
         <Download class="size-4" />
         {{ t('detail.download') }}
       </Button>

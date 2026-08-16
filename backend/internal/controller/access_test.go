@@ -14,23 +14,25 @@ import (
 	"disapp/pkg/pwd"
 )
 
-// setAppAccess applies the app-level access scope for the test app.
-func setAppAccess(s *Controller, app *model.App, mode, secret string, expiresAt *time.Time) {
-	m := map[string]any{"access_mode": mode}
+// setAppAccess applies the app-level permission: an optional download
+// password and an optional download-link expiry (independent).
+func setAppAccess(s *Controller, app *model.App, secret string, expiresAt *time.Time) {
+	m := map[string]any{}
 	if expiresAt != nil {
 		m["expires_at"] = expiresAt
 	}
-	s.SVC.DB.Model(app).Updates(m)
 	if secret != "" {
 		h, salt := pwd.Hash(secret)
-		s.SVC.DB.Model(app).Updates(map[string]any{"password_hash": h, "salt": salt})
+		m["password_hash"] = h
+		m["salt"] = salt
 	}
+	s.SVC.DB.Model(app).Updates(m)
 }
 
 func TestVerifyPassword(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
-	setAppAccess(s, app, model.AccessPassword, "abc", nil)
+	setAppAccess(s, app, "abc", nil)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", StorageKey: "wechat/1/3/a.apk",
@@ -56,7 +58,7 @@ func TestVerifyPassword(t *testing.T) {
 func TestDownloadWrongPassword(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
-	setAppAccess(s, app, model.AccessPassword, "abc", nil)
+	setAppAccess(s, app, "abc", nil)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", StorageKey: "wechat/1/3/a.apk",
@@ -77,11 +79,13 @@ func TestDownloadWrongPassword(t *testing.T) {
 	}
 }
 
+// An app past its download-link expiry behaves like it's taken down: the
+// public download returns "应用不存在".
 func TestDownloadExpired(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
 	past := time.Now().Add(-time.Hour)
-	setAppAccess(s, app, model.AccessExpiry, "", &past)
+	setAppAccess(s, app, "", &past)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", StorageKey: "wechat/1/3/a.apk",
@@ -97,8 +101,8 @@ func TestDownloadExpired(t *testing.T) {
 		Code int `json:"code"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &res)
-	if res.Code != 403 {
-		t.Fatalf("body = %s", w.Body.String())
+	if res.Code != 404 {
+		t.Fatalf("expired app must be not-found, got code=%d body=%s", res.Code, w.Body.String())
 	}
 }
 

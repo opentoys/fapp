@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"disapp/internal/resources/config"
 	"disapp/internal/resources/storage/local"
@@ -89,6 +90,26 @@ func TestRequireAuth(t *testing.T) {
 	h(w, httptest.NewRequest(http.MethodGet, "/", nil))
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("missing token should be 401, got %d", w.Code)
+	}
+}
+
+func TestRequireAuthAcceptsQueryToken(t *testing.T) {
+	s := testServer(t)
+	tok, err := token.CreateToken(s.SVC.Config.JWT.Secret, service.SuperAdminUID, "admin", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
+		if userFrom(r) == nil {
+			t.Fatal("userFrom returned nil with valid query token")
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/files/preview?token="+tok, nil)
+	w := httptest.NewRecorder()
+	h(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("valid query token should pass, got %d", w.Code)
 	}
 }
 

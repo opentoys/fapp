@@ -49,10 +49,14 @@ func (c *Controller) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	web.SendJson(w, map[string]any{"ok": true})
 }
 
-// RequireAuth validates Bearer JWT middleware.
+// RequireAuth validates the JWT from the Authorization header or, failing
+// that, the token query param (for non-JS resource fetches like <img>).
 func (c *Controller) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		raw := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if raw == "" {
+			raw = r.URL.Query().Get("token")
+		}
 		claims, err := c.SVC.ParseToken(raw)
 		if err != nil {
 			web.SendStatus(w, http.StatusUnauthorized, "未登录或登录已过期")

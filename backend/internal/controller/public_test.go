@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"disapp/internal/resources/storage/local"
 	"disapp/internal/resources/store/model"
@@ -87,6 +88,40 @@ func TestPublicAppsHideUnpublished(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &res)
 	if res.Code != 0 || len(res.Data) != 0 {
 		t.Fatalf("unpublished app should be hidden, got %s", w.Body.String())
+	}
+}
+
+// An app past its download-link expiry must also be hidden from the public
+// list, matching the unpublished behavior.
+func TestPublicAppsHideExpired(t *testing.T) {
+	s := testServer(t)
+	app := seedApp(t, s)
+	past := time.Now().Add(-time.Hour)
+	s.SVC.DB.Model(app).Update("expires_at", past)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/apps", nil)
+	w := httptest.NewRecorder()
+	s.Apps(w, req)
+	var res struct {
+		Code int   `json:"code"`
+		Data []any `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 0 || len(res.Data) != 0 {
+		t.Fatalf("expired app should be hidden, got %s", w.Body.String())
+	}
+
+	// Detail path also reports "应用不存在".
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v1/apps/"+itoa(app.ID), nil)
+	req2.SetPathValue("id", itoa(app.ID))
+	w2 := httptest.NewRecorder()
+	s.AppDetail(w2, req2)
+	var res2 struct {
+		Code int `json:"code"`
+	}
+	json.Unmarshal(w2.Body.Bytes(), &res2)
+	if res2.Code != 404 {
+		t.Fatalf("expired app detail must be 404, got %s", w2.Body.String())
 	}
 }
 

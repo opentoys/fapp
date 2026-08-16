@@ -23,6 +23,14 @@ func (s *Service) PublicApps(ctx context.Context) ([]appSummary, error) {
 	if err := s.DB.Where("published = ?", true).Order("id desc").Find(&apps).Error; err != nil {
 		return nil, &Error{StatusInternal, "查询失败"}
 	}
+	// Expired apps are hidden from the public list, same as unpublished.
+	visible := apps[:0]
+	for _, a := range apps {
+		if !hiddenApp(&a) {
+			visible = append(visible, a)
+		}
+	}
+	apps = visible
 	versionIDs := make([]int64, 0, len(apps))
 	appCurrent := make(map[int64]int64, len(apps))
 	for _, a := range apps {
@@ -95,7 +103,7 @@ func (s *Service) PublicAppDetail(ctx context.Context, key string) (model.App, [
 	if err != nil {
 		return app, nil, &Error{StatusNotFound, "应用不存在"}
 	}
-	if !app.Published {
+	if hiddenApp(&app) {
 		return app, nil, &Error{StatusNotFound, "应用不存在"}
 	}
 	versions := make([]model.Version, 0, 1)
@@ -109,28 +117,29 @@ func (s *Service) PublicAppDetail(ctx context.Context, key string) (model.App, [
 	return app, versions, nil
 }
 
+// hiddenApp reports whether an app is absent from the public view: taken down
+// or past its expiry. Both behave as "应用不存在", matching the下架 logic.
+func hiddenApp(app *model.App) bool {
+	return !app.Published || (app.ExpiresAt != nil && time.Now().After(*app.ExpiresAt))
+}
+
 // checkAccess enforces that a version is publicly downloadable: its app must
-// be published and the version must be current, then the app-level password or
-// expiry scope.
+// be visible (published, not expired) and the version must be current. A
+// password-protected app additionally requires the correct password.
 func (s *Service) checkAccess(v *model.Version, password string) error {
 	var app model.App
 	if err := s.DB.First(&app, v.AppID).Error; err != nil {
 		return &Error{StatusNotFound, "应用不存在"}
 	}
-	if !app.Published {
+	if hiddenApp(&app) {
 		return &Error{StatusNotFound, "应用不存在"}
 	}
 	if app.CurrentVersionID != v.ID {
 		return &Error{StatusForbidden, "该版本不可下载"}
 	}
-	switch app.AccessMode {
-	case model.AccessPassword:
+	if app.PasswordHash != "" {
 		if !pwd.Verify(password, app.PasswordHash, app.Salt) {
 			return &Error{StatusUnauthorized, "密码错误"}
-		}
-	case model.AccessExpiry:
-		if app.ExpiresAt != nil && time.Now().After(*app.ExpiresAt) {
-			return &Error{StatusForbidden, "下载链接已过期"}
 		}
 	}
 	return nil

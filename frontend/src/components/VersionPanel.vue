@@ -13,8 +13,6 @@ const props = defineProps<{
   version: Version
   fallbackName: string
   fallbackIcon: string
-  accessMode?: string
-  expiresAt?: string | null
   noDownload?: boolean
 }>()
 
@@ -29,10 +27,6 @@ function releaseVariant(rt: string): 'default' | 'info' | 'warning' {
   if (rt === 'beta') return 'info'
   if (rt === 'canary') return 'warning'
   return 'default'
-}
-
-function isExpired(): boolean {
-  return props.accessMode === 'expiry' && !!props.expiresAt && new Date(props.expiresAt) < new Date()
 }
 
 function fmtSize(n: number): string {
@@ -86,7 +80,7 @@ function fmtSize(n: number): string {
     </div>
 
     <div v-if="!noDownload">
-      <Button size="lg" :disabled="isExpired()" @click="emit('download', version)">
+      <Button size="lg" @click="emit('download', version)">
         <Download class="size-4" />
         {{ t('detail.download') }}
       </Button>
