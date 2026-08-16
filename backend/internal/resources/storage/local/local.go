@@ -65,19 +65,6 @@ func (s *LocalStorage) Open(ctx context.Context, key string) (io.ReadCloser, err
 	return os.Open(full)
 }
 
-// Size returns the on-disk size of key (concrete method, optional capability).
-func (s *LocalStorage) Size(ctx context.Context, key string) (int64, error) {
-	full, err := s.path(key)
-	if err != nil {
-		return 0, err
-	}
-	st, err := os.Stat(full)
-	if err != nil {
-		return 0, err
-	}
-	return st.Size(), nil
-}
-
 func (s *LocalStorage) Delete(ctx context.Context, key string) error {
 	full, err := s.path(key)
 	if err != nil {

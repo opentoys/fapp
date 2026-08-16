@@ -27,7 +27,7 @@ func TestValidKey(t *testing.T) {
 	}
 }
 
-func TestLocalSaveOpenDeleteSize(t *testing.T) {
+func TestLocalSaveOpenDelete(t *testing.T) {
 	s, err := NewLocal(filepath.Join(t.TempDir(), "files"), "test-secret")
 	if err != nil {
 		t.Fatal(err)
@@ -48,10 +48,6 @@ func TestLocalSaveOpenDeleteSize(t *testing.T) {
 	rc.Close()
 	if string(data) != "hello world" {
 		t.Fatalf("data = %q", data)
-	}
-	got, err := s.Size(nil, key)
-	if err != nil || got != 11 {
-		t.Fatalf("size = %d, err = %v", got, err)
 	}
 	if err := s.Delete(nil, key); err != nil {
 		t.Fatal(err)

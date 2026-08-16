@@ -14,6 +14,7 @@ import (
 	"disapp/internal/resources/storage/local"
 	"disapp/internal/resources/store/db"
 	"disapp/internal/service"
+	pkgcos "disapp/pkg/cos"
 	"disapp/static"
 )
 
@@ -52,11 +53,11 @@ func main() {
 	var st storage.Storage
 	switch cfg.Storage.Backend {
 	case "cos":
-		cosSt, err := cos.NewCOSFromConfig(cfg.Storage.COS.SecretID, cfg.Storage.COS.SecretKey, cfg.Storage.COS.Bucket, cfg.Storage.COS.Region, cfg.Storage.COS.BaseURL)
+		obj, err := pkgcos.NewFromConfig(cfg.Storage.COS.SecretID, cfg.Storage.COS.SecretKey, cfg.Storage.COS.Bucket, cfg.Storage.COS.Region, cfg.Storage.COS.BaseURL)
 		if err != nil {
 			log.Fatalf("init cos: %v", err)
 		}
-		st = cosSt
+		st = cos.NewCOS(obj)
 	default:
 		loc, err := local.NewLocal(cfg.Storage.Local.Dir, cfg.JWT.Secret)
 		if err != nil {
