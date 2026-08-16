@@ -38,7 +38,7 @@ func TestUploadPresign(t *testing.T) {
 	c := NewOCI(&fakeStore{uploadURL: func(_ context.Context, key, _ string, _ time.Duration) (string, error) {
 		return "https://bucket.ns.compat.objectstorage.ap.oraclecloud.com/" + key + "?X-Amz-Signature=x", nil
 	}})
-	u, err := c.UploadURL(context.Background(), "1/2/app.apk", "application/vnd.android.package-archive", time.Hour)
+	u, err := c.UploadURL(context.Background(), "wechat/1/2/app.apk", "application/vnd.android.package-archive", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestDownloadPresign(t *testing.T) {
 	c := NewOCI(&fakeStore{downloadURL: func(_ context.Context, key, filename string, _ time.Duration) (string, error) {
 		return "https://bucket.ns.compat.objectstorage.ap.oraclecloud.com/" + key + "?X-Amz-Signature=x", nil
 	}})
-	du, err := c.DownloadURL(context.Background(), "1/2/app.apk", "app.apk", time.Hour)
+	du, err := c.DownloadURL(context.Background(), "wechat/1/2/app.apk", "app.apk", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestDownloadPresign(t *testing.T) {
 
 func TestDeleteError(t *testing.T) {
 	c := NewOCI(&fakeStore{deleteErr: errors.New("boom")})
-	if err := c.Delete(context.Background(), "1/2/x.apk"); err == nil {
+	if err := c.Delete(context.Background(), "wechat/1/2/x.apk"); err == nil {
 		t.Fatal("expected delete error")
 	}
 }

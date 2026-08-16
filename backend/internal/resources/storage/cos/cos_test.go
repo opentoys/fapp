@@ -36,7 +36,7 @@ func TestCOSUploadPresign(t *testing.T) {
 	c := NewCOS(&fakeStore{uploadURL: func(_ context.Context, key, _ string, _ time.Duration) (string, error) {
 		return "https://bucket.cos/" + key + "?upload-sign=x", nil
 	}})
-	u, err := c.UploadURL(context.Background(), "1/2/app.apk", "application/vnd.android.package-archive", time.Hour)
+	u, err := c.UploadURL(context.Background(), "wechat/1/2/app.apk", "application/vnd.android.package-archive", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestCOSDownloadPresign(t *testing.T) {
 	c := NewCOS(&fakeStore{downloadURL: func(_ context.Context, key, filename string, _ time.Duration) (string, error) {
 		return "https://bucket.cos/" + key + "?download-sign=x&name=" + filename, nil
 	}})
-	du, err := c.DownloadURL(context.Background(), "1/2/app.apk", "app.apk", time.Hour)
+	du, err := c.DownloadURL(context.Background(), "wechat/1/2/app.apk", "app.apk", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestCOSDownloadPresign(t *testing.T) {
 
 func TestCOSDeleteError(t *testing.T) {
 	c := NewCOS(&fakeStore{deleteErr: errors.New("boom")})
-	if err := c.Delete(context.Background(), "1/2/x.apk"); err == nil {
+	if err := c.Delete(context.Background(), "wechat/1/2/x.apk"); err == nil {
 		t.Fatal("expected delete error")
 	}
 }

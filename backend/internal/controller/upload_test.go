@@ -37,7 +37,7 @@ func createVersion(t *testing.T, s *Controller, appID int64, extra map[string]st
 		"version_name": "1.0.0",
 		"version_code": 100,
 		"file_name":    "app.apk",
-		"key":          "1/2/app.apk",
+		"key":          "wechat/1/2/app.apk",
 		"file_size":    11,
 		"sha256":       "abc",
 	}
@@ -64,7 +64,7 @@ func TestCreateVersionSavesMetadata(t *testing.T) {
 	app := model.App{Name: "a", Platform: "android"}
 	s.SVC.DB.Create(&app)
 
-	body := `{"app_id":` + itoa(app.ID) + `,"version_name":"1.2.3","version_code":123,"release_type":"production","arch":"arm64,x86_64","changelog":"修复 bug","file_name":"app.apk","key":"7/8/app.apk","file_size":14,"sha256":"feedbeef"}`
+	body := `{"app_id":` + itoa(app.ID) + `,"version_name":"1.2.3","version_code":123,"release_type":"production","arch":"arm64,x86_64","changelog":"修复 bug","file_name":"app.apk","key":"wechat/7/8/app.apk","file_size":14,"sha256":"feedbeef"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/versions", strings.NewReader(body))
 	w := httptest.NewRecorder()
 	s.CreateVersion(w, req)
@@ -93,7 +93,7 @@ func TestCreateVersionSavesMetadata(t *testing.T) {
 	if v.ReleaseType != "production" || v.Platform != "android" || v.Arch != "arm64,x86_64" {
 		t.Fatalf("release_type/platform/arch not stored: %+v", v)
 	}
-	if v.StorageKey != "7/8/app.apk" {
+	if v.StorageKey != "wechat/7/8/app.apk" {
 		t.Fatalf("storage_key = %q", v.StorageKey)
 	}
 }
@@ -105,7 +105,7 @@ func TestCreateVersionForcesAppPlatform(t *testing.T) {
 
 	// Client sends a conflicting platform; the server must ignore it and use
 	// the app's platform.
-	body := `{"app_id":` + itoa(app.ID) + `,"version_name":"1.0.0","platform":"android","file_name":"app.ipa","key":"1/2/app.ipa"}`
+	body := `{"app_id":` + itoa(app.ID) + `,"version_name":"1.0.0","platform":"android","file_name":"app.ipa","key":"wechat/1/2/app.ipa"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/versions", strings.NewReader(body))
 	w := httptest.NewRecorder()
 	s.CreateVersion(w, req)
@@ -232,10 +232,10 @@ func TestDeleteVersion(t *testing.T) {
 	s := testServer(t)
 	v := model.Version{
 		AppID: 1, VersionName: "1.0", VersionCode: 1,
-		StorageKey: "1/2/a.apk",
+		StorageKey: "wechat/1/2/a.apk",
 	}
 	s.SVC.DB.Create(&v)
-	storeBytes(t, s, "1/2/a.apk", []byte("x"))
+	storeBytes(t, s, "wechat/1/2/a.apk", []byte("x"))
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/versions/"+itoa(v.ID)+"?delete_file=true", nil)
 	req.SetPathValue("id", itoa(v.ID))
@@ -246,7 +246,7 @@ func TestDeleteVersion(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("versions = %d", count)
 	}
-	if _, err := s.SVC.Storage.(*local.LocalStorage).Open(nil, "1/2/a.apk"); err == nil {
+	if _, err := s.SVC.Storage.(*local.LocalStorage).Open(nil, "wechat/1/2/a.apk"); err == nil {
 		t.Fatal("file should be deleted")
 	}
 }
@@ -255,7 +255,7 @@ func TestVersionStats(t *testing.T) {
 	s := testServer(t)
 	v := model.Version{
 		AppID: 1, VersionName: "1.0", VersionCode: 1,
-		StorageKey: "1/2/a.apk", DownloadCount: 3, InstallCount: 1,
+		StorageKey: "wechat/1/2/a.apk", DownloadCount: 3, InstallCount: 1,
 	}
 	s.SVC.DB.Create(&v)
 	s.SVC.DB.Create(&model.DownloadLog{VersionID: v.ID, IP: "1.2.3.4", UserAgent: "curl"})

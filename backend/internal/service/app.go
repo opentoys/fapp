@@ -121,6 +121,15 @@ func (s *Service) DeleteApp(ctx context.Context, appID int64) error {
 	return nil
 }
 
+// AppName returns the app's name, used to build the storage key folder.
+func (s *Service) AppName(ctx context.Context, appID int64) (string, error) {
+	var app model.App
+	if err := s.DB.Select("name").First(&app, appID).Error; err != nil {
+		return "", &Error{StatusNotFound, "应用不存在"}
+	}
+	return app.Name, nil
+}
+
 func (s *Service) AdminApps(ctx context.Context) ([]model.App, error) {
 	var apps []model.App
 	if err := s.DB.Order("id desc").Find(&apps).Error; err != nil {

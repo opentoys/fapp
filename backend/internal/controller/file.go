@@ -99,10 +99,14 @@ func (c *Controller) localStorage() (*local.LocalStorage, bool) {
 	return loc, ok
 }
 
-// appOfKey extracts the owning app id from a {app_id}/{version_id}/file key.
+// appOfKey extracts the owning app id from a
+// {app_name}/{app_id}/{version_id}/file key.
 func appOfKey(key string) int64 {
-	seg := key[:strings.Index(key, "/")]
-	appID, err := strconv.ParseInt(seg, 10, 64)
+	parts := strings.Split(key, "/")
+	if len(parts) < 4 {
+		return 0
+	}
+	appID, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
 		return 0
 	}

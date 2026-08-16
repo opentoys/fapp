@@ -20,7 +20,7 @@ func seedApp(t *testing.T, s *Controller) *model.App {
 	current := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 1,
 		FileName: "app.apk", FileType: "apk", FileSize: 100,
-		StorageKey: "1/2/app.apk", StorageBackend: "local",
+		StorageKey: "wechat/1/2/app.apk", StorageBackend: "local",
 	}
 	if err := s.SVC.DB.Create(&current).Error; err != nil {
 		t.Fatal(err)
@@ -35,7 +35,7 @@ func seedApp(t *testing.T, s *Controller) *model.App {
 	newer := model.Version{
 		AppID: app.ID, VersionName: "2.0.0", VersionCode: 2,
 		FileName: "new.apk", FileType: "apk",
-		StorageKey: "1/4/new.apk", StorageBackend: "local",
+		StorageKey: "wechat/1/4/new.apk", StorageBackend: "local",
 	}
 	if err := s.SVC.DB.Create(&newer).Error; err != nil {
 		t.Fatal(err)

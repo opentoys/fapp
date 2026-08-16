@@ -202,7 +202,7 @@ func TestKeyApiSetCurrentAndTouch(t *testing.T) {
 	var k model.ApiKey
 	s.SVC.DB.Where("key = ?", runKey).First(&k)
 
-	v := model.Version{AppID: app.ID, VersionName: "1.0.0", VersionCode: 1, FileName: "a.apk", FileType: "apk", StorageKey: "1/2/a.apk"}
+	v := model.Version{AppID: app.ID, VersionName: "1.0.0", VersionCode: 1, FileName: "a.apk", FileType: "apk", StorageKey: "wechat/1/2/a.apk"}
 	s.SVC.DB.Create(&v)
 
 	body := `{"version_id":` + itoa(v.ID) + `}`

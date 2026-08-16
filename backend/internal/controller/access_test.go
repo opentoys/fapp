@@ -33,7 +33,7 @@ func TestVerifyPassword(t *testing.T) {
 	setAppAccess(s, app, model.AccessPassword, "abc", nil)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
-		FileType: "apk", StorageKey: "1/3/a.apk",
+		FileType: "apk", StorageKey: "wechat/1/3/a.apk",
 	}
 	s.SVC.DB.Create(&v)
 	// Access checks only apply to the app's current version.
@@ -59,7 +59,7 @@ func TestDownloadWrongPassword(t *testing.T) {
 	setAppAccess(s, app, model.AccessPassword, "abc", nil)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
-		FileType: "apk", StorageKey: "1/3/a.apk",
+		FileType: "apk", StorageKey: "wechat/1/3/a.apk",
 	}
 	s.SVC.DB.Create(&v)
 	s.SVC.DB.Model(app).Update("current_version_id", v.ID)
@@ -84,7 +84,7 @@ func TestDownloadExpired(t *testing.T) {
 	setAppAccess(s, app, model.AccessExpiry, "", &past)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
-		FileType: "apk", StorageKey: "1/3/a.apk",
+		FileType: "apk", StorageKey: "wechat/1/3/a.apk",
 	}
 	s.SVC.DB.Create(&v)
 	s.SVC.DB.Model(app).Update("current_version_id", v.ID)
@@ -107,7 +107,7 @@ func TestDownloadCounts(t *testing.T) {
 	app := seedApp(t, s)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
-		FileType: "apk", StorageKey: "1/3/a.apk",
+		FileType: "apk", StorageKey: "wechat/1/3/a.apk",
 	}
 	s.SVC.DB.Create(&v)
 	s.SVC.DB.Model(app).Update("current_version_id", v.ID)
@@ -147,7 +147,7 @@ func TestInstallCounts(t *testing.T) {
 	app := seedApp(t, s)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
-		FileType: "apk", StorageKey: "1/3/a.apk",
+		FileType: "apk", StorageKey: "wechat/1/3/a.apk",
 	}
 	s.SVC.DB.Create(&v)
 	s.SVC.DB.Model(app).Update("current_version_id", v.ID)
@@ -173,7 +173,7 @@ func TestDownloadNonCurrentVersionForbidden(t *testing.T) {
 	app := seedApp(t, s)
 	other := model.Version{
 		AppID: app.ID, VersionName: "0.9.0", VersionCode: 9, FileName: "old.apk",
-		FileType: "apk", StorageKey: "1/9/old.apk",
+		FileType: "apk", StorageKey: "wechat/1/9/old.apk",
 	}
 	s.SVC.DB.Create(&other)
 
@@ -196,7 +196,7 @@ func TestDownloadUnpublishedAppNotFound(t *testing.T) {
 	app := seedApp(t, s)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 1, FileName: "a.apk",
-		FileType: "apk", StorageKey: "1/3/a.apk",
+		FileType: "apk", StorageKey: "wechat/1/3/a.apk",
 	}
 	s.SVC.DB.Create(&v)
 	s.SVC.DB.Model(app).Update("current_version_id", v.ID)
@@ -217,9 +217,9 @@ func TestDownloadUnpublishedAppNotFound(t *testing.T) {
 
 func TestFilePreviewStreamsSignedKey(t *testing.T) {
 	s := testServer(t)
-	storeBytes(t, s, "1/2/app.apk", []byte("binary-data"))
+	storeBytes(t, s, "wechat/1/2/app.apk", []byte("binary-data"))
 	loc, _ := s.SVC.Storage.(*local.LocalStorage)
-	u, err := loc.DownloadURL(nil, "1/2/app.apk", "app.apk", time.Hour)
+	u, err := loc.DownloadURL(nil, "wechat/1/2/app.apk", "app.apk", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,8 +233,8 @@ func TestFilePreviewStreamsSignedKey(t *testing.T) {
 
 func TestFilePreviewRejectsBadSign(t *testing.T) {
 	s := testServer(t)
-	storeBytes(t, s, "1/2/app.apk", []byte("binary-data"))
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/preview?key=1/2/app.apk&ttl=9999999999&sign=deadbeef", nil)
+	storeBytes(t, s, "wechat/1/2/app.apk", []byte("binary-data"))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/preview?key=wechat/1/2/app.apk&ttl=9999999999&sign=deadbeef", nil)
 	w := httptest.NewRecorder()
 	s.FilePreview(w, req)
 	if codeOf(w) == 0 {

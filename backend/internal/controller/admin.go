@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"path"
 	"strconv"
@@ -146,14 +147,20 @@ func (c *Controller) PresignFile(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeBadRequest, "app_id 必填")
 		return
 	}
-	name := fmt.Sprintf("%d-%s", time.Now().UnixNano(), path.Base(req.FileName))
-	key := storage.Key(req.AppID, 0, name)
+	appName, err := c.SVC.AppName(r.Context(), req.AppID)
+	if err != nil {
+		sendErr(w, err)
+		return
+	}
+	file := fmt.Sprintf("%d-%s", time.Now().UnixNano(), path.Base(req.FileName))
+	key := storage.AppKey(appName, req.AppID, 0, file)
 	if !storage.ValidKey(key) {
 		web.SendError(w, web.CodeBadRequest, "无效的 file_name")
 		return
 	}
 	url, err := c.SVC.Storage.UploadURL(r.Context(), key, "", service.UploadExpiry)
 	if err != nil {
+		log.Printf("presign upload failed: %v", err)
 		sendErr(w, err)
 		return
 	}

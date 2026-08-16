@@ -13,8 +13,8 @@ import (
 )
 
 func TestValidKey(t *testing.T) {
-	valid := []string{"1/2/app.apk", "12/345/foo bar.zip"}
-	invalid := []string{"", "../x", "a/b/c", "1/2/../../etc", "1//x", "/1/2/x", "1/2/"}
+	valid := []string{"wechat/1/2/app.apk", "测试应用/12/345/foo_bar.zip"}
+	invalid := []string{"", "../x", "a/b/c", "1/2/../../etc", "1//x", "/1/2/x", "1/2/", "wechat/1/2/", "wechat/1/2/../x"}
 	for _, k := range valid {
 		if !storage.ValidKey(k) {
 			t.Errorf("expected valid: %q", k)
@@ -32,7 +32,7 @@ func TestLocalSaveOpenDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key := "1/2/app.apk"
+	key := "wechat/1/2/app.apk"
 	size, err := s.Save(nil, key, strings.NewReader("hello world"))
 	if err != nil {
 		t.Fatal(err)
@@ -61,7 +61,7 @@ func TestLocalSaveOpenDelete(t *testing.T) {
 // round-trips through the ticket validator.
 func TestUploadURL(t *testing.T) {
 	s, _ := NewLocal(t.TempDir(), "jwt-secret")
-	u, err := s.UploadURL(nil, "1/2/app.apk", "", time.Hour)
+	u, err := s.UploadURL(nil, "wechat/1/2/app.apk", "", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestUploadURL(t *testing.T) {
 // TestDownloadURL checks the signed preview ticket round-trips.
 func TestDownloadURL(t *testing.T) {
 	s, _ := NewLocal(t.TempDir(), "jwt-secret")
-	u, err := s.DownloadURL(nil, "1/2/app.apk", "app.apk", time.Hour)
+	u, err := s.DownloadURL(nil, "wechat/1/2/app.apk", "app.apk", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestDownloadURL(t *testing.T) {
 	if !ValidPreviewTicket("jwt-secret", q.Query().Get("key"), ttl, q.Query().Get("sign")) {
 		t.Fatal("preview signature did not validate")
 	}
-	if ValidPreviewTicket("jwt-secret", "1/9/other.apk", ttl, q.Query().Get("sign")) {
+	if ValidPreviewTicket("jwt-secret", "wechat/1/9/other.apk", ttl, q.Query().Get("sign")) {
 		t.Fatal("preview signature validated with wrong key")
 	}
 }
