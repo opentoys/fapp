@@ -16,6 +16,7 @@ import { Card, CardContent, CardTitle } from '../../components/ui/card'
 import { Alert } from '../../components/ui/alert'
 import { AlertDialog } from '../../components/ui/alert-dialog'
 import { Input } from '../../components/ui/input'
+import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group'
 import { Label } from '../../components/ui/label'
 import { Textarea } from '../../components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs'
@@ -169,7 +170,8 @@ const shotsInput = ref<File[]>([])
 const shotsUploading = ref(false)
 const shotsError = ref('')
 
-// --- Overview: access permission (independent password + expiry) ---
+// --- Overview: access permission (mode 公开/密码) + independent expiry ---
+const accessMode = ref<'public' | 'password'>('public')
 const accessPassword = ref('')
 const accessExpiresAt = ref('')
 const accessError = ref('')
@@ -179,7 +181,7 @@ function toLocalInput(iso: string | null): string {
   if (!iso) return ''
   const d = new Date(iso)
   const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
 function syncOverview() {
@@ -189,6 +191,7 @@ function syncOverview() {
   infoDescription.value = app.description ?? ''
   infoIcon.value = null
   infoIconPreview.value = app.icon ? fileURL(app.icon) : ''
+  accessMode.value = app.access_mode === 'password' ? 'password' : 'public'
   accessPassword.value = ''
   accessExpiresAt.value = toLocalInput(app.expires_at ?? null)
 }
@@ -280,16 +283,20 @@ async function saveAccess() {
   accessError.value = ''
   accessSaving.value = true
   const id = data.value.app.id
-  // Password and expiry are independent. Empty password input clears the
-  // stored password; empty expiry input clears the download-link expiry.
-  const payload: Partial<AppItem> & { password?: string; clear_password?: boolean; clear_expiry?: boolean } = {}
-  if (accessPassword.value) {
-    payload.password = accessPassword.value
-  } else {
-    payload.clear_password = true
+  if (accessMode.value === 'password' && !accessPassword.value) {
+    accessError.value = t('adminApp.passwordRequired')
+    accessSaving.value = false
+    return
   }
+  // Mode (公开/密码) is explicit; expiry is an independent, separate field.
+  const payload: Partial<AppItem> & { password?: string; clear_expiry?: boolean } = {
+    access_mode: accessMode.value,
+  }
+  if (accessMode.value === 'password') payload.password = accessPassword.value
   if (accessExpiresAt.value) {
-    payload.expires_at = new Date(accessExpiresAt.value).toISOString()
+    // Date-only picker; default to end of the selected day.
+    const d = new Date(`${accessExpiresAt.value}T23:59:59`)
+    payload.expires_at = d.toISOString()
   } else {
     payload.clear_expiry = true
   }
@@ -484,10 +491,10 @@ function goUpload() {
   router.push(`/admin/upload?app_id=${data.value.app.id}`)
 }
 
-// Public download page for the app, shown on the Overview tab. Name-based:
-// `/app/{name}` — no numeric id in the shareable link.
+// Public download page for the app, shown on the Overview tab. Resolved
+// through the router so the link matches the configured history mode.
 const downloadLink = computed(() =>
-  data.value ? `${location.origin}/app/${encodeURIComponent(data.value.app.name)}` : ''
+  data.value ? router.resolve(`/app/${data.value.app.name}`).href : ''
 )
 
 async function copyLink() {
@@ -579,16 +586,24 @@ function fmtSize(n: number): string {
           </div>
           <Separator class="my-4" />
           <CardTitle class="text-base mb-4">{{ t('upload.access') }}</CardTitle>
-          <!-- Download password (independent of expiry). Empty = removed. -->
-          <div class="mb-4 grid gap-2">
+          <RadioGroup v-model="accessMode" class="mb-4">
+            <div class="flex items-center gap-2 text-sm">
+              <RadioGroupItem value="public" id="r-public" />
+              <Label for="r-public">{{ t('upload.accessPublic') }}</Label>
+            </div>
+            <div class="flex items-center gap-2 text-sm">
+              <RadioGroupItem value="password" id="r-password" />
+              <Label for="r-password">{{ t('upload.accessPassword') }}</Label>
+            </div>
+          </RadioGroup>
+          <div v-if="accessMode === 'password'" class="mb-4 grid gap-2">
             <Label for="access-password">{{ t('upload.downloadPassword') }}</Label>
             <Input id="access-password" v-model="accessPassword" type="password" />
-            <p class="text-muted-foreground text-xs">{{ t('access.passwordHint') }}</p>
           </div>
-          <!-- Download-link expiry (independent of password). Past expiry hides the app. -->
+          <!-- Download-link expiry: separate from the mode; past expiry hides the app. -->
           <div class="grid gap-2">
             <Label for="access-expires-at">{{ t('upload.expiresAt') }}</Label>
-            <Input id="access-expires-at" v-model="accessExpiresAt" type="datetime-local" />
+            <Input id="access-expires-at" v-model="accessExpiresAt" type="date" />
             <p class="text-muted-foreground text-xs">{{ t('access.expiryHint') }}</p>
           </div>
           <Alert v-if="accessError" variant="destructive" class="mt-2">{{ accessError }}</Alert>

@@ -9,7 +9,6 @@ import (
 const (
 	AccessPublic   = "public"
 	AccessPassword = "password"
-	AccessExpiry   = "expiry"
 )
 
 type User struct {

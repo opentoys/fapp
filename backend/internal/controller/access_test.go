@@ -14,10 +14,10 @@ import (
 	"disapp/pkg/pwd"
 )
 
-// setAppAccess applies the app-level permission: an optional download
-// password and an optional download-link expiry (independent).
-func setAppAccess(s *Controller, app *model.App, secret string, expiresAt *time.Time) {
-	m := map[string]any{}
+// setAppAccess applies the app-level permission: an explicit access mode
+// (public/password) plus an independent download-link expiry.
+func setAppAccess(s *Controller, app *model.App, mode, secret string, expiresAt *time.Time) {
+	m := map[string]any{"access_mode": mode}
 	if expiresAt != nil {
 		m["expires_at"] = expiresAt
 	}
@@ -32,7 +32,7 @@ func setAppAccess(s *Controller, app *model.App, secret string, expiresAt *time.
 func TestVerifyPassword(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
-	setAppAccess(s, app, "abc", nil)
+	setAppAccess(s, app, model.AccessPassword, "abc", nil)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", StorageKey: "wechat/1/3/a.apk",
@@ -58,7 +58,7 @@ func TestVerifyPassword(t *testing.T) {
 func TestDownloadWrongPassword(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
-	setAppAccess(s, app, "abc", nil)
+	setAppAccess(s, app, model.AccessPassword, "abc", nil)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", StorageKey: "wechat/1/3/a.apk",
@@ -85,7 +85,7 @@ func TestDownloadExpired(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
 	past := time.Now().Add(-time.Hour)
-	setAppAccess(s, app, "", &past)
+	setAppAccess(s, app, model.AccessPublic, "", &past)
 	v := model.Version{
 		AppID: app.ID, VersionName: "1.0.0", VersionCode: 2, FileName: "a.apk",
 		FileType: "apk", StorageKey: "wechat/1/3/a.apk",

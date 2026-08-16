@@ -42,7 +42,7 @@ func (s *Service) CreateApp(ctx context.Context, in CreateAppInput) (*model.App,
 			return nil, &Error{StatusBadRequest, "该平台下已存在相同包名（appid）的应用"}
 		}
 	}
-	app := model.App{Name: in.Name, Platform: in.Platform, PackageName: pkg, Icon: in.Icon, Description: in.Description}
+	app := model.App{Name: in.Name, Platform: in.Platform, PackageName: pkg, Icon: in.Icon, Description: in.Description, AccessMode: model.AccessPublic}
 	if err := s.DB.Create(&app).Error; err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return nil, &Error{StatusBadRequest, "该平台下已存在相同包名（appid）的应用"}
@@ -52,19 +52,19 @@ func (s *Service) CreateApp(ctx context.Context, in CreateAppInput) (*model.App,
 	return &app, nil
 }
 
-// UpdateAppInput carries the pointer-based PATCH fields. Password and expiry
-// are independent: password sets/clears the download password, ExpiresAt sets
-// (or clears when null, alongside ClearExpiry) the download-link validity.
+// UpdateAppInput carries the pointer-based PATCH fields. AccessMode keeps the
+// explicit 公开/密码 choice; the download-link expiry is a separate,
+// independent setting.
 type UpdateAppInput struct {
-	Name         *string    `json:"name"`
-	Icon         *string    `json:"icon"`
-	Screenshots  []string   `json:"screenshots"`
-	Description  *string    `json:"description"`
-	Password     *string    `json:"password"`
-	ClearPassword bool      `json:"clear_password"`
-	ExpiresAt    *time.Time `json:"expires_at"`
-	ClearExpiry  bool       `json:"clear_expiry"`
-	Published    *bool      `json:"published"`
+	Name        *string    `json:"name"`
+	Icon        *string    `json:"icon"`
+	Screenshots []string   `json:"screenshots"`
+	Description *string    `json:"description"`
+	AccessMode  *string    `json:"access_mode"` // public | password
+	Password    *string    `json:"password"`
+	ExpiresAt   *time.Time `json:"expires_at"`
+	ClearExpiry bool       `json:"clear_expiry"`
+	Published   *bool      `json:"published"`
 }
 
 func (s *Service) UpdateApp(ctx context.Context, id int64, in UpdateAppInput) (*model.App, error) {
@@ -87,19 +87,26 @@ func (s *Service) UpdateApp(ctx context.Context, id int64, in UpdateAppInput) (*
 	if in.Published != nil {
 		app.Published = *in.Published
 	}
+	if in.AccessMode != nil {
+		switch *in.AccessMode {
+		case model.AccessPassword:
+			if in.Password == nil || *in.Password == "" {
+				return nil, &Error{StatusBadRequest, "密码模式下需要填写下载密码"}
+			}
+			app.AccessMode = model.AccessPassword
+		case model.AccessPublic:
+			app.AccessMode = model.AccessPublic
+		default:
+			return nil, &Error{StatusBadRequest, "access_mode 必须为 public 或 password"}
+		}
+	}
 	if in.Password != nil && *in.Password != "" {
 		h, salt := pwd.Hash(*in.Password)
 		app.PasswordHash, app.Salt = h, salt
 	}
-	if in.ClearPassword {
+	// Public mode has no download password.
+	if app.AccessMode != model.AccessPassword {
 		app.PasswordHash, app.Salt = "", ""
-	}
-	// AccessMode is derived from password presence (expiry no longer maps to
-	// a mode): password → "password", else "public".
-	if app.PasswordHash != "" {
-		app.AccessMode = model.AccessPassword
-	} else {
-		app.AccessMode = model.AccessPublic
 	}
 	if in.ExpiresAt != nil {
 		at := in.ExpiresAt.In(time.Local)
