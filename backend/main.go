@@ -8,13 +8,15 @@ import (
 
 	"disapp/internal/controller"
 	"disapp/internal/resources/config"
-	"disapp/internal/router"
 	"disapp/internal/resources/storage"
 	"disapp/internal/resources/storage/cos"
 	"disapp/internal/resources/storage/local"
+	ocistorage "disapp/internal/resources/storage/oci"
 	"disapp/internal/resources/store/db"
+	"disapp/internal/router"
 	"disapp/internal/service"
 	pkgcos "disapp/pkg/cos"
+	pkgoci "disapp/pkg/oci"
 	"disapp/static"
 )
 
@@ -58,6 +60,12 @@ func main() {
 			log.Fatalf("init cos: %v", err)
 		}
 		st = cos.NewCOS(obj)
+	case "oci":
+		obj, err := pkgoci.NewFromConfig(cfg.Storage.OCI.AccessKey, cfg.Storage.OCI.SecretKey, cfg.Storage.OCI.Namespace, cfg.Storage.OCI.Bucket, cfg.Storage.OCI.Region, cfg.Storage.OCI.BaseURL)
+		if err != nil {
+			log.Fatalf("init oci: %v", err)
+		}
+		st = ocistorage.NewOCI(obj)
 	default:
 		loc, err := local.NewLocal(cfg.Storage.Local.Dir, cfg.JWT.Secret)
 		if err != nil {

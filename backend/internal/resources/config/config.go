@@ -27,6 +27,19 @@ type StorageConfig struct {
 	Backend string      `json:"backend"`
 	Local   LocalConfig `json:"local"`
 	COS     COSConfig   `json:"cos"`
+	OCI     OCIConfig   `json:"oci"`
+}
+
+// OCIConfig authenticates against the S3-compatible Oracle Object Storage
+// endpoint via AWS SigV4, using a customer secret key (not instance
+// principals / signed API requests).
+type OCIConfig struct {
+	AccessKey string `json:"access_key"`
+	SecretKey string `json:"secret_key"`
+	Bucket    string `json:"bucket"`    // 如 app-dist
+	Namespace string `json:"namespace"` // 如 axhyl7xyzabc
+	Region    string `json:"region"`    // 如 ap-chuncheon-1 / ap-singapore-1
+	BaseURL   string `json:"base_url"`
 }
 
 type LocalConfig struct {
