@@ -96,7 +96,11 @@ func (s *LocalStorage) UploadURL(ctx context.Context, key, contentType string, e
 		return "", fmt.Errorf("invalid key %q", key)
 	}
 	ttl := time.Now().Add(expire).Unix()
-	q := url.Values{"ttl": {strconv.FormatInt(ttl, 10)}, "sign": {signUpload(s.secret, ttl)}}
+	q := url.Values{
+		"key": {key},
+		"ttl": {strconv.FormatInt(ttl, 10)},
+		"sign": {signUpload(s.secret, ttl)},
+	}
 	return "/api/v1/files/upload?" + q.Encode(), nil
 }
 

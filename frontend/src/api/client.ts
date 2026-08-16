@@ -92,8 +92,11 @@ export const api = {
 }
 
 // uploadViaURL pushes the file body straight to the presigned url returned by a
-// presign endpoint ({key,url}). COS takes a PUT, local takes a POST.
-export async function uploadViaURL(url: string, file: File, method: 'PUT' | 'POST' = 'PUT'): Promise<void> {
+// presign endpoint ({key,url}). COS presigns a PUT URL; local signs a server
+// upload endpoint (/files/upload) that takes a POST — derive the method from
+// the url host/path so neither backend needs a method hint.
+export async function uploadViaURL(url: string, file: File): Promise<void> {
+  const method = url.includes('/api/v1/files/upload') ? 'POST' : 'PUT'
   const res = await fetch(url, { method, body: file })
   if (!res.ok) throw new Error(`upload failed: ${res.status}`)
 }
