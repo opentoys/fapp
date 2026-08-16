@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -97,8 +99,21 @@ func (s *Service) CreateVersion(ctx context.Context, appID int64, in CreateVersi
 		if err := s.DB.Save(&app).Error; err != nil {
 			return nil, &Error{StatusInternal, "保存失败"}
 		}
+		s.NotifyEventParams(ctx, app.ID, model.EventVersionCurrent, app.Name, versionParams(&v))
 	}
+	s.NotifyEventParams(ctx, app.ID, model.EventVersionUploaded, app.Name, versionParams(&v))
 	return &v, nil
+}
+
+// versionParams fills the version-related notification parameters.
+func versionParams(v *model.Version) NotifyParams {
+	return NotifyParams{
+		"version_id":   fmt.Sprintf("%d", v.ID),
+		"version_name": v.VersionName,
+		"version_code": strconv.Itoa(v.VersionCode),
+		"file_name":    v.FileName,
+		"file_size":    fmt.Sprintf("%d", v.FileSize),
+	}
 }
 
 // DeleteVersion deletes a version, optionally deleting the storage file. If the

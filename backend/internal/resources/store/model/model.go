@@ -146,6 +146,44 @@ type DownloadLog struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// Notification events a bot can subscribe to.
+const (
+	EventVersionUploaded  = "version_uploaded"   // 新版本上传
+	EventVersionCurrent   = "version_current"    // 版本设为当前
+	EventAppPublish       = "app_publish"        // 应用发布/下架
+	EventAppExpire        = "app_expire"         // 应用到期
+)
+
+// NotificationBot is a webhook notification bot subscribed to a single app.
+// Headers and BodyTemplate carry {{param}} placeholders that are compiled from
+// the event's common notification parameters at send time.
+type NotificationBot struct {
+	ID          int64    `gorm:"primaryKey" json:"id"`
+	Name        string   `gorm:"size:128" json:"name"`
+	AppID       int64    `gorm:"index" json:"app_id"`
+	Method      string   `gorm:"size:16" json:"method"` // POST/GET/PUT
+	URL         string   `gorm:"size:1024" json:"url"`
+	Headers     JSONList `gorm:"type:text" json:"headers"`     // ["K: V", ...]
+	BodyTemplate string  `gorm:"type:text" json:"body_template"`
+	Events      JSONList `gorm:"type:text" json:"events"`      // subscribed event names
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// NotificationLog records the raw webhook request we attempted (for the admin
+// to debug). Only the outgoing request is stored; responses are not persisted.
+type NotificationLog struct {
+	ID        int64     `gorm:"primaryKey" json:"id"`
+	BotID     int64     `gorm:"index" json:"bot_id"`
+	AppID     int64     `gorm:"index" json:"app_id"`
+	Event     string    `gorm:"size:32" json:"event"`
+	URL       string    `gorm:"size:1024" json:"url"`
+	Body      string    `gorm:"type:text" json:"body"`
+	Status    int       `json:"status"`
+	Error     string    `gorm:"size:512" json:"error"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // FileType returns the file type based on filename extension.
 func FileType(filename string) string {
 	switch {

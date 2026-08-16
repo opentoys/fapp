@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -84,6 +85,7 @@ func (s *Service) UpdateApp(ctx context.Context, id int64, in UpdateAppInput) (*
 	if in.Description != nil {
 		app.Description = *in.Description
 	}
+	wasPublished := app.Published
 	if in.Published != nil {
 		app.Published = *in.Published
 	}
@@ -118,7 +120,21 @@ func (s *Service) UpdateApp(ctx context.Context, id int64, in UpdateAppInput) (*
 	if err := s.DB.Save(&app).Error; err != nil {
 		return nil, &Error{StatusInternal, "保存失败"}
 	}
+	// Notify on publish/下架 changes.
+	if in.Published != nil && *in.Published != wasPublished {
+		s.NotifyEventParams(ctx, app.ID, model.EventAppPublish, app.Name, NotifyParams{
+			"published":  fmt.Sprintf("%t", app.Published),
+			"expires_at": expiresAtString(app.ExpiresAt),
+		})
+	}
 	return &app, nil
+}
+
+func expiresAtString(at *time.Time) string {
+	if at == nil {
+		return ""
+	}
+	return at.In(time.Local).Format("2006-01-02 15:04:05")
 }
 
 func (s *Service) DeleteApp(ctx context.Context, appID int64) error {
@@ -239,6 +255,7 @@ func (s *Service) SetCurrentVersion(ctx context.Context, appID, versionID int64)
 	if err := s.DB.Save(&app).Error; err != nil {
 		return nil, &Error{StatusInternal, "保存失败"}
 	}
+	s.NotifyEventParams(context.Background(), app.ID, model.EventVersionCurrent, app.Name, versionParams(&v))
 	return &app, nil
 }
 

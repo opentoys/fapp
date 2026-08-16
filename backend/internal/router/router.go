@@ -66,6 +66,14 @@ func Routes(c *controller.Controller, dist fs.FS) http.Handler {
 	mux.HandleFunc("PUT /api/v1/admin/keys/{id}", web.Chain(admin...)(c.UpdateKey))
 	mux.HandleFunc("DELETE /api/v1/admin/keys/{id}", web.Chain(admin...)(c.DeleteKey))
 
+	// Notification bots (webhook subscriptions).
+	mux.HandleFunc("GET /api/v1/admin/subscriptions", web.Chain(admin...)(c.SubscriptionsList))
+	mux.HandleFunc("POST /api/v1/admin/subscriptions", web.Chain(admin...)(c.CreateSubscription))
+	mux.HandleFunc("PUT /api/v1/admin/subscriptions/{id}", web.Chain(admin...)(c.UpdateSubscription))
+	mux.HandleFunc("DELETE /api/v1/admin/subscriptions/{id}", web.Chain(admin...)(c.DeleteSubscription))
+	mux.HandleFunc("POST /api/v1/admin/subscriptions/{id}/test", web.Chain(admin...)(c.TestSubscription))
+	mux.HandleFunc("GET /api/v1/admin/subscriptions/{id}/logs", web.Chain(admin...)(c.SubscriptionLogs))
+
 	// API-key-authenticated programmatic endpoints (key via `?apikey=`).
 	mux.HandleFunc("POST /api/v1/keys/{app_id}/versions", web.Chain(pub...)(c.UploadKeyVersion))
 	mux.HandleFunc("POST /api/v1/keys/{app_id}/current", web.Chain(pub...)(c.SetKeyCurrentVersion))

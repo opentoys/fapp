@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"disapp/internal/controller"
 	"disapp/internal/resources/config"
@@ -79,6 +81,16 @@ func main() {
 	// static.Dist is the embedded frontend when built with `-tags dist`,
 	// otherwise nil (no static serving).
 	handler := router.Routes(ctrl, static.Dist)
+
+	// Background scan for apps that just passed their expiry; fires the
+	// 应用到期 notification once per app (deduped via NotificationLog).
+	go func() {
+		for range time.Tick(5 * time.Minute) {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			svc.ExpiryScan(ctx)
+			cancel()
+		}
+	}()
 
 	log.Printf("app-dist listening on %s (storage: %s, dist: %v)", cfg.Server.Addr, cfg.Storage.Backend, static.Dist != nil)
 	if err := http.ListenAndServe(cfg.Server.Addr, handler); err != nil {

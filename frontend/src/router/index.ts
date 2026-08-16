@@ -36,6 +36,11 @@ const router = createRouter({
       component: () => import('../views/admin/KeysDoc.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/admin/subscriptions',
+      component: () => import('../views/admin/Subscriptions.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

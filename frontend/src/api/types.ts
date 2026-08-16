@@ -74,6 +74,43 @@ export interface VersionMeta {
   key: string
 }
 
+export type NotifyEvent = 'version_uploaded' | 'version_current' | 'app_publish' | 'app_expire'
+
+export interface NotificationBot {
+  id: number
+  name: string
+  app_id: number
+  method: 'POST' | 'GET' | 'PUT'
+  url: string
+  headers: string[]
+  body_template: string
+  events: NotifyEvent[]
+  created_at: string
+  updated_at: string
+}
+
+export interface BotInput {
+  name: string
+  app_id: number
+  method: 'POST' | 'GET' | 'PUT'
+  url: string
+  headers: string[]
+  body_template: string
+  events: NotifyEvent[]
+}
+
+export interface NotificationLog {
+  id: number
+  bot_id: number
+  app_id: number
+  event: string
+  url: string
+  body: string
+  status: number
+  error: string
+  created_at: string
+}
+
 export type KeyScope = 'read' | 'run'
 
 export interface ApiKey {

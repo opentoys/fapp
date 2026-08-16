@@ -41,6 +41,7 @@ const tabs = computed(() => {
   }
   result.push({ label: t('adminKeys.title'), to: '/admin/keys', match: '/admin/keys' })
   result.push({ label: t('apiDoc.title'), to: '/admin/keys/doc', match: '/admin/keys/doc' })
+  result.push({ label: t('notify.title'), to: '/admin/subscriptions', match: '/admin/subscriptions' })
   return result
 })
 

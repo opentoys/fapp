@@ -20,6 +20,7 @@ func Open(dsn string) (*gorm.DB, error) {
 	}
 	if err := gdb.AutoMigrate(
 		&model.User{}, &model.App{}, &model.Version{}, &model.DownloadLog{}, &model.AppMember{}, &model.ApiKey{},
+		&model.NotificationBot{}, &model.NotificationLog{},
 	); err != nil {
 		return nil, err
 	}

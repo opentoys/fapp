@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { useAuth } from '../composables/useAuth'
-import type { ApiKey, ApiResp, AppDetail, AppItem, DownloadsTimeSeries, KeyScope, Platform, User, Version, VersionMeta, UploadTicket } from './types'
+import type { ApiKey, ApiResp, AppDetail, AppItem, BotInput, DownloadsTimeSeries, KeyScope, NotificationBot, NotificationLog, Platform, User, Version, VersionMeta, UploadTicket } from './types'
 
 const client = axios.create({ baseURL: '/api/v1', timeout: 60000 })
 
@@ -89,6 +89,16 @@ export const api = {
   updateKey: (id: number, data: { name?: string; scope?: KeyScope; expires_at?: string | null }) =>
     client.put<ApiResp<ApiKey>>(`/admin/keys/${id}`, data),
   deleteKey: (id: number) => client.delete<ApiResp<unknown>>(`/admin/keys/${id}`),
+
+  subscriptions: () => client.get<ApiResp<NotificationBot[]>>('/admin/subscriptions').then((r) => r.data.data),
+  createSubscription: (data: BotInput) =>
+    client.post<ApiResp<NotificationBot>>('/admin/subscriptions', data).then((r) => r.data.data),
+  updateSubscription: (id: number, data: BotInput) =>
+    client.put<ApiResp<NotificationBot>>(`/admin/subscriptions/${id}`, data).then((r) => r.data.data),
+  deleteSubscription: (id: number) => client.delete<ApiResp<unknown>>(`/admin/subscriptions/${id}`),
+  testSubscription: (id: number) => client.post<ApiResp<unknown>>(`/admin/subscriptions/${id}/test`),
+  subscriptionLogs: (id: number, limit = 20) =>
+    client.get<ApiResp<NotificationLog[]>>(`/admin/subscriptions/${id}/logs`, { params: { limit } }).then((r) => r.data.data),
 }
 
 // uploadViaURL pushes the file body straight to the presigned url returned by a
