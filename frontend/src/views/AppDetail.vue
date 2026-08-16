@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Download } from 'lucide-vue-next'
+import { Download, Loader2 } from 'lucide-vue-next'
 import { api } from '../api/client'
 import { useI18n } from '../composables/useI18n'
 import { loadDownloadApp } from '../composables/useDownloadApp'
@@ -10,8 +10,7 @@ import { Alert } from '../components/ui/alert'
 import { Avatar } from '../components/ui/avatar'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
-import { Card, CardContent } from '../components/ui/card'
-import { Dialog } from '../components/ui/dialog'
+import { Card, CardContent, CardFooter } from '../components/ui/card'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import VersionPanel from '../components/VersionPanel.vue'
@@ -23,26 +22,20 @@ const detected = detectUA()
 
 const data = ref<AppDetail | null>(null)
 const error = ref('')
-const passwordPrompt = ref<{ versionId: number; password: string } | null>(null)
-const dialogOpen = ref(false)
+const unlocked = ref(false)
+const unlocking = ref(false)
+const password = ref('')
+const passwordError = ref('')
 
 // The backend exposes only the app's single current version.
 const latest = computed(() => data.value?.versions[0] ?? null)
-
-function openPasswordPrompt(versionId: number) {
-  passwordPrompt.value = { versionId, password: '' }
-  dialogOpen.value = true
-}
-function closePasswordPrompt() {
-  dialogOpen.value = false
-  passwordPrompt.value = null
-}
 
 onMounted(load)
 watch(() => route.params.name, (name) => { if (name) load() })
 
 async function load() {
   data.value = null
+  unlocked.value = false
   error.value = ''
   try {
     data.value = await loadDownloadApp(String(route.params.name))
@@ -54,30 +47,38 @@ async function load() {
 const appAccess = computed(() => data.value?.app.access_mode ?? 'public')
 const appExpiresAt = computed(() => data.value?.app.expires_at ?? null)
 
+// appAccess is determined after load; a password-protected app starts
+// locked and shows the password form. Once verified, the password is kept
+// and passed to downloadUrl on every download.
+const appLocked = computed(() => appAccess.value === 'password' && !unlocked.value)
+
 function isExpired(): boolean {
   return appAccess.value === 'expiry' && !!appExpiresAt.value && new Date(appExpiresAt.value) < new Date()
 }
 
-async function download(v: Version | null) {
+async function unlock() {
+  const v = latest.value
   if (!v) return
-  if (appAccess.value === 'password') {
-    openPasswordPrompt(v.id)
-    return
-  }
-  await doDownload(v.id, undefined)
-}
-
-async function submitPassword() {
-  if (!passwordPrompt.value) return
-  const pwd = passwordPrompt.value.password
-  const vid = passwordPrompt.value.versionId
-  closePasswordPrompt()
-  await doDownload(vid, pwd)
-}
-
-async function doDownload(versionId: number, password: string | undefined) {
+  unlocking.value = true
+  passwordError.value = ''
   try {
-    const url = await api.downloadUrl(versionId, password)
+    await api.verify(v.id, password.value)
+    unlocked.value = true
+  } catch (e) {
+    passwordError.value = (e as Error).message
+  } finally {
+    unlocking.value = false
+  }
+}
+
+async function download(v: Version | null) {
+  if (!v || appLocked.value) return
+  await doDownload(v.id, appAccess.value === 'password' ? password.value : undefined)
+}
+
+async function doDownload(versionId: number, pw: string | undefined) {
+  try {
+    const url = await api.downloadUrl(versionId, pw)
     window.location.href = url
   } catch (e) {
     error.value = (e as Error).message
@@ -92,7 +93,38 @@ async function doDownload(versionId: number, password: string | undefined) {
       {{ error }}
     </Alert>
 
-    <template v-if="data">
+    <!-- Password gate: entry-level. Replace the info until verified. -->
+    <Card v-if="data && appLocked" class="mx-auto max-w-md">
+      <CardContent class="p-6">
+        <div class="mb-4 flex items-center gap-3">
+          <Avatar :src="data.app.icon" :fallback="data.app.name.charAt(0).toUpperCase()" class="size-10" />
+          <h1 class="text-lg font-semibold tracking-tight">{{ data.app.name }}</h1>
+        </div>
+        <p class="text-muted-foreground mb-4 text-sm">{{ t('detail.passwordBody') }}</p>
+        <div class="grid gap-2">
+          <Label for="app-password">{{ t('common.password') }}</Label>
+          <Input
+            id="app-password"
+            v-model="password"
+            type="password"
+            autocomplete="off"
+            autofocus
+            :disabled="unlocking"
+            @keyup.enter="unlock"
+          />
+        </div>
+        <div v-if="passwordError" class="mt-2 text-sm text-destructive">{{ passwordError }}</div>
+        <Button class="mt-4 w-full" :disabled="unlocking" @click="unlock">
+          <Loader2 v-if="unlocking" class="animate-spin size-4" />
+          {{ t('detail.passwordContinue') }}
+        </Button>
+        <CardFooter class="p-0 pt-4">
+          <p class="text-muted-foreground text-xs">{{ t('detail.passwordGateHint') }}</p>
+        </CardFooter>
+      </CardContent>
+    </Card>
+
+    <template v-else-if="data">
       <div class="mb-2 flex items-center gap-3">
         <Avatar :src="data.app.icon" :fallback="data.app.name.charAt(0).toUpperCase()" class="size-10" />
         <div>
@@ -141,33 +173,11 @@ async function doDownload(versionId: number, password: string | undefined) {
     </template>
 
     <!-- Floating download button: 80% width, pinned to the viewport bottom -->
-    <div v-if="!detected.isDesktop && latest && !error" class="fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 bg-gradient-to-t from-background to-transparent">
+    <div v-if="!detected.isDesktop && latest && !error && !appLocked" class="fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 bg-gradient-to-t from-background to-transparent">
       <Button size="lg" class="w-4/5" :disabled="isExpired()" @click="download(latest)">
         <Download class="size-4" />
         {{ t('detail.download') }}
       </Button>
     </div>
-
-    <Dialog v-model:open="dialogOpen" :title="t('detail.passwordTitle')" max-width="md">
-      <div class="grid gap-4">
-        <p class="text-muted-foreground text-sm">{{ t('detail.passwordBody') }}</p>
-        <div class="grid gap-2">
-          <Label for="download-password">{{ t('common.password') }}</Label>
-          <Input
-            v-if="passwordPrompt"
-            id="download-password"
-            v-model="passwordPrompt.password"
-            type="password"
-            autocomplete="off"
-            autofocus
-            @keyup.enter="submitPassword"
-          />
-        </div>
-        <div class="flex justify-end gap-2">
-          <Button variant="outline" @click="closePasswordPrompt">{{ t('common.cancel') }}</Button>
-          <Button @click="submitPassword">{{ t('detail.passwordContinue') }}</Button>
-        </div>
-      </div>
-    </Dialog>
   </div>
 </template>
