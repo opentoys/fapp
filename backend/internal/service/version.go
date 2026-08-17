@@ -113,7 +113,6 @@ func (s *Service) versionParams(v *model.Version) NotifyParams {
 		"version_code": strconv.Itoa(v.VersionCode),
 		"file_name":    v.FileName,
 		"file_size":    fmt.Sprintf("%d", v.FileSize),
-		"download_url": s.downloadURL(v.ID),
 	}
 }
 

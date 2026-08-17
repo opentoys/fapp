@@ -17,10 +17,6 @@ type Config struct {
 
 type ServerConfig struct {
 	Addr string `json:"addr"`
-	// PublicURL is the externally reachable base URL (e.g.
-	// https://dist.example.com). When set, notification webhooks can build
-	// absolute {{download_url}} links. Empty disables the param.
-	PublicURL string `json:"public_url"`
 }
 
 type DatabaseConfig struct {

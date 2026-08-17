@@ -52,7 +52,6 @@ const previewParams = computed(() => {
     file_size: '10485760',
     published: 'true',
     expires_at: '2026-12-31 23:59:59',
-    download_url: location.origin + '/api/v1/versions/42/download',
   }
 })
 

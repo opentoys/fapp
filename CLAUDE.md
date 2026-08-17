@@ -47,3 +47,6 @@ Open http://localhost:5173. Kill both when done.
 - API responses are NOT translated; only UI strings are
 - Icons: `lucide-vue-next`; `vue-sonner` for toasts
 - Reuse `frontend/src/components/ui/*` shadcn primitives, never raw Vuetify
+- Webhook templates use `{{key}}` placeholders — see `service/notify.go`
+- Public home `/` is a blank placeholder; apps are reached by direct detail
+  links (`/app/:name`), there is no public app-list endpoint (`/api/v1/apps`)

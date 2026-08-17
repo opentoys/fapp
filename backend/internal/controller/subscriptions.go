@@ -97,7 +97,7 @@ func (c *Controller) TestSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err := c.SVC.TestBot(r.Context(), id, requestBase(r)); err != nil {
+	if err := c.SVC.TestBot(r.Context(), id); err != nil {
 		sendErr(w, err)
 		return
 	}
@@ -121,7 +121,7 @@ func (c *Controller) TestSubscriptionConfig(w http.ResponseWriter, r *http.Reque
 		web.SendError(w, web.CodeForbidden, "无权访问该应用")
 		return
 	}
-	if err := c.SVC.TestBotInput(r.Context(), in, requestBase(r)); err != nil {
+	if err := c.SVC.TestBotInput(r.Context(), in); err != nil {
 		sendErr(w, err)
 		return
 	}

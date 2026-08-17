@@ -31,28 +31,7 @@ func EventParams(event, appName string) NotifyParams {
 	p["file_size"] = ""
 	p["published"] = ""
 	p["expires_at"] = ""
-	p["download_url"] = "" // set per-event from server.public_url + version id
 	return p
-}
-
-// downloadURL builds the download URL for a version. base is an explicit
-// absolute prefix (test pushes pass the request host); otherwise it falls
-// back to server.public_url. With no base it degrades to a relative path so
-// {{download_url}} is never silently empty.
-func (s *Service) downloadURLFor(versionID int64, base string) string {
-	if base == "" {
-		base = s.Config.Server.PublicURL
-	}
-	path := "/api/v1/versions/" + fmt.Sprintf("%d", versionID) + "/download"
-	if base == "" {
-		return path
-	}
-	return strings.TrimRight(base, "/") + path
-}
-
-// downloadURL uses the configured public_url (real notification events).
-func (s *Service) downloadURL(versionID int64) string {
-	return s.downloadURLFor(versionID, "")
 }
 
 func eventName(key string) string {
@@ -325,9 +304,8 @@ func (s *Service) DeleteBot(ctx context.Context, userID, id int64) error {
 }
 
 // TestBot fires a sample "版本上传" event to the bot so the admin can verify
-// the webhook without waiting for a real event. Uses the saved app name and
-// its current version for download_url.
-func (s *Service) TestBot(ctx context.Context, id int64, base string) error {
+// the webhook without waiting for a real event. Uses the saved app name.
+func (s *Service) TestBot(ctx context.Context, id int64) error {
 	var bot model.NotificationBot
 	if err := s.DB.First(&bot, id).Error; err != nil {
 		return &Error{StatusNotFound, "机器人不存在"}
@@ -338,23 +316,12 @@ func (s *Service) TestBot(ctx context.Context, id int64, base string) error {
 	}
 	params := EventParams(model.EventVersionUploaded, app.Name)
 	params["version_name"] = "（测试）"
-	params["download_url"] = s.sampleDownloadURL(app.CurrentVersionID, base)
 	return s.SendNotification(ctx, &bot, params)
 }
 
-// sampleDownloadURL fills {{download_url}} for a test push: the app's current
-// version when one exists, otherwise an empty value.
-func (s *Service) sampleDownloadURL(versionID int64, base string) string {
-	if versionID <= 0 {
-		return ""
-	}
-	return s.downloadURLFor(versionID, base)
-}
-
 // TestBotInput fires a sample "版本上传" event to an unsaved bot configuration
-// so the admin can verify the webhook before creating or updating it. base is
-// the request-derived absolute origin, used to fill {{download_url}}.
-func (s *Service) TestBotInput(ctx context.Context, in BotInput, base string) error {
+// so the admin can verify the webhook before creating or updating it.
+func (s *Service) TestBotInput(ctx context.Context, in BotInput) error {
 	if err := s.validateBot(&in); err != nil {
 		return err
 	}
@@ -368,7 +335,6 @@ func (s *Service) TestBotInput(ctx context.Context, in BotInput, base string) er
 	}
 	params := EventParams(model.EventVersionUploaded, app.Name)
 	params["version_name"] = "（测试）"
-	params["download_url"] = s.sampleDownloadURL(app.CurrentVersionID, base)
 	return s.SendNotification(ctx, &bot, params)
 }
 

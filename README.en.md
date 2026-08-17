@@ -12,7 +12,14 @@ CI pipelines.
   is unique app-wide, and the appid is locked on the first version upload
 - **Publishing** — app-level on/off switch; only the current version of a published
   app is visible publicly
-- **Access control** — password-protected versions, optional app expiry
+- **Access control** — app-level `access_mode` (`public` / `password`); download-link
+  expiry is decoupled from the password and set at day granularity; credentials pass
+  through query params on the link
+- **Webhook notifications** — subscribe to events (version uploaded / set current /
+  publish-unpublish / expired), templated payloads with `{{key}}` placeholders,
+  test push of unsaved config, and send logs
+- **Desktop QR code** — the public app detail page shows a QR code on desktop for
+  phone-scan download
 - **Team management** — app members decide who can manage each app; super-admin
   (defined in `config.json`, `uid = -1`) manages everything
 - **API keys** — CI/script access via `?apikey=` with `run`/`read` scope and
@@ -28,7 +35,8 @@ CI pipelines.
 | Frontend | Vue 3 + Vite + TypeScript + Tailwind CSS v4 + shadcn-vue |
 | Backend  | Go, standard-library HTTP (`mux.HandleFunc("METHOD /path")`) |
 | Storage  | GORM + SQLite (pure Go, no CGO) |
-| Files    | local directory or Tencent Cloud COS |
+| Files    | local directory, Tencent Cloud COS, or Oracle Object Storage (S3-compatible) |
+| QR       | `qrcode` (desktop QR generation) |
 | Auth     | JWT (golang-jwt), super-admin from config |
 
 ## Project layout
@@ -41,14 +49,19 @@ backend/
     controller/ HTTP handlers (thin: parse → service → JSON)
     service/     business logic (DB/storage/validation)
     router/      Routes + static files
-    resources/   config · store/{db,model} · storage/{local,cos}
+    resources/   config · store/{db,model} · storage/{local,cos,oci}
   static/      optional — frontend dist embedded only with `-tags dist`
 .github/workflows/release.yml   tag push → cross-compiled GitHub Release
 ```
 
 ## Screenshots
 
-Public download page (no login needed, `/` app list → app detail):
+Public download page (no login needed — `/` home is a blank placeholder; reach
+apps via direct detail links):
+
+![App detail](docs/screenshots/app-detail.png)
+
+Public app detail page (with QR code on desktop):
 
 ![Public download page](docs/screenshots/public-app.png)
 
@@ -96,11 +109,15 @@ All config lives in a JSON file (`APP_CONFIG`, defaults to `./config.json`):
   "server":  { "addr": ":8080" },
   "database":{ "dsn": "./data/app.db" },
   "storage": {
-    "backend": "local" /* or "cos" */,
+    "backend": "local" /* or "cos" / "oci" */,
     "local":   { "dir": "./data/files" },
     "cos": {
       "secret_id": "...", "secret_key": "...",
       "bucket": "app-dist-1250000000", "region": "ap-guangzhou", "base_url": "..."
+    },
+    "oci": {
+      "access_key": "...", "secret_key": "...",
+      "bucket": "app-dist", "namespace": "...", "region": "ap-singapore-1", "base_url": "..."
     }
   },
   "jwt":    { "secret": "change-me", "expire": "24h" },
@@ -113,6 +130,34 @@ All config lives in a JSON file (`APP_CONFIG`, defaults to `./config.json`):
 
 There are **no migrations** — GORM auto-migrates the schema on startup. If the
 schema changes, rebuild from scratch (dev only): `make reset`.
+
+### Access control
+
+- Each app has `access_mode`: `public` (open download) or `password` (password-gated)
+- Download-link expiry is decoupled from the password and set at day granularity;
+  once expired the detail page reports the app as not found
+- Password/token ride on the link as query params, so a link can be copied and
+  forwarded directly
+
+## Webhook notifications (subscription bots)
+
+Create bots on the **Subscriptions** page: bind an app, pick a method
+(POST/GET/PUT), URL, headers, events, and a body template. Placeholders use
+`{{key}}`:
+
+| Param | Meaning |
+|-------|---------|
+| `event` / `event_key` | event display name / raw key (`version_uploaded`, `version_current`, `app_publish`, `app_expire`) |
+| `app_id` / `app_name` | app ID / name |
+| `version_id` / `version_name` / `version_code` | version info (upload-related events) |
+| `file_name` / `file_size` | file info |
+| `published` / `expires_at` | publish status / expiry time |
+| `time` | event time |
+
+- **Test push** — send a sample request from the edit dialog against unsaved config
+- **Logs** — each send records URL, body, status code, and error
+- **Expiry scan** — background poll fires `app_expire` once per app (deduped via the
+  log table, so restarts don't re-fire)
 
 ## Roles
 
