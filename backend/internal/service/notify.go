@@ -71,7 +71,9 @@ func fillParams(s string, p NotifyParams) string {
 			if v, ok := p[key]; ok {
 				b.WriteString(v)
 			} else {
-				b.WriteString("{{" + key + "}}")
+				b.WriteString("{{")
+				b.WriteString(key)
+				b.WriteString("}}")
 			}
 			s = rest[close+2:]
 		}

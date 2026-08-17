@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -306,7 +307,7 @@ func TestAdminUploadAndSetIcon(t *testing.T) {
 	if reload.Icon != res.Data.Key {
 		t.Fatalf("icon key = %q, want %q", reload.Icon, res.Data.Key)
 	}
-	rc, err := loc.Open(nil, res.Data.Key)
+	rc, err := loc.Open(context.TODO(), res.Data.Key)
 	if err != nil {
 		t.Fatalf("icon not stored: %v", err)
 	}
@@ -320,7 +321,7 @@ func TestAdminUploadAndSetIcon(t *testing.T) {
 	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/apps/"+itoa(app.ID), nil)
 	delReq.SetPathValue("id", itoa(app.ID))
 	s.DeleteApp(httptest.NewRecorder(), delReq)
-	if _, err := loc.Open(nil, res.Data.Key); err == nil {
+	if _, err := loc.Open(context.TODO(), res.Data.Key); err == nil {
 		t.Fatal("icon file should be deleted with the app")
 	}
 }
@@ -388,7 +389,7 @@ func TestAdminScreenshotPresignAndDelete(t *testing.T) {
 	}
 	key := res.Data.Key
 	storeBytes(t, s, key, pngData)
-	if rc, err := loc.Open(nil, key); err != nil {
+	if rc, err := loc.Open(context.TODO(), key); err != nil {
 		t.Fatalf("screenshot not stored: %v", err)
 	} else {
 		got, _ := io.ReadAll(rc)
@@ -410,7 +411,7 @@ func TestAdminScreenshotPresignAndDelete(t *testing.T) {
 	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/admin/apps/"+itoa(app.ID), nil)
 	delReq.SetPathValue("id", itoa(app.ID))
 	s.DeleteApp(httptest.NewRecorder(), delReq)
-	if _, err := loc.Open(nil, key); err == nil {
+	if _, err := loc.Open(context.TODO(), key); err == nil {
 		t.Fatal("screenshot file should be deleted with the app")
 	}
 }
@@ -464,7 +465,7 @@ func TestAdminDeleteAppScreenshot(t *testing.T) {
 	if res.Code != 0 || len(res.Data.Screenshots) != 1 || res.Data.Screenshots[0] != keys[1] {
 		t.Fatalf("res = %s", w.Body.String())
 	}
-	if _, err := loc.Open(nil, keys[0]); err == nil {
+	if _, err := loc.Open(context.TODO(), keys[0]); err == nil {
 		t.Fatal("deleted screenshot file should be gone")
 	}
 }

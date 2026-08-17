@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -274,7 +275,7 @@ func TestDeleteVersion(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("versions = %d", count)
 	}
-	if _, err := s.SVC.Storage.(*local.LocalStorage).Open(nil, "wechat/1/2/a.apk"); err == nil {
+	if _, err := s.SVC.Storage.(*local.LocalStorage).Open(context.TODO(), "wechat/1/2/a.apk"); err == nil {
 		t.Fatal("file should be deleted")
 	}
 }

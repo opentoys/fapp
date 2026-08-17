@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -223,7 +224,7 @@ func TestFilePreviewStreamsSignedKey(t *testing.T) {
 	s := testServer(t)
 	storeBytes(t, s, "wechat/1/2/app.apk", []byte("binary-data"))
 	loc, _ := s.SVC.Storage.(*local.LocalStorage)
-	u, err := loc.DownloadURL(nil, "wechat/1/2/app.apk", "app.apk", time.Hour)
+	u, err := loc.DownloadURL(context.TODO(), "wechat/1/2/app.apk", "app.apk", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}

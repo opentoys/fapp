@@ -2,6 +2,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -232,7 +233,7 @@ func storeBytes(t *testing.T, s *Controller, key string, data []byte) {
 	if !ok {
 		t.Fatal("test requires local storage")
 	}
-	if _, err := loc.Save(nil, key, bytes.NewReader(data)); err != nil {
+	if _, err := loc.Save(context.TODO(), key, bytes.NewReader(data)); err != nil {
 		t.Fatalf("store bytes: %v", err)
 	}
 }
