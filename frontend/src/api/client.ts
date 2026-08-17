@@ -1,3 +1,4 @@
+import CryptoJS from 'crypto-js'
 import axios from 'axios'
 import { useAuth } from '../composables/useAuth'
 import type { ApiKey, ApiResp, AppDetail, AppGate, AppItem, BotInput, DownloadsTimeSeries, KeyScope, NotificationBot, NotificationLog, Platform, User, Version, VersionMeta, UploadTicket } from './types'
@@ -135,10 +136,10 @@ export function fileURL(key: string): string {
   return `/api/v1/admin/files/preview?${q.toString()}`
 }
 
-// sha256Hex computes the hex SHA-256 of a file in the browser.
+// sha256Hex computes the hex SHA-256 of a file with crypto-js. Unlike the
+// native Web Crypto API it needs no secure context (HTTPS/localhost), so it
+// works on plain-HTTP self-hosted deployments.
 export async function sha256Hex(file: File): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
+  const wordArray = CryptoJS.lib.WordArray.create(await file.arrayBuffer())
+  return CryptoJS.SHA256(wordArray).toString(CryptoJS.enc.Hex)
 }
