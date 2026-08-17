@@ -494,7 +494,7 @@ function goUpload() {
 // Public download page for the app, shown on the Overview tab. Resolved
 // through the router so the link matches the configured history mode.
 const downloadLink = computed(() =>
-  data.value ? router.resolve(`/app/${data.value.app.name}`).href : ''
+  data.value ? location.origin+'/'+router.resolve(`/app/${data.value.app.name}`).href : ''
 )
 
 async function copyLink() {
