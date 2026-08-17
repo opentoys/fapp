@@ -136,10 +136,21 @@ export function fileURL(key: string): string {
   return `/api/v1/admin/files/preview?${q.toString()}`
 }
 
-// sha256Hex computes the hex SHA-256 of a file with crypto-js. Unlike the
-// native Web Crypto API it needs no secure context (HTTPS/localhost), so it
-// works on plain-HTTP self-hosted deployments.
+// sha256Hex computes the hex SHA-256 of a file. It prefers the native Web
+// Crypto API (available only in secure contexts) and falls back to crypto-js
+// otherwise, so plain-HTTP self-hosted deployments still get a checksum.
 export async function sha256Hex(file: File): Promise<string> {
-  const wordArray = CryptoJS.lib.WordArray.create(await file.arrayBuffer())
+  const buf = await file.arrayBuffer()
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    try {
+      const digest = await crypto.subtle.digest('SHA-256', buf)
+      return Array.from(new Uint8Array(digest))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('')
+    } catch {
+      // fall through to crypto-js
+    }
+  }
+  const wordArray = CryptoJS.lib.WordArray.create(buf)
   return CryptoJS.SHA256(wordArray).toString(CryptoJS.enc.Hex)
 }
