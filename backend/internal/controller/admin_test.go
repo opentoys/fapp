@@ -291,6 +291,9 @@ func TestAdminUploadAndSetIcon(t *testing.T) {
 	if res.Data.URL == "" || res.Data.Key == "" {
 		t.Fatalf("ticket missing fields: %+v", res.Data)
 	}
+	if want := "distapp/" + itoa(app.ID) + "/0/"; !strings.HasPrefix(res.Data.Key, want) {
+		t.Fatalf("key = %q, want prefix %q", res.Data.Key, want)
+	}
 	loc, _ := s.SVC.Storage.(*local.LocalStorage)
 	storeBytes(t, s, res.Data.Key, pngData)
 

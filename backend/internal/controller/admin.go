@@ -132,8 +132,8 @@ type uploadTicket struct {
 // PresignFile is the single presigned-upload endpoint for every file kind
 // (version package, icon, screenshot). The caller sends the target app id and
 // the upload file name; it gets back {url, key} where key is
-// {app_id}/0/{file_name}. The caller pushes the bytes to url, then submits
-// key (with size + sha256) when saving the entity it belongs to.
+// {prefix}/{app_id}/0/{file_name}. The caller pushes the bytes to url, then
+// submits key (with size + sha256) when saving the entity it belongs to.
 func (c *Controller) PresignFile(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		AppID    int64  `json:"app_id"`
@@ -147,13 +147,8 @@ func (c *Controller) PresignFile(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeBadRequest, "app_id 必填")
 		return
 	}
-	appName, err := c.SVC.AppName(r.Context(), req.AppID)
-	if err != nil {
-		sendErr(w, err)
-		return
-	}
 	file := fmt.Sprintf("%d-%s", time.Now().UnixNano(), path.Base(req.FileName))
-	key := storage.AppKey(appName, req.AppID, 0, file)
+	key := storage.AppKey(c.SVC.Config.Storage.Prefix, req.AppID, 0, file)
 	if !storage.ValidKey(key) {
 		web.SendError(w, web.CodeBadRequest, "无效的 file_name")
 		return

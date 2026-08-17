@@ -21,24 +21,10 @@ type Storage interface {
 	DownloadURL(ctx context.Context, key, filename string, expire time.Duration) (string, error)
 }
 
-// AppKey generates a storage key with a human-readable app-name folder as
-// the top segment: {app_name}/{app_id}/{version_id}/{filename}.
-func AppKey(name string, appID, versionID int64, filename string) string {
-	return SlugName(name) + "/" + itoa(appID) + "/" + itoa(versionID) + "/" + filename
-}
-
-// SlugName sanitizes an app name to a safe folder segment: slash and spaces
-// become dashes, leading/trailing dots and dashes are trimmed. Empty falls
-// back to "app". Unicode (e.g. CJK) is preserved.
-func SlugName(s string) string {
-	s = strings.TrimSpace(s)
-	s = strings.ReplaceAll(s, "/", "-")
-	s = strings.ReplaceAll(s, " ", "-")
-	s = strings.Trim(s, "-.")
-	if s == "" {
-		return "app"
-	}
-	return s
+// AppKey generates a storage key under the configured top-level prefix:
+// {prefix}/{app_id}/{version_id}/{filename}.
+func AppKey(prefix string, appID, versionID int64, filename string) string {
+	return prefix + "/" + itoa(appID) + "/" + itoa(versionID) + "/" + filename
 }
 
 // Only allow {segment}/number/number/filename, all without slashes or spaces,

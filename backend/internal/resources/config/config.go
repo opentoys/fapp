@@ -24,6 +24,9 @@ type DatabaseConfig struct {
 }
 
 type StorageConfig struct {
+	// Prefix is the top-level folder under which all objects are stored
+	// (presign keys). Defaults to "distapp".
+	Prefix  string      `json:"prefix"`
 	Backend string      `json:"backend"`
 	Local   LocalConfig `json:"local"`
 	COS     COSConfig   `json:"cos"`
@@ -68,7 +71,7 @@ func Default() Config {
 	return Config{
 		Server:   ServerConfig{Addr: ":8080"},
 		Database: DatabaseConfig{DSN: "./data/app.db"},
-		Storage:  StorageConfig{Backend: "local", Local: LocalConfig{Dir: "./data/files"}},
+		Storage:  StorageConfig{Prefix: "distapp", Backend: "local", Local: LocalConfig{Dir: "./data/files"}},
 		JWT:      JWTConfig{Secret: "change-me", Expire: "24h"},
 		// Admin: 留空时启动不会自动创建任何管理员账号
 	}
