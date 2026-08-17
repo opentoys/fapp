@@ -71,7 +71,7 @@ func Default() Config {
 	return Config{
 		Server:   ServerConfig{Addr: ":8080"},
 		Database: DatabaseConfig{DSN: "./data/app.db"},
-		Storage:  StorageConfig{Prefix: "distapp", Backend: "local", Local: LocalConfig{Dir: "./data/files"}},
+		Storage:  StorageConfig{Prefix: "disapp", Backend: "local", Local: LocalConfig{Dir: "./data/files"}},
 		JWT:      JWTConfig{Secret: "change-me", Expire: "24h"},
 		// Admin: 留空时启动不会自动创建任何管理员账号
 	}
