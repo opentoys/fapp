@@ -4,6 +4,18 @@ import type { ApiKey, ApiResp, AppDetail, AppItem, BotInput, DownloadsTimeSeries
 
 const client = axios.create({ baseURL: '/api/v1', timeout: 60000 })
 
+// Hash router: the app lives under `/#/`. Redirecting a 401 to `/login`
+// (a bare path) would reload to a non-SPA route, so jump via the hash
+// instead and carry the current path as the post-login redirect target.
+function loginURL(): string {
+  const cur = location.hash.replace(/^#/, '')
+  return `#/login?redirect=${encodeURIComponent(cur || '/admin')}`
+}
+
+function isOnLoginPage(): boolean {
+  return location.hash.startsWith('#/login')
+}
+
 client.interceptors.request.use((cfg) => {
   const token = localStorage.getItem('token')
   if (token) cfg.headers.Authorization = `Bearer ${token}`
@@ -15,7 +27,7 @@ client.interceptors.response.use((res) => {
   if (body.code !== 0) {
     if (body.code === 401) {
       useAuth().clearToken()
-      if (!location.pathname.startsWith('/login')) location.href = '/login'
+      if (!isOnLoginPage()) location.href = loginURL()
     }
     return Promise.reject(new Error(body.msg))
   }
