@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { useAuth } from '../composables/useAuth'
-import type { ApiKey, ApiResp, AppDetail, AppItem, BotInput, DownloadsTimeSeries, KeyScope, NotificationBot, NotificationLog, Platform, User, Version, VersionMeta, UploadTicket } from './types'
+import type { ApiKey, ApiResp, AppDetail, AppGate, AppItem, BotInput, DownloadsTimeSeries, KeyScope, NotificationBot, NotificationLog, Platform, User, Version, VersionMeta, UploadTicket } from './types'
 
 const client = axios.create({ baseURL: '/api/v1', timeout: 60000 })
 
@@ -40,11 +40,12 @@ export const api = {
   changePassword: (oldPassword: string, newPassword: string) =>
     client.put<ApiResp<{ ok: boolean }>>('/auth/password', { old_password: oldPassword, new_password: newPassword }),
 
-  // The public page is keyed by app name (fallback: numeric id).
-  appDetail: (key: string | number) =>
-    client.get<ApiResp<AppDetail>>(`/apps/${encodeURIComponent(key)}`).then((r) => r.data.data),
-  verify: (id: number, password: string) =>
-    client.post<ApiResp<{ ok: boolean }>>(`/versions/${id}/verify`, { password }),
+  // The public page is keyed by app name (fallback: numeric id). A
+  // password-protected app returns an AppGate until the password unlocks it.
+  appDetail: (key: string | number, password?: string) =>
+    client
+      .get<ApiResp<AppDetail | AppGate>>(`/apps/${encodeURIComponent(key)}`, { params: password ? { password } : {} })
+      .then((r) => r.data.data),
   downloadUrl: (id: number, password?: string) =>
     client
       .get<ApiResp<{ url: string }>>(`/versions/${id}/download`, { params: password ? { password } : {} })

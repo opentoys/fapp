@@ -51,6 +51,14 @@ export interface AppDetail {
   versions: Version[]
 }
 
+// Password-protected apps return only this minimal shape until unlocked.
+export interface AppGate {
+  app: {
+    id: number
+    access_mode: 'password'
+  }
+}
+
 export interface UploadTicket {
   key: string
   url: string

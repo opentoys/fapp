@@ -15,21 +15,26 @@ import { Card, CardContent, CardFooter } from '../components/ui/card'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import VersionPanel from '../components/VersionPanel.vue'
-import type { AppDetail, Version } from '../api/types'
+import type { AppDetail, AppGate, Version } from '../api/types'
 
 const route = useRoute()
 const { t } = useI18n()
 const detected = detectUA()
 
+// data holds the full detail only after the password gate is passed.
 const data = ref<AppDetail | null>(null)
+const appKey = ref('')
 const error = ref('')
-const unlocked = ref(false)
 const unlocking = ref(false)
 const password = ref('')
 const passwordError = ref('')
 
 // The backend exposes only the app's single current version.
 const latest = computed(() => data.value?.versions[0] ?? null)
+
+// A gate present (locked or unlocked detail available) means we can render.
+const gate = ref<AppGate | null>(null)
+const appLocked = computed(() => gate.value !== null && data.value === null)
 
 // Desktop shows a QR code of the page so a phone can scan and download.
 const qrDataUrl = ref('')
@@ -49,26 +54,37 @@ watch(() => route.params.name, (name) => { if (name) load() })
 
 async function load() {
   data.value = null
-  unlocked.value = false
+  gate.value = null
+  password.value = ''
+  passwordError.value = ''
   error.value = ''
+  const key = String(route.params.name)
+  appKey.value = key
   try {
-    data.value = await loadDownloadApp(String(route.params.name))
+    const d = await loadDownloadApp(key)
+    if (isDetail(d)) data.value = d
+    else gate.value = d
   } catch (e) {
     error.value = (e as Error).message
   }
 }
 
-const appAccess = computed(() => data.value?.app.access_mode ?? 'public')
-const appLocked = computed(() => data.value?.app.access_mode === 'password' && !unlocked.value)
+function isDetail(d: AppDetail | AppGate): d is AppDetail {
+  return 'versions' in d
+}
 
+// Submitting the password re-requests the detail with the password; a correct
+// one returns the full payload (so a refresh re-locks — nothing persists).
 async function unlock() {
-  const v = latest.value
-  if (!v) return
+  if (!gate.value) return
   unlocking.value = true
   passwordError.value = ''
   try {
-    await api.verify(v.id, password.value)
-    unlocked.value = true
+    const d = await api.appDetail(appKey.value, password.value)
+    if (isDetail(d)) {
+      data.value = d
+      gate.value = null
+    }
   } catch (e) {
     passwordError.value = (e as Error).message
   } finally {
@@ -78,7 +94,7 @@ async function unlock() {
 
 async function download(v: Version | null) {
   if (!v || appLocked.value) return
-  await doDownload(v.id, appAccess.value === 'password' ? password.value : undefined)
+  await doDownload(v.id, password.value || undefined)
 }
 
 async function doDownload(versionId: number, pw: string | undefined) {
@@ -98,13 +114,9 @@ async function doDownload(versionId: number, pw: string | undefined) {
       {{ error }}
     </Alert>
 
-    <!-- Password gate: entry-level. Replace the info until verified. -->
-    <Card v-if="data && appLocked" class="mx-auto max-w-md">
+    <!-- Password gate: only shown while locked; the backend withheld identity. -->
+    <Card v-if="appLocked" class="mx-auto max-w-md">
       <CardContent class="p-6">
-        <div class="mb-4 flex items-center gap-3">
-          <Avatar :src="data.app.icon" :fallback="data.app.name.charAt(0).toUpperCase()" class="size-10" />
-          <h1 class="text-lg font-semibold tracking-tight">{{ data.app.name }}</h1>
-        </div>
         <p class="text-muted-foreground mb-4 text-sm">{{ t('detail.passwordBody') }}</p>
         <div class="grid gap-2">
           <Label for="app-password">{{ t('common.password') }}</Label>

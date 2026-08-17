@@ -28,10 +28,11 @@ func (s *Service) resolveAppMedia(a *model.App) {
 	}
 }
 
-// PublicAppDetail resolves an app by name (share link) or numeric id. An
-// unpublished app behaves as if it doesn't exist. Only the current version is
-// exposed.
-func (s *Service) PublicAppDetail(ctx context.Context, key string) (model.App, []model.Version, error) {
+// PublicAppDetail returns a password-protected app's minimal visible fields
+// (id + access_mode) when no password is supplied, and the full detail once a
+// valid password unlocks it. An unpublished app behaves as if it doesn't
+// exist. Only the current version is exposed.
+func (s *Service) PublicAppDetail(ctx context.Context, key, password string) (model.App, []model.Version, bool, error) {
 	var app model.App
 	err := s.DB.Where("name = ?", key).First(&app).Error
 	if err != nil {
@@ -40,10 +41,20 @@ func (s *Service) PublicAppDetail(ctx context.Context, key string) (model.App, [
 		}
 	}
 	if err != nil {
-		return app, nil, &Error{StatusNotFound, "应用不存在"}
+		return app, nil, false, &Error{StatusNotFound, "应用不存在"}
 	}
 	if hiddenApp(&app) {
-		return app, nil, &Error{StatusNotFound, "应用不存在"}
+		return app, nil, false, &Error{StatusNotFound, "应用不存在"}
+	}
+	// No password → expose only what the gate needs; keep everything else out.
+	if app.AccessMode == model.AccessPassword && password == "" {
+		minimal := model.App{ID: app.ID, AccessMode: model.AccessPassword}
+		return minimal, nil, false, nil
+	}
+	if app.AccessMode == model.AccessPassword {
+		if !pwd.Verify(password, app.PasswordHash, app.Salt) {
+			return app, nil, false, &Error{StatusForbidden, "密码错误"}
+		}
 	}
 	versions := make([]model.Version, 0, 1)
 	if app.CurrentVersionID > 0 {
@@ -53,7 +64,7 @@ func (s *Service) PublicAppDetail(ctx context.Context, key string) (model.App, [
 		}
 	}
 	s.resolveAppMedia(&app)
-	return app, versions, nil
+	return app, versions, true, nil
 }
 
 // hiddenApp reports whether an app is absent from the public view: taken down
@@ -76,7 +87,7 @@ func (s *Service) checkAccess(v *model.Version, password string) error {
 	if app.CurrentVersionID != v.ID {
 		return &Error{StatusForbidden, "该版本不可下载"}
 	}
-	if app.PasswordHash != "" {
+	if app.AccessMode == model.AccessPassword {
 		if !pwd.Verify(password, app.PasswordHash, app.Salt) {
 			return &Error{StatusUnauthorized, "密码错误"}
 		}

@@ -117,7 +117,7 @@ function onLangSelect(i: number) {
   <div class="flex min-h-screen flex-col">
     <header class="border-b bg-background/95 sticky top-0 z-40 backdrop-blur">
       <div class="flex h-14 items-center gap-3 px-4 sm:px-6">
-        <template v-if="currentDownloadApp">
+        <template v-if="currentDownloadApp && currentDownloadApp.name">
           <Avatar :src="currentDownloadApp.icon" :fallback="currentDownloadApp.name.charAt(0).toUpperCase()" class="size-7" />
           <span class="truncate text-sm font-semibold">{{ currentDownloadApp.name }}</span>
         </template>

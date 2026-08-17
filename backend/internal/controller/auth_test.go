@@ -88,8 +88,8 @@ func TestRequireAuth(t *testing.T) {
 	})
 	w := httptest.NewRecorder()
 	h(w, httptest.NewRequest(http.MethodGet, "/", nil))
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("missing token should be 401, got %d", w.Code)
+	if codeOf(w) != 401 {
+		t.Fatalf("missing token should be 401, got %s", w.Body.String())
 	}
 }
 

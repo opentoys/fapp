@@ -233,7 +233,7 @@ func TestAdminRequiresAuth(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/apps", nil)
 	w := httptest.NewRecorder()
 	s.RequireAuth(s.AppsList)(w, req)
-	if w.Code == http.StatusOK {
+	if codeOf(w) != 401 {
 		t.Fatal("should be unauthorized")
 	}
 }

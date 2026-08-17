@@ -9,15 +9,21 @@ import (
 	"disapp/pkg/web"
 )
 
-// AppDetail returns app detail. An unpublished app behaves as if it doesn't
-// exist (404).
+// AppDetail returns app detail. A password-protected app returns only
+// {id, access_mode} until a valid password is supplied via query param;
+// then the full detail. An unpublished app behaves as if it doesn't exist
+// (404).
 func (c *Controller) AppDetail(w http.ResponseWriter, r *http.Request) {
-	app, versions, err := c.SVC.PublicAppDetail(r.Context(), r.PathValue("id"))
+	app, versions, unlocked, err := c.SVC.PublicAppDetail(r.Context(), r.PathValue("id"), r.URL.Query().Get("password"))
 	if err != nil {
 		sendErr(w, err)
 		return
 	}
-	web.SendJson(w, map[string]any{"app": app, "versions": versions})
+	out := map[string]any{"app": app}
+	if unlocked {
+		out["versions"] = versions
+	}
+	web.SendJson(w, out)
 }
 
 // VerifyAccess checks access permission (password mode submits password).
