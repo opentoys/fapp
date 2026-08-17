@@ -77,13 +77,6 @@ type App struct {
 	CreatedAt        time.Time  `json:"created_at"`
 }
 
-// ReleaseType values.
-const (
-	ReleaseProduction = "production"
-	ReleaseBeta       = "beta"
-	ReleaseCanary     = "canary"
-)
-
 type Version struct {
 	ID             int64      `gorm:"primaryKey" json:"id"`
 	AppID          int64      `gorm:"index" json:"app_id"`

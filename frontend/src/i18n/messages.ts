@@ -39,12 +39,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'login.title': 'Sign in',
     'login.submit': 'Sign in',
 
-    // Public apps list (Home)
+    // Home (blank placeholder; title also labels the admin nav entry)
     'home.title': 'Apps',
-    'home.stat.apps': 'Apps',
-    'home.stat.versions': 'Versions',
-    'home.stat.downloads': 'Downloads',
-    'home.empty': 'No applications yet.',
 
     // Public app detail (AppDetail)
     'detail.versions': 'Versions',
@@ -345,10 +341,6 @@ export const messages: Record<Locale, Record<string, string>> = {
 
     // Public apps list (Home)
     'home.title': '应用',
-    'home.stat.apps': '应用',
-    'home.stat.versions': '版本',
-    'home.stat.downloads': '下载',
-    'home.empty': '暂无应用。',
 
     // Public app detail (AppDetail)
     'detail.versions': '版本',
