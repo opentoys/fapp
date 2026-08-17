@@ -207,32 +207,32 @@ var validBotMethods = map[string]bool{"POST": true, "GET": true, "PUT": true}
 func (s *Service) validateBot(in *BotInput) error {
 	in.Name = strings.TrimSpace(in.Name)
 	if in.Name == "" {
-		return &Error{StatusBadRequest, "机器人名称不能为空"}
+		return &Error{http.StatusBadRequest, "机器人名称不能为空"}
 	}
 	in.Method = strings.ToUpper(strings.TrimSpace(in.Method))
 	if in.Method == "" {
 		in.Method = http.MethodPost
 	}
 	if !validBotMethods[in.Method] {
-		return &Error{StatusBadRequest, "请求方法必须为 POST/GET/PUT"}
+		return &Error{http.StatusBadRequest, "请求方法必须为 POST/GET/PUT"}
 	}
 	in.URL = strings.TrimSpace(in.URL)
 	if in.URL == "" || !strings.HasPrefix(in.URL, "http") {
-		return &Error{StatusBadRequest, "请求 url 必须为 http(s) 地址"}
+		return &Error{http.StatusBadRequest, "请求 url 必须为 http(s) 地址"}
 	}
 	if len(in.Events) == 0 {
-		return &Error{StatusBadRequest, "至少订阅一个事件"}
+		return &Error{http.StatusBadRequest, "至少订阅一个事件"}
 	}
 	for _, e := range in.Events {
 		switch e {
 		case model.EventVersionUploaded, model.EventVersionCurrent, model.EventAppPublish, model.EventAppExpire:
 		default:
-			return &Error{StatusBadRequest, "未知事件: " + e}
+			return &Error{http.StatusBadRequest, "未知事件: " + e}
 		}
 	}
 	var app model.App
 	if err := s.DB.Select("id").First(&app, in.AppID).Error; err != nil {
-		return &Error{StatusNotFound, "应用不存在"}
+		return &Error{http.StatusNotFound, "应用不存在"}
 	}
 	return nil
 }
@@ -247,7 +247,7 @@ func (s *Service) CreateBot(ctx context.Context, in BotInput) (*model.Notificati
 		Headers: in.Headers, BodyTemplate: in.BodyTemplate, Events: in.Events,
 	}
 	if err := s.DB.Create(&bot).Error; err != nil {
-		return nil, &Error{StatusInternal, "创建失败"}
+		return nil, &Error{http.StatusInternalServerError, "创建失败"}
 	}
 	return &bot, nil
 }
@@ -256,7 +256,7 @@ func (s *Service) CreateBot(ctx context.Context, in BotInput) (*model.Notificati
 func (s *Service) UpdateBot(ctx context.Context, id int64, in BotInput) (*model.NotificationBot, error) {
 	var bot model.NotificationBot
 	if err := s.DB.First(&bot, id).Error; err != nil {
-		return nil, &Error{StatusNotFound, "机器人不存在"}
+		return nil, &Error{http.StatusNotFound, "机器人不存在"}
 	}
 	if err := s.validateBot(&in); err != nil {
 		return nil, err
@@ -265,7 +265,7 @@ func (s *Service) UpdateBot(ctx context.Context, id int64, in BotInput) (*model.
 	bot.Method, bot.URL = in.Method, in.URL
 	bot.Headers, bot.BodyTemplate, bot.Events = in.Headers, in.BodyTemplate, in.Events
 	if err := s.DB.Save(&bot).Error; err != nil {
-		return nil, &Error{StatusInternal, "保存失败"}
+		return nil, &Error{http.StatusInternalServerError, "保存失败"}
 	}
 	return &bot, nil
 }
@@ -282,7 +282,7 @@ func (s *Service) BotsList(ctx context.Context, userID int64) ([]model.Notificat
 	}
 	var bots []model.NotificationBot
 	if err := q.Find(&bots).Error; err != nil {
-		return nil, &Error{StatusInternal, "查询失败"}
+		return nil, &Error{http.StatusInternalServerError, "查询失败"}
 	}
 	return bots, nil
 }
@@ -291,13 +291,13 @@ func (s *Service) BotsList(ctx context.Context, userID int64) ([]model.Notificat
 func (s *Service) DeleteBot(ctx context.Context, userID, id int64) error {
 	var bot model.NotificationBot
 	if err := s.DB.First(&bot, id).Error; err != nil {
-		return &Error{StatusNotFound, "机器人不存在"}
+		return &Error{http.StatusNotFound, "机器人不存在"}
 	}
 	if userID != SuperAdminUID && !s.CanManage(userID, bot.AppID) {
-		return &Error{StatusForbidden, "无权操作该机器人"}
+		return &Error{http.StatusForbidden, "无权操作该机器人"}
 	}
 	if err := s.DB.Delete(&model.NotificationBot{}, id).Error; err != nil {
-		return &Error{StatusInternal, "删除失败"}
+		return &Error{http.StatusInternalServerError, "删除失败"}
 	}
 	s.DB.Where("bot_id = ?", id).Delete(&model.NotificationLog{})
 	return nil
@@ -308,11 +308,11 @@ func (s *Service) DeleteBot(ctx context.Context, userID, id int64) error {
 func (s *Service) TestBot(ctx context.Context, id int64) error {
 	var bot model.NotificationBot
 	if err := s.DB.First(&bot, id).Error; err != nil {
-		return &Error{StatusNotFound, "机器人不存在"}
+		return &Error{http.StatusNotFound, "机器人不存在"}
 	}
 	var app model.App
 	if err := s.DB.Select("name").First(&app, bot.AppID).Error; err != nil {
-		return &Error{StatusNotFound, "应用不存在"}
+		return &Error{http.StatusNotFound, "应用不存在"}
 	}
 	params := EventParams(model.EventVersionUploaded, app.Name)
 	params["version_name"] = "（测试）"
@@ -327,7 +327,7 @@ func (s *Service) TestBotInput(ctx context.Context, in BotInput) error {
 	}
 	var app model.App
 	if err := s.DB.Select("name").First(&app, in.AppID).Error; err != nil {
-		return &Error{StatusNotFound, "应用不存在"}
+		return &Error{http.StatusNotFound, "应用不存在"}
 	}
 	bot := model.NotificationBot{
 		AppID: in.AppID, Method: in.Method, URL: in.URL,
@@ -345,7 +345,7 @@ func (s *Service) BotLogs(ctx context.Context, botID, limit int64) ([]model.Noti
 	}
 	var rows []model.NotificationLog
 	if err := s.DB.Where("bot_id = ?", botID).Order("id desc").Limit(int(limit)).Find(&rows).Error; err != nil {
-		return nil, &Error{StatusInternal, "查询失败"}
+		return nil, &Error{http.StatusInternalServerError, "查询失败"}
 	}
 	return rows, nil
 }

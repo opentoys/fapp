@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -39,16 +40,16 @@ const UploadExpiry = 30 * time.Minute
 func (s *Service) CreateVersion(ctx context.Context, appID int64, in CreateVersionInput) (*model.Version, error) {
 	var app model.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
-		return nil, &Error{StatusNotFound, "应用不存在"}
+		return nil, &Error{http.StatusNotFound, "应用不存在"}
 	}
 	if in.VersionName == "" {
-		return nil, &Error{StatusBadRequest, "version_name 必填"}
+		return nil, &Error{http.StatusBadRequest, "version_name 必填"}
 	}
 	if in.FileName == "" {
-		return nil, &Error{StatusBadRequest, "file_name 必填"}
+		return nil, &Error{http.StatusBadRequest, "file_name 必填"}
 	}
 	if !storage.ValidKey(in.StorageKey) {
-		return nil, &Error{StatusBadRequest, "无效的上传 key"}
+		return nil, &Error{http.StatusBadRequest, "无效的上传 key"}
 	}
 	pkg := strings.TrimSpace(in.PackageName)
 	if app.PackageName == nil || *app.PackageName == "" {
@@ -58,18 +59,18 @@ func (s *Service) CreateVersion(ctx context.Context, appID int64, in CreateVersi
 				Where("platform = ? AND package_name = ? AND id != ?", app.Platform, pkg, app.ID).
 				Count(&n)
 			if n > 0 {
-				return nil, &Error{StatusBadRequest, "该平台下已存在相同包名（appid）的应用"}
+				return nil, &Error{http.StatusBadRequest, "该平台下已存在相同包名（appid）的应用"}
 			}
 			app.PackageName = &pkg
 			if err := s.DB.Save(app).Error; err != nil {
 				if strings.Contains(err.Error(), "UNIQUE") {
-					return nil, &Error{StatusBadRequest, "该平台下已存在相同包名（appid）的应用"}
+					return nil, &Error{http.StatusBadRequest, "该平台下已存在相同包名（appid）的应用"}
 				}
-				return nil, &Error{StatusInternal, "保存失败"}
+				return nil, &Error{http.StatusInternalServerError, "保存失败"}
 			}
 		}
 	} else if pkg != *app.PackageName {
-		return nil, &Error{StatusBadRequest, "安装包 appid 与应用不一致"}
+		return nil, &Error{http.StatusBadRequest, "安装包 appid 与应用不一致"}
 	}
 
 	v := model.Version{
@@ -90,14 +91,14 @@ func (s *Service) CreateVersion(ctx context.Context, appID int64, in CreateVersi
 		StorageBackend: storageBackendName(s),
 	}
 	if err := s.DB.Create(&v).Error; err != nil {
-		return nil, &Error{StatusInternal, "创建版本失败"}
+		return nil, &Error{http.StatusInternalServerError, "创建版本失败"}
 	}
 	// The app's first version becomes current automatically; later ones need
 	// the explicit "set current" action.
 	if app.CurrentVersionID == 0 {
 		app.CurrentVersionID = v.ID
 		if err := s.DB.Save(&app).Error; err != nil {
-			return nil, &Error{StatusInternal, "保存失败"}
+			return nil, &Error{http.StatusInternalServerError, "保存失败"}
 		}
 		s.NotifyEventParams(ctx, app.ID, model.EventVersionCurrent, app.Name, s.versionParams(&v))
 	}
@@ -121,13 +122,13 @@ func (s *Service) versionParams(v *model.Version) NotifyParams {
 func (s *Service) DeleteVersion(ctx context.Context, id int64, deleteFile bool) error {
 	var v model.Version
 	if err := s.DB.First(&v, id).Error; err != nil {
-		return &Error{StatusNotFound, "版本不存在"}
+		return &Error{http.StatusNotFound, "版本不存在"}
 	}
 	if deleteFile && v.StorageKey != "" {
 		s.Storage.Delete(ctx, v.StorageKey)
 	}
 	if err := s.DB.Delete(&model.Version{}, id).Error; err != nil {
-		return &Error{StatusInternal, "删除失败"}
+		return &Error{http.StatusInternalServerError, "删除失败"}
 	}
 	s.DB.Model(&model.App{}).Where("id = ? AND current_version_id = ?", v.AppID, v.ID).
 		Update("current_version_id", 0)
@@ -138,7 +139,7 @@ func (s *Service) DeleteVersion(ctx context.Context, id int64, deleteFile bool) 
 func (s *Service) VersionStats(ctx context.Context, id int64) (map[string]any, error) {
 	var v model.Version
 	if err := s.DB.First(&v, id).Error; err != nil {
-		return nil, &Error{StatusNotFound, "版本不存在"}
+		return nil, &Error{http.StatusNotFound, "版本不存在"}
 	}
 	var recent []model.DownloadLog
 	s.DB.Where("version_id = ?", id).Order("id desc").Limit(20).Find(&recent)
@@ -153,7 +154,7 @@ func (s *Service) VersionStats(ctx context.Context, id int64) (map[string]any, e
 func (s *Service) CurrentVersion(ctx context.Context, appID int64) (model.App, []model.Version, error) {
 	var app model.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
-		return app, nil, &Error{StatusNotFound, "应用不存在"}
+		return app, nil, &Error{http.StatusNotFound, "应用不存在"}
 	}
 	versions := make([]model.Version, 0, 1)
 	if app.CurrentVersionID > 0 {
@@ -170,18 +171,18 @@ func (s *Service) CurrentVersion(ctx context.Context, appID int64) (model.App, [
 func (s *Service) CurrentDownloadURL(ctx context.Context, appID int64) (string, error) {
 	var app model.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
-		return "", &Error{StatusNotFound, "应用不存在"}
+		return "", &Error{http.StatusNotFound, "应用不存在"}
 	}
 	if app.CurrentVersionID == 0 {
-		return "", &Error{StatusNotFound, "应用尚未设置当前版本"}
+		return "", &Error{http.StatusNotFound, "应用尚未设置当前版本"}
 	}
 	var v model.Version
 	if err := s.DB.First(&v, app.CurrentVersionID).Error; err != nil {
-		return "", &Error{StatusNotFound, "当前版本不存在"}
+		return "", &Error{http.StatusNotFound, "当前版本不存在"}
 	}
 	rel, err := s.Storage.DownloadURL(ctx, v.StorageKey, v.FileName, 15*time.Minute)
 	if err != nil {
-		return "", &Error{StatusInternal, "生成下载链接失败"}
+		return "", &Error{http.StatusInternalServerError, "生成下载链接失败"}
 	}
 	return rel, nil
 }
@@ -191,7 +192,7 @@ func (s *Service) CurrentDownloadURL(ctx context.Context, appID int64) (string, 
 func (s *Service) PreviewURL(ctx context.Context, key string) (string, error) {
 	rel, err := s.Storage.DownloadURL(ctx, key, key[strings.LastIndex(key, "/")+1:], 15*time.Minute)
 	if err != nil {
-		return "", &Error{StatusInternal, "生成下载链接失败"}
+		return "", &Error{http.StatusInternalServerError, "生成下载链接失败"}
 	}
 	return rel, nil
 }

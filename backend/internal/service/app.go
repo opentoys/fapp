@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -24,10 +25,10 @@ type CreateAppInput struct {
 
 func (s *Service) CreateApp(ctx context.Context, in CreateAppInput) (*model.App, error) {
 	if in.Name == "" {
-		return nil, &Error{StatusBadRequest, "应用名不能为空"}
+		return nil, &Error{http.StatusBadRequest, "应用名不能为空"}
 	}
 	if in.Platform != "ios" && in.Platform != "android" {
-		return nil, &Error{StatusBadRequest, "平台必须为 ios 或 android"}
+		return nil, &Error{http.StatusBadRequest, "平台必须为 ios 或 android"}
 	}
 	var pkg *string
 	if in.PackageName != nil {
@@ -40,15 +41,15 @@ func (s *Service) CreateApp(ctx context.Context, in CreateAppInput) (*model.App,
 		var n int64
 		s.DB.Model(&model.App{}).Where("platform = ? AND package_name = ?", in.Platform, *pkg).Count(&n)
 		if n > 0 {
-			return nil, &Error{StatusBadRequest, "该平台下已存在相同包名（appid）的应用"}
+			return nil, &Error{http.StatusBadRequest, "该平台下已存在相同包名（appid）的应用"}
 		}
 	}
 	app := model.App{Name: in.Name, Platform: in.Platform, PackageName: pkg, Icon: in.Icon, Description: in.Description, AccessMode: model.AccessPublic}
 	if err := s.DB.Create(&app).Error; err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
-			return nil, &Error{StatusBadRequest, "该平台下已存在相同包名（appid）的应用"}
+			return nil, &Error{http.StatusBadRequest, "该平台下已存在相同包名（appid）的应用"}
 		}
-		return nil, &Error{StatusInternal, "创建失败"}
+		return nil, &Error{http.StatusInternalServerError, "创建失败"}
 	}
 	return &app, nil
 }
@@ -71,7 +72,7 @@ type UpdateAppInput struct {
 func (s *Service) UpdateApp(ctx context.Context, id int64, in UpdateAppInput) (*model.App, error) {
 	var app model.App
 	if err := s.DB.First(&app, id).Error; err != nil {
-		return nil, &Error{StatusNotFound, "应用不存在"}
+		return nil, &Error{http.StatusNotFound, "应用不存在"}
 	}
 	if in.Name != nil {
 		app.Name = *in.Name
@@ -93,13 +94,13 @@ func (s *Service) UpdateApp(ctx context.Context, id int64, in UpdateAppInput) (*
 		switch *in.AccessMode {
 		case model.AccessPassword:
 			if in.Password == nil || *in.Password == "" {
-				return nil, &Error{StatusBadRequest, "密码模式下需要填写下载密码"}
+				return nil, &Error{http.StatusBadRequest, "密码模式下需要填写下载密码"}
 			}
 			app.AccessMode = model.AccessPassword
 		case model.AccessPublic:
 			app.AccessMode = model.AccessPublic
 		default:
-			return nil, &Error{StatusBadRequest, "access_mode 必须为 public 或 password"}
+			return nil, &Error{http.StatusBadRequest, "access_mode 必须为 public 或 password"}
 		}
 	}
 	if in.Password != nil && *in.Password != "" {
@@ -118,7 +119,7 @@ func (s *Service) UpdateApp(ctx context.Context, id int64, in UpdateAppInput) (*
 		app.ExpiresAt = nil
 	}
 	if err := s.DB.Save(&app).Error; err != nil {
-		return nil, &Error{StatusInternal, "保存失败"}
+		return nil, &Error{http.StatusInternalServerError, "保存失败"}
 	}
 	// Notify on publish/下架 changes.
 	if in.Published != nil && *in.Published != wasPublished {
@@ -140,7 +141,7 @@ func expiresAtString(at *time.Time) string {
 func (s *Service) DeleteApp(ctx context.Context, appID int64) error {
 	var app model.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
-		return &Error{StatusNotFound, "应用不存在"}
+		return &Error{http.StatusNotFound, "应用不存在"}
 	}
 	for _, key := range app.Screenshots {
 		s.Storage.Delete(ctx, key)
@@ -149,7 +150,7 @@ func (s *Service) DeleteApp(ctx context.Context, appID int64) error {
 		s.Storage.Delete(ctx, app.Icon)
 	}
 	if err := s.DB.Delete(&model.App{}, appID).Error; err != nil {
-		return &Error{StatusInternal, "删除失败"}
+		return &Error{http.StatusInternalServerError, "删除失败"}
 	}
 	return nil
 }
@@ -157,7 +158,7 @@ func (s *Service) DeleteApp(ctx context.Context, appID int64) error {
 func (s *Service) AdminApps(ctx context.Context) ([]model.App, error) {
 	var apps []model.App
 	if err := s.DB.Order("id desc").Find(&apps).Error; err != nil {
-		return nil, &Error{StatusInternal, "查询失败"}
+		return nil, &Error{http.StatusInternalServerError, "查询失败"}
 	}
 	return apps, nil
 }
@@ -167,11 +168,11 @@ func (s *Service) AdminApps(ctx context.Context) ([]model.App, error) {
 func (s *Service) AppDetail(ctx context.Context, appID int64) (model.App, []model.Version, error) {
 	var app model.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
-		return app, nil, &Error{StatusNotFound, "应用不存在"}
+		return app, nil, &Error{http.StatusNotFound, "应用不存在"}
 	}
 	var versions []model.Version
 	if err := s.DB.Where("app_id = ?", app.ID).Order("version_code desc").Find(&versions).Error; err != nil {
-		return app, nil, &Error{StatusInternal, "查询失败"}
+		return app, nil, &Error{http.StatusInternalServerError, "查询失败"}
 	}
 	return app, versions, nil
 }
@@ -180,7 +181,7 @@ func (s *Service) AppDetail(ctx context.Context, appID int64) (model.App, []mode
 func (s *Service) AppMembers(ctx context.Context, appID int64) ([]int64, error) {
 	var app model.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
-		return nil, &Error{StatusNotFound, "应用不存在"}
+		return nil, &Error{http.StatusNotFound, "应用不存在"}
 	}
 	var rows []model.AppMember
 	s.DB.Where("app_id = ?", app.ID).Find(&rows)
@@ -196,13 +197,13 @@ func (s *Service) AppMembers(ctx context.Context, appID int64) ([]int64, error) 
 func (s *Service) SetAppMembers(ctx context.Context, appID int64, uids []int64) error {
 	var app model.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
-		return &Error{StatusNotFound, "应用不存在"}
+		return &Error{http.StatusNotFound, "应用不存在"}
 	}
 	if len(uids) > 0 {
 		var n int64
 		s.DB.Model(&model.User{}).Where("id IN ?", uids).Count(&n)
 		if n != int64(len(uids)) {
-			return &Error{StatusBadRequest, "用户不存在"}
+			return &Error{http.StatusBadRequest, "用户不存在"}
 		}
 	}
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
@@ -219,7 +220,7 @@ func (s *Service) SetAppMembers(ctx context.Context, appID int64, uids []int64) 
 		return nil
 	})
 	if err != nil {
-		return &Error{StatusInternal, "保存失败"}
+		return &Error{http.StatusInternalServerError, "保存失败"}
 	}
 	return nil
 }
@@ -233,18 +234,18 @@ func (s *Service) UsersList(ctx context.Context) ([]model.User, error) {
 func (s *Service) SetCurrentVersion(ctx context.Context, appID, versionID int64) (*model.App, error) {
 	var app model.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
-		return nil, &Error{StatusNotFound, "应用不存在"}
+		return nil, &Error{http.StatusNotFound, "应用不存在"}
 	}
 	var v model.Version
 	if err := s.DB.First(&v, versionID).Error; err != nil {
-		return nil, &Error{StatusNotFound, "版本不存在"}
+		return nil, &Error{http.StatusNotFound, "版本不存在"}
 	}
 	if v.AppID != app.ID {
-		return nil, &Error{StatusBadRequest, "版本不属于该应用"}
+		return nil, &Error{http.StatusBadRequest, "版本不属于该应用"}
 	}
 	app.CurrentVersionID = v.ID
 	if err := s.DB.Save(&app).Error; err != nil {
-		return nil, &Error{StatusInternal, "保存失败"}
+		return nil, &Error{http.StatusInternalServerError, "保存失败"}
 	}
 	s.NotifyEventParams(context.Background(), app.ID, model.EventVersionCurrent, app.Name, s.versionParams(&v))
 	return &app, nil
@@ -255,10 +256,10 @@ func (s *Service) SetCurrentVersion(ctx context.Context, appID, versionID int64)
 func (s *Service) DeleteAppScreenshot(ctx context.Context, appID int64, key string) (*model.App, error) {
 	var app model.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
-		return nil, &Error{StatusNotFound, "应用不存在"}
+		return nil, &Error{http.StatusNotFound, "应用不存在"}
 	}
 	if key == "" || !storage.ValidKey(key) {
-		return nil, &Error{StatusBadRequest, "无效的截图地址"}
+		return nil, &Error{http.StatusBadRequest, "无效的截图地址"}
 	}
 	kept := app.Screenshots[:0]
 	for _, k := range app.Screenshots {
@@ -269,8 +270,7 @@ func (s *Service) DeleteAppScreenshot(ctx context.Context, appID int64, key stri
 	app.Screenshots = kept
 	s.Storage.Delete(ctx, key)
 	if err := s.DB.Model(&app).Update("screenshots", app.Screenshots).Error; err != nil {
-		return nil, &Error{StatusInternal, "保存失败"}
+		return nil, &Error{http.StatusInternalServerError, "保存失败"}
 	}
 	return &app, nil
 }
-

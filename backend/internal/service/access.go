@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"net/http"
 	"time"
 
 	"disapp/internal/resources/store/model"
@@ -82,14 +83,14 @@ func (s *Service) KeysList(ctx context.Context, userID int64) ([]map[string]any,
 // CreateKey creates a key for the authenticated user.
 func (s *Service) CreateKey(ctx context.Context, userID int64, name, scope string, expiresAt *time.Time) (*model.ApiKey, error) {
 	if name == "" {
-		return nil, &Error{StatusBadRequest, "key 名称不能为空"}
+		return nil, &Error{http.StatusBadRequest, "key 名称不能为空"}
 	}
 	if scope != model.KeyScopeRead && scope != model.KeyScopeRun {
-		return nil, &Error{StatusBadRequest, "scope 必须为 read 或 run"}
+		return nil, &Error{http.StatusBadRequest, "scope 必须为 read 或 run"}
 	}
 	raw, err := newKey()
 	if err != nil {
-		return nil, &Error{StatusInternal, "生成 key 失败"}
+		return nil, &Error{http.StatusInternalServerError, "生成 key 失败"}
 	}
 	key := model.ApiKey{
 		Name:      name,
@@ -99,16 +100,16 @@ func (s *Service) CreateKey(ctx context.Context, userID int64, name, scope strin
 		ExpiresAt: normalizeExpiry(expiresAt),
 	}
 	if err := s.DB.Create(&key).Error; err != nil {
-		return nil, &Error{StatusInternal, "创建失败"}
+		return nil, &Error{http.StatusInternalServerError, "创建失败"}
 	}
 	return &key, nil
 }
 
 // UpdateKeyInput carries the PATCH fields for a key.
 type UpdateKeyInput struct {
-	Name       *string
-	Scope      *string
-	ExpiresAt  *time.Time
+	Name        *string
+	Scope       *string
+	ExpiresAt   *time.Time
 	ClearExpiry bool
 }
 
@@ -116,20 +117,20 @@ type UpdateKeyInput struct {
 func (s *Service) UpdateKey(ctx context.Context, userID, id int64, in UpdateKeyInput) (*model.ApiKey, error) {
 	var key model.ApiKey
 	if err := s.DB.First(&key, id).Error; err != nil {
-		return nil, &Error{StatusNotFound, "key 不存在"}
+		return nil, &Error{http.StatusNotFound, "key 不存在"}
 	}
 	if userID != SuperAdminUID && key.UserID != userID {
-		return nil, &Error{StatusForbidden, "无权操作该 key"}
+		return nil, &Error{http.StatusForbidden, "无权操作该 key"}
 	}
 	if in.Name != nil {
 		if *in.Name == "" {
-			return nil, &Error{StatusBadRequest, "key 名称不能为空"}
+			return nil, &Error{http.StatusBadRequest, "key 名称不能为空"}
 		}
 		key.Name = *in.Name
 	}
 	if in.Scope != nil {
 		if *in.Scope != model.KeyScopeRead && *in.Scope != model.KeyScopeRun {
-			return nil, &Error{StatusBadRequest, "scope 必须为 read 或 run"}
+			return nil, &Error{http.StatusBadRequest, "scope 必须为 read 或 run"}
 		}
 		key.Scope = *in.Scope
 	}
@@ -139,7 +140,7 @@ func (s *Service) UpdateKey(ctx context.Context, userID, id int64, in UpdateKeyI
 		key.ExpiresAt = normalizeExpiry(in.ExpiresAt)
 	}
 	if err := s.DB.Save(&key).Error; err != nil {
-		return nil, &Error{StatusInternal, "保存失败"}
+		return nil, &Error{http.StatusInternalServerError, "保存失败"}
 	}
 	return &key, nil
 }
@@ -148,13 +149,13 @@ func (s *Service) UpdateKey(ctx context.Context, userID, id int64, in UpdateKeyI
 func (s *Service) DeleteKey(ctx context.Context, userID, id int64) error {
 	var key model.ApiKey
 	if err := s.DB.First(&key, id).Error; err != nil {
-		return &Error{StatusNotFound, "key 不存在"}
+		return &Error{http.StatusNotFound, "key 不存在"}
 	}
 	if userID != SuperAdminUID && key.UserID != userID {
-		return &Error{StatusForbidden, "无权操作该 key"}
+		return &Error{http.StatusForbidden, "无权操作该 key"}
 	}
 	if err := s.DB.Delete(&model.ApiKey{}, id).Error; err != nil {
-		return &Error{StatusInternal, "删除失败"}
+		return &Error{http.StatusInternalServerError, "删除失败"}
 	}
 	return nil
 }
@@ -162,14 +163,14 @@ func (s *Service) DeleteKey(ctx context.Context, userID, id int64) error {
 // AuthorizeKey resolves a raw `apikey` query value to a live (unexpired) key.
 func (s *Service) AuthorizeKey(ctx context.Context, raw string) (*model.ApiKey, error) {
 	if raw == "" {
-		return nil, &Error{StatusUnauthorized, "缺少 apikey 参数"}
+		return nil, &Error{http.StatusUnauthorized, "缺少 apikey 参数"}
 	}
 	var key model.ApiKey
 	if err := s.DB.Where("key = ?", raw).First(&key).Error; err != nil {
-		return nil, &Error{StatusUnauthorized, "apikey 无效"}
+		return nil, &Error{http.StatusUnauthorized, "apikey 无效"}
 	}
 	if key.ExpiresAt != nil && time.Now().After(*key.ExpiresAt) {
-		return nil, &Error{StatusUnauthorized, "apikey 已过期"}
+		return nil, &Error{http.StatusUnauthorized, "apikey 已过期"}
 	}
 	return &key, nil
 }
@@ -182,10 +183,10 @@ func (s *Service) AuthorizeKeyApp(ctx context.Context, raw string, appID int64, 
 		return nil, err
 	}
 	if !s.CanManage(key.UserID, appID) {
-		return nil, &Error{StatusForbidden, "无权访问该应用"}
+		return nil, &Error{http.StatusForbidden, "无权访问该应用"}
 	}
 	if requireRun && key.Scope != model.KeyScopeRun {
-		return nil, &Error{StatusForbidden, "该 key 需要 run 权限"}
+		return nil, &Error{http.StatusForbidden, "该 key 需要 run 权限"}
 	}
 	return key, nil
 }

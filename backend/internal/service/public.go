@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
+	"net/http"
 	"strconv"
 	"time"
-
 
 	"disapp/internal/resources/store/model"
 	"disapp/pkg/pwd"
@@ -41,10 +41,10 @@ func (s *Service) PublicAppDetail(ctx context.Context, key, password string) (mo
 		}
 	}
 	if err != nil {
-		return app, nil, false, &Error{StatusNotFound, "应用不存在"}
+		return app, nil, false, &Error{http.StatusNotFound, "应用不存在"}
 	}
 	if hiddenApp(&app) {
-		return app, nil, false, &Error{StatusNotFound, "应用不存在"}
+		return app, nil, false, &Error{http.StatusNotFound, "应用不存在"}
 	}
 	// No password → expose only what the gate needs; keep everything else out.
 	if app.AccessMode == model.AccessPassword && password == "" {
@@ -53,7 +53,7 @@ func (s *Service) PublicAppDetail(ctx context.Context, key, password string) (mo
 	}
 	if app.AccessMode == model.AccessPassword {
 		if !pwd.Verify(password, app.PasswordHash, app.Salt) {
-			return app, nil, false, &Error{StatusForbidden, "密码错误"}
+			return app, nil, false, &Error{http.StatusForbidden, "密码错误"}
 		}
 	}
 	versions := make([]model.Version, 0, 1)
@@ -79,17 +79,17 @@ func hiddenApp(app *model.App) bool {
 func (s *Service) checkAccess(v *model.Version, password string) error {
 	var app model.App
 	if err := s.DB.First(&app, v.AppID).Error; err != nil {
-		return &Error{StatusNotFound, "应用不存在"}
+		return &Error{http.StatusNotFound, "应用不存在"}
 	}
 	if hiddenApp(&app) {
-		return &Error{StatusNotFound, "应用不存在"}
+		return &Error{http.StatusNotFound, "应用不存在"}
 	}
 	if app.CurrentVersionID != v.ID {
-		return &Error{StatusForbidden, "该版本不可下载"}
+		return &Error{http.StatusForbidden, "该版本不可下载"}
 	}
 	if app.AccessMode == model.AccessPassword {
 		if !pwd.Verify(password, app.PasswordHash, app.Salt) {
-			return &Error{StatusUnauthorized, "密码错误"}
+			return &Error{http.StatusUnauthorized, "密码错误"}
 		}
 	}
 	return nil
@@ -99,7 +99,7 @@ func (s *Service) checkAccess(v *model.Version, password string) error {
 func (s *Service) VerifyAccess(ctx context.Context, versionID int64, password string) error {
 	var v model.Version
 	if err := s.DB.First(&v, versionID).Error; err != nil {
-		return &Error{StatusNotFound, "版本不存在"}
+		return &Error{http.StatusNotFound, "版本不存在"}
 	}
 	return s.checkAccess(&v, password)
 }
@@ -109,14 +109,14 @@ func (s *Service) VerifyAccess(ctx context.Context, versionID int64, password st
 func (s *Service) ResolveDownload(ctx context.Context, versionID int64, password string) (string, *model.Version, error) {
 	var v model.Version
 	if err := s.DB.First(&v, versionID).Error; err != nil {
-		return "", nil, &Error{StatusNotFound, "版本不存在"}
+		return "", nil, &Error{http.StatusNotFound, "版本不存在"}
 	}
 	if err := s.checkAccess(&v, password); err != nil {
 		return "", nil, err
 	}
 	rel, err := s.Storage.DownloadURL(ctx, v.StorageKey, v.FileName, 15*time.Minute)
 	if err != nil {
-		return "", nil, &Error{StatusInternal, "生成下载链接失败"}
+		return "", nil, &Error{http.StatusInternalServerError, "生成下载链接失败"}
 	}
 	return rel, &v, nil
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"net/http"
 	"sort"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 func (s *Service) DownloadsTimeSeries(ctx context.Context, appID, versionID int64) (map[string]any, error) {
 	var app model.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
-		return nil, &Error{StatusNotFound, "应用不存在"}
+		return nil, &Error{http.StatusNotFound, "应用不存在"}
 	}
 	query := func(versionID int64) map[string]int {
 		q := s.DB.Table("download_logs l").
@@ -39,13 +40,13 @@ func (s *Service) DownloadsTimeSeries(ctx context.Context, appID, versionID int6
 
 	total := query(0)
 	if total == nil {
-		return nil, &Error{StatusInternal, "查询失败"}
+		return nil, &Error{http.StatusInternalServerError, "查询失败"}
 	}
 	selected := map[string]int(nil)
 	if versionID != 0 {
 		selected = query(versionID)
 		if selected == nil {
-			return nil, &Error{StatusInternal, "查询失败"}
+			return nil, &Error{http.StatusInternalServerError, "查询失败"}
 		}
 	}
 	dates, totals, sels := buildDailySeries(total, selected)
