@@ -33,12 +33,11 @@ func testService(t *testing.T) *Service {
 func TestFillParams(t *testing.T) {
 	p := NotifyParams{"event": "版本上传", "app_name": "微信"}
 	cases := []struct{ in, want string }{
-		{"{{event}}", "版本上传"},
-		{"hello {{ app_name }}", "hello 微信"},
-		{"{{unknown}} stays", "{{unknown}} stays"},
+		{"{{.event}}", "版本上传"},
+		{"hello {{.app_name}}", "hello 微信"},
+		{"{{.unknown}} is empty", " is empty"},
 		{"no placeholders here", "no placeholders here"},
-		{"{{event}}-{{app_name}}", "版本上传-微信"},
-		{"{{app_name}{{event}}", "{{app_name}{{event}}"},
+		{"{{.event}}-{{.app_name}}", "版本上传-微信"},
 		{"", ""},
 	}
 	for _, c := range cases {
@@ -100,7 +99,7 @@ func TestNotifyEventParamsTriggersMatchingBots(t *testing.T) {
 	defer hook.Close()
 
 	// One bot subscribed to the fired event, one to a different event.
-	s.DB.Create(&model.NotificationBot{Name: "match", AppID: app.ID, URL: hook.URL + "/{{app_id}}/{{event_key}}", Method: "POST", BodyTemplate: `{"version":"{{version_name}}"}` , Events: []string{model.EventVersionUploaded}})
+	s.DB.Create(&model.NotificationBot{Name: "match", AppID: app.ID, URL: hook.URL + "/{{.app_id}}/{{.event_key}}", Method: "POST", BodyTemplate: `{"version":"{{.version_name}}"}` , Events: []string{model.EventVersionUploaded}})
 	s.DB.Create(&model.NotificationBot{Name: "skip", AppID: app.ID, URL: hook.URL + "/skip", Method: "POST", Events: []string{model.EventAppPublish}})
 
 	s.NotifyEventParams(context.Background(), app.ID, model.EventVersionUploaded, "微信", NotifyParams{"version_name": "9.9.9"})

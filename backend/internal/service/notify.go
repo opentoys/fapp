@@ -7,13 +7,14 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"text/template"
 	"time"
 
 	"disapp/internal/resources/store/model"
 )
 
 // NotifyParams is the fixed set of common notification parameters available in
-// every webhook template. Each key corresponds to a {{key}} placeholder.
+// every webhook template. Each key corresponds to a {{.key}} placeholder.
 type NotifyParams map[string]string
 
 // EventParams returns the parameters for a notification event of appName.
@@ -48,37 +49,19 @@ func eventName(key string) string {
 	return key
 }
 
-// fillParams replaces every {{key}} placeholder in s from p. Unknown keys are
-// left untouched. When no placeholder is present the input is returned as-is.
+// fillParams renders s with p using text/template. {{.key}} placeholders map
+// to p["key"]; unknown keys and missing values render as empty
+// (missingkey=zero). A malformed template is left untouched.
 func fillParams(s string, p NotifyParams) string {
-	if !strings.Contains(s, "{{") {
+	tmpl, err := template.New("notify").Option("missingkey=zero").Parse(s)
+	if err != nil {
 		return s
 	}
-	var b strings.Builder
-	for {
-		open := strings.Index(s, "{{")
-		if open < 0 {
-			b.WriteString(s)
-			break
-		}
-		b.WriteString(s[:open])
-		rest := s[open+2:]
-		if close := strings.Index(rest, "}}"); close < 0 {
-			b.WriteString(s[open:])
-			break
-		} else {
-			key := strings.TrimSpace(rest[:close])
-			if v, ok := p[key]; ok {
-				b.WriteString(v)
-			} else {
-				b.WriteString("{{")
-				b.WriteString(key)
-				b.WriteString("}}")
-			}
-			s = rest[close+2:]
-		}
+	var out bytes.Buffer
+	if err := tmpl.Execute(&out, p); err != nil {
+		return s
 	}
-	return b.String()
+	return out.String()
 }
 
 // compileForBot merges the event params with the bot's own substitutions

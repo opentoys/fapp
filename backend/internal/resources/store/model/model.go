@@ -148,7 +148,7 @@ const (
 )
 
 // NotificationBot is a webhook notification bot subscribed to a single app.
-// Headers and BodyTemplate carry {{param}} placeholders that are compiled from
+// Headers and BodyTemplate carry {{.param}} placeholders that are compiled from
 // the event's common notification parameters at send time.
 type NotificationBot struct {
 	ID          int64    `gorm:"primaryKey" json:"id"`

@@ -35,7 +35,7 @@ func superLogin(t *testing.T, s *Controller) string {
 }
 
 func createBotBody(appID int64) string {
-	return `{"name":"钉钉","app_id":` + itoa(appID) + `,"method":"POST","url":"https://example.com/hook","headers":["X-App: demo"],"body_template":"{\"e\":\"{{event}}\"}","events":["version_uploaded","app_expire"]}`
+	return `{"name":"钉钉","app_id":` + itoa(appID) + `,"method":"POST","url":"https://example.com/hook","headers":["X-App: demo"],"body_template":"{\"e\":\"{{.event}}\"}","events":["version_uploaded","app_expire"]}`
 }
 
 func TestSubscriptionCRUD(t *testing.T) {
@@ -202,7 +202,7 @@ func TestSubscriptionVersionUploadFires(t *testing.T) {
 
 	s.SVC.DB.Create(&model.NotificationBot{
 		Name: "upload-hook", AppID: app.ID, Method: "POST",
-		URL: hook.URL + "/{{app_id}}", BodyTemplate: `{"name":"{{app_name}}"}`,
+		URL: hook.URL + "/{{.app_id}}", BodyTemplate: `{"name":"{{.app_name}}"}`,
 		Events: []string{model.EventVersionUploaded},
 	})
 

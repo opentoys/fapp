@@ -70,7 +70,7 @@ function openCreate() {
   fMethod.value = 'POST'
   fUrl.value = ''
   fHeaders.value = ''
-  fBody.value = JSON.stringify({ event: '{{event}}', app: '{{app_name}}', version: '{{version_name}}', time: '{{time}}' })
+  fBody.value = JSON.stringify({ event: '{{.event}}', app: '{{.app_name}}', version: '{{.version_name}}', time: '{{.time}}' })
   fEvents.value = ['version_uploaded']
   dialogError.value = ''
   dialogOpen.value = true
@@ -301,7 +301,7 @@ async function load() {
         </div>
         <div class="grid gap-2">
           <Label>{{ t('notify.fHeaders') }}</Label>
-          <Textarea v-model="fHeaders" :placeholder="`Authorization: token xxx\nX-App: {{app_name}}`" rows="2" />
+          <Textarea v-model="fHeaders" :placeholder="`Authorization: token xxx\nX-App: {{.app_name}}`" rows="2" />
         </div>
         <div class="grid gap-2">
           <div class="flex items-center gap-1">

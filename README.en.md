@@ -16,7 +16,7 @@ CI pipelines.
   expiry is decoupled from the password and set at day granularity; credentials pass
   through query params on the link
 - **Webhook notifications** — subscribe to events (version uploaded / set current /
-  publish-unpublish / expired), templated payloads with `{{key}}` placeholders,
+  publish-unpublish / expired), templated payloads with `{{.key}}` placeholders,
   test push of unsaved config, and send logs
 - **Desktop QR code** — the public app detail page shows a QR code on desktop for
   phone-scan download
@@ -143,7 +143,7 @@ schema changes, rebuild from scratch (dev only): `make reset`.
 
 Create bots on the **Subscriptions** page: bind an app, pick a method
 (POST/GET/PUT), URL, headers, events, and a body template. Placeholders use
-`{{key}}`:
+`{{.key}}`:
 
 | Param | Meaning |
 |-------|---------|
