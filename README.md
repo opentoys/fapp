@@ -130,13 +130,25 @@ cd frontend && npm run dev                                      # :5173 → 代�
 
 ## API Key
 
-在「API Keys」页面创建，通过 `?apikey=` 查询参数认证，无需 JWT：
+在「API Keys」页面创建，通过 `?apikey=` 查询参数认证，无需 JWT。
+
+**上传新版本（两段式）**——先取上传票据，推送文件字节，再创建版本记录：
 
 ```bash
-curl "https://your-host/api/v1/keys/123/versions?apikey=dk_xxxx"
+# 1) 预签名：获取 {key, url}
+curl -X POST "https://your-host/api/v1/keys/123/files?apikey=dk_xxxx" \
+  -H "Content-Type: application/json" -d '{"file_name":"app.apk"}'
+
+# 2) 将文件字节推送到返回的 url（COS 为 PUT，local 为 /files/upload）
+curl -X PUT "…返回的 url…" --data-binary "@app.apk"
+
+# 3) 创建版本（携带 key / file_size / sha256）
+curl -X POST "https://your-host/api/v1/keys/123/versions?apikey=dk_xxxx" \
+  -H "Content-Type: application/json" \
+  -d '{"key":"distapp/123/0/…","file_name":"app.apk","file_size":1048576,"sha256":"…","version_name":"1.0.0","version_code":1}'
 ```
 
-- **权限**：`run`（上传版本、设置当前）或 `read`（仅查询/下载）
+- **权限**：`run`（上传版本、设置当前、预签名）或 `read`（仅查询/下载）
 - **有效期**：可选预设（永久 / 1 天 / 3 天 / 7 天 / 1 个月 / 6 个月 / 1 年）
 - **范围**：key 等同于创建人身份，可管理的应用实时解析
 - **可见性**：key 仅创建人可见；超管可见全部
@@ -145,7 +157,8 @@ curl "https://your-host/api/v1/keys/123/versions?apikey=dk_xxxx"
 
 | 方法 | 路径 | 权限 |
 |------|------|------|
-| POST | `/api/v1/keys/{id}/versions` | run（上传新版本） |
+| POST | `/api/v1/keys/{id}/files` | run（获取上传票据） |
+| POST | `/api/v1/keys/{id}/versions` | run（创建新版本） |
 | POST | `/api/v1/keys/{id}/current` | run（设置当前版本） |
 | GET  | `/api/v1/keys/{id}/versions` | run / read |
 | GET  | `/api/v1/keys/{id}/current` | run / read |

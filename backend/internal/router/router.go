@@ -75,6 +75,7 @@ func Routes(c *controller.Controller, dist fs.FS) http.Handler {
 	mux.HandleFunc("GET /api/v1/admin/subscriptions/{id}/logs", web.Chain(admin...)(c.SubscriptionLogs))
 
 	// API-key-authenticated programmatic endpoints (key via `?apikey=`).
+	mux.HandleFunc("POST /api/v1/keys/{app_id}/files", web.Chain(pub...)(c.PresignKeyFile))
 	mux.HandleFunc("POST /api/v1/keys/{app_id}/versions", web.Chain(pub...)(c.UploadKeyVersion))
 	mux.HandleFunc("POST /api/v1/keys/{app_id}/current", web.Chain(pub...)(c.SetKeyCurrentVersion))
 	mux.HandleFunc("GET /api/v1/keys/{app_id}/versions", web.Chain(pub...)(c.KeyVersionsList))

@@ -12,15 +12,36 @@ const base = () => window.location.origin
 const endpoints = [
   {
     method: 'POST',
+    path: '/api/v1/keys/{id}/files',
+    scope: 'run',
+    desc: 'apiDoc.epPresignDesc',
+    docs: [
+      { name: 'file_name', type: 'string', required: true, desc: 'apiDoc.fieldApk' },
+    ],
+    example: `curl -X POST "${base()}/api/v1/keys/123/files?apikey=dk_xxx" \\\n  -H "Content-Type: application/json" \\\n  -d '{"file_name":"app.apk"}'`,
+    resp: `{
+  "code": 0,
+  "data": {
+    "key": "distapp/123/0/1690000000-app.apk",
+    "url": "…signed upload url…"
+  },
+  "msg": "ok"
+}`,
+  },
+  {
+    method: 'POST',
     path: '/api/v1/keys/{id}/versions',
     scope: 'run',
     desc: 'apiDoc.epUploadDesc',
     docs: [
-      { name: 'file', type: 'file', required: true, desc: 'apiDoc.fieldApk' },
+      { name: 'key', type: 'string', required: true, desc: 'apiDoc.fieldKey' },
+      { name: 'file_name', type: 'string', required: true, desc: 'apiDoc.fieldApk' },
+      { name: 'file_size', type: 'int', required: true, desc: 'apiDoc.fieldFileSize' },
+      { name: 'sha256', type: 'string', required: true, desc: 'apiDoc.fieldSha256' },
       { name: 'version_name', type: 'string', required: true, desc: 'apiDoc.fieldVersionName' },
       { name: 'version_code', type: 'int', required: true, desc: 'apiDoc.fieldVersionCode' },
     ],
-    example: `curl -X POST "${base()}/api/v1/keys/123/versions?apikey=dk_xxx" \\\n  -F "file=@app.apk" \\\n  -F "version_name=1.0.0" \\\n  -F "version_code=1"`,
+    example: `KEY=$(curl -s -X POST "${base()}/api/v1/keys/123/files?apikey=dk_xxx" \\\n  -H "Content-Type: application/json" -d '{"file_name":"app.apk"}' | jq -r .data.key)\n# push bytes to the presigned url, then create the version\ncurl -X POST "${base()}/api/v1/keys/123/versions?apikey=dk_xxx" \\\n  -H "Content-Type: application/json" \\\n  -d "{\\"key\\":\\"$KEY\\",\\"file_name\\":\\"app.apk\\",\\"file_size\\":$(stat -f%z app.apk),\\"sha256\\":\\"$(shasum -a 256 app.apk | cut -d' ' -f1)\\",\\"version_name\\":\\"1.0.0\\",\\"version_code\\":1}"`,
     resp: `{
   "code": 0,
   "data": {

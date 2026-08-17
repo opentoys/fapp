@@ -22,6 +22,33 @@ func (c *Controller) authKeyApp(w http.ResponseWriter, r *http.Request, appID in
 	return key.ID, true
 }
 
+// PresignKeyFile issues an upload ticket {url, key} for an app via API key
+// (scope run). The caller pushes the bytes to url, then submits key (with size
+// + sha256) to POST /keys/{app_id}/versions.
+func (c *Controller) PresignKeyFile(w http.ResponseWriter, r *http.Request) {
+	appID, err := strconv.ParseInt(r.PathValue("app_id"), 10, 64)
+	if err != nil {
+		web.SendError(w, web.CodeBadRequest, "bad request")
+		return
+	}
+	if _, ok := c.authKeyApp(w, r, appID, true); !ok {
+		return
+	}
+	var req struct {
+		FileName string `json:"file_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		web.SendError(w, web.CodeBadRequest, "bad request")
+		return
+	}
+	ticket, err := c.presignFor(r.Context(), appID, req.FileName)
+	if err != nil {
+		sendErr(w, err)
+		return
+	}
+	web.SendJson(w, ticket)
+}
+
 // UploadKeyVersion records a version via API key (scope run). The bytes were
 // already pushed to the submitted storage key.
 func (c *Controller) UploadKeyVersion(w http.ResponseWriter, r *http.Request) {

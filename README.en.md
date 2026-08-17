@@ -170,13 +170,26 @@ Create bots on the **Subscriptions** page: bind an app, pick a method
 ## API keys
 
 Keys are created in the **API Keys** page. Auth via the `?apikey=` query
-parameter, no JWT needed:
+parameter, no JWT needed.
+
+**Upload a new version (two-stage)** — presign a ticket, push the file bytes,
+then create the version record:
 
 ```bash
-curl "https://your-host/api/v1/keys/123/versions?apikey=dk_xxxx"
+# 1) Presign: get {key, url}
+curl -X POST "https://your-host/api/v1/keys/123/files?apikey=dk_xxxx" \
+  -H "Content-Type: application/json" -d '{"file_name":"app.apk"}'
+
+# 2) Push the file bytes to the returned url (PUT for COS, /files/upload for local)
+curl -X PUT "…returned url…" --data-binary "@app.apk"
+
+# 3) Create the version (with key / file_size / sha256)
+curl -X POST "https://your-host/api/v1/keys/123/versions?apikey=dk_xxxx" \
+  -H "Content-Type: application/json" \
+  -d '{"key":"distapp/123/0/…","file_name":"app.apk","file_size":1048576,"sha256":"…","version_name":"1.0.0","version_code":1}'
 ```
 
-- **Scope**: `run` (upload version, set current) or `read` (query/download only)
+- **Scope**: `run` (presign, upload version, set current) or `read` (query/download only)
 - **Expiry**: optional preset (never / 1d / 3d / 7d / 1m / 6m / 1y)
 - **Reach**: the key acts as its creator — manageable apps resolved live
 - **Visibility**: keys are private to their owner; super-admin sees all
@@ -185,7 +198,8 @@ Endpoints (app `id` is the numeric ID, `appid` is the package/bundle name):
 
 | Method | Path | Scope |
 |--------|------|-------|
-| POST | `/api/v1/keys/{id}/versions` | run (upload new version) |
+| POST | `/api/v1/keys/{id}/files` | run (upload ticket) |
+| POST | `/api/v1/keys/{id}/versions` | run (create new version) |
 | POST | `/api/v1/keys/{id}/current` | run (set current version) |
 | GET  | `/api/v1/keys/{id}/versions` | run / read |
 | GET  | `/api/v1/keys/{id}/current` | run / read |

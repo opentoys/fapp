@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -129,11 +130,26 @@ type uploadTicket struct {
 	Key string `json:"key"`
 }
 
+// presignFor builds the {url, key} upload ticket for a file of an app. The key
+// is {prefix}/{app_id}/0/{file_name}; the caller pushes the bytes to url, then
+// submits key (with size + sha256) when saving the entity it belongs to.
+func (c *Controller) presignFor(ctx context.Context, appID int64, fileName string) (uploadTicket, error) {
+	file := fmt.Sprintf("%d-%s", time.Now().UnixNano(), path.Base(fileName))
+	key := storage.AppKey(c.SVC.Config.Storage.Prefix, appID, 0, file)
+	if !storage.ValidKey(key) {
+		return uploadTicket{}, &service.Error{Status: http.StatusBadRequest, Msg: "无效的 file_name"}
+	}
+	url, err := c.SVC.Storage.UploadURL(ctx, key, "", service.UploadExpiry)
+	if err != nil {
+		log.Printf("presign upload failed: %v", err)
+		return uploadTicket{}, &service.Error{Status: http.StatusInternalServerError, Msg: "生成上传链接失败"}
+	}
+	return uploadTicket{URL: url, Key: key}, nil
+}
+
 // PresignFile is the single presigned-upload endpoint for every file kind
 // (version package, icon, screenshot). The caller sends the target app id and
-// the upload file name; it gets back {url, key} where key is
-// {prefix}/{app_id}/0/{file_name}. The caller pushes the bytes to url, then
-// submits key (with size + sha256) when saving the entity it belongs to.
+// the upload file name; it gets back {url, key}. Requires JWT auth.
 func (c *Controller) PresignFile(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		AppID    int64  `json:"app_id"`
@@ -147,19 +163,12 @@ func (c *Controller) PresignFile(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeBadRequest, "app_id 必填")
 		return
 	}
-	file := fmt.Sprintf("%d-%s", time.Now().UnixNano(), path.Base(req.FileName))
-	key := storage.AppKey(c.SVC.Config.Storage.Prefix, req.AppID, 0, file)
-	if !storage.ValidKey(key) {
-		web.SendError(w, web.CodeBadRequest, "无效的 file_name")
-		return
-	}
-	url, err := c.SVC.Storage.UploadURL(r.Context(), key, "", service.UploadExpiry)
+	ticket, err := c.presignFor(r.Context(), req.AppID, req.FileName)
 	if err != nil {
-		log.Printf("presign upload failed: %v", err)
 		sendErr(w, err)
 		return
 	}
-	web.SendJson(w, uploadTicket{URL: url, Key: key})
+	web.SendJson(w, ticket)
 }
 
 // CreateVersion records a version whose bytes were already uploaded to the

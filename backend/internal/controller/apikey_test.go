@@ -157,6 +157,65 @@ func TestKeyApiScopeGating(t *testing.T) {
 	}
 }
 
+func TestKeyApiPresignRequiresRun(t *testing.T) {
+	s := testServer(t)
+	app := seedApp(t, s)
+	readKey := makeKey(t, s, "read", model.KeyScopeRead, service.SuperAdminUID)
+
+	// read-scope key cannot presign an upload (write op).
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/keys/"+itoa(app.ID)+"/files?apikey="+readKey,
+		bytes.NewBufferString(`{"file_name":"app.apk"}`))
+	req.SetPathValue("app_id", itoa(app.ID))
+	w := httptest.NewRecorder()
+	s.PresignKeyFile(w, req)
+	var res struct {
+		Code int `json:"code"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 403 {
+		t.Fatalf("read key must not presign upload, got %s", w.Body.String())
+	}
+}
+
+func TestKeyApiPresignAndUpload(t *testing.T) {
+	s := testServer(t)
+	app := seedApp(t, s)
+	runKey := makeKey(t, s, "run", model.KeyScopeRun, service.SuperAdminUID)
+
+	// Presign → {url, key} scoped to the app.
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/keys/"+itoa(app.ID)+"/files?apikey="+runKey,
+		bytes.NewBufferString(`{"file_name":"app.apk"}`))
+	req.SetPathValue("app_id", itoa(app.ID))
+	w := httptest.NewRecorder()
+	s.PresignKeyFile(w, req)
+	var res struct {
+		Code int         `json:"code"`
+		Data uploadTicket `json:"data"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res.Code != 0 || res.Data.Key == "" || res.Data.URL == "" {
+		t.Fatalf("presign failed: %s", w.Body.String())
+	}
+	if want := "distapp/" + itoa(app.ID) + "/0/"; !strings.HasPrefix(res.Data.Key, want) {
+		t.Fatalf("key = %q, want prefix %q", res.Data.Key, want)
+	}
+
+	// Push bytes to the presigned url, then create the version with the key.
+	storeBytes(t, s, res.Data.Key, []byte("apk-bytes"))
+	up := httptest.NewRequest(http.MethodPost, "/api/v1/keys/"+itoa(app.ID)+"/versions?apikey="+runKey,
+		bytes.NewBufferString(`{"version_code":3,"version_name":"3.0.0","file_name":"app.apk","file_size":9,"sha256":"abc","key":"`+res.Data.Key+`"}`))
+	up.SetPathValue("app_id", itoa(app.ID))
+	w2 := httptest.NewRecorder()
+	s.UploadKeyVersion(w2, up)
+	var res2 struct {
+		Code int `json:"code"`
+	}
+	json.Unmarshal(w2.Body.Bytes(), &res2)
+	if res2.Code != 0 {
+		t.Fatalf("version create failed: %s", w2.Body.String())
+	}
+}
+
 func TestKeyApiUnauthorizedForUnmanagedApp(t *testing.T) {
 	s := testServer(t)
 	app := seedApp(t, s)
