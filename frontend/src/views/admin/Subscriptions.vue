@@ -57,10 +57,10 @@ const previewParams = computed(() => {
 
 const previewRendered = computed(() => fill(fBody.value, previewParams.value))
 
-const paramLabel = (k: string) => `{{${k}}}`
+const paramLabel = (k: string) => `{{.${k}}}`
 
 function fill(s: string, p: Record<string, string>): string {
-  return s.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) => (k in p ? p[k] : `{{${k}}}`))
+  return s.replace(/\{\{\s*\.?(\w+)\s*\}\}/g, (_, k: string) => (k in p ? p[k] : `{{.${k}}}`))
 }
 
 function openCreate() {
