@@ -6,6 +6,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -15,8 +16,11 @@ import (
 // presignURL builds a COS presigned (query-signed) URL for the given object
 // key. method is the lowercase HTTP verb. extra are additional query params
 // that must be covered by the signature (e.g. response-content-disposition).
-// creds carries the STS session (temp secretID/secretKey + token).
-func (c *client) presignURL(ctx context.Context, method, key string, extra url.Values, expire time.Duration, creds *stsCredentials) (*url.URL, error) {
+// headers maps lowercase header names to their values; each is covered by the
+// signature and the client must send it verbatim with the request (e.g.
+// x-cos-forbid-overwrite). creds carries the STS session (temp
+// secretID/secretKey + token).
+func (c *client) presignURL(ctx context.Context, method, key string, extra url.Values, headers http.Header, expire time.Duration, creds *stsCredentials) (*url.URL, error) {
 	if method == "" {
 		method = "get"
 	}
@@ -41,12 +45,18 @@ func (c *client) presignURL(ctx context.Context, method, key string, extra url.V
 	// Params owned by the caller must be listed in q-url-param-list and
 	// signed. The q-* params we add below are appended after signing.
 	paramList := sortedParamNames(query)
+	headerList := append([]string{"host"}, sortedHeaderNames(headers)...)
 
-	// FormatString = method\npath\n<query>\n<headers>\n. COS presigning always
-	// signs the host header, so headers is "host=<bucket-host>". The SDK signs
-	// the SHA1 hex of the formatString (with a trailing newline), not the
-	// formatString itself.
-	headerBlock := "host=" + c.host
+	// FormatString = method\npath\n<query>\n<headers>\n. COS presigning signs
+	// the host header plus every header in headers; they are semicolon-joined
+	// in the header block and echoed in q-header-list. The SDK signs the SHA1
+	// hex of the formatString (with a trailing newline), not the formatString.
+	hdr := make([]string, 0, len(headers)+1)
+	hdr = append(hdr, "host="+c.host)
+	for _, k := range sortedHeaderNames(headers) {
+		hdr = append(hdr, k+"="+cosQueryEscape(headers.Get(k)))
+	}
+	headerBlock := strings.Join(hdr, ";")
 	formatString := method + "\n" + path + "\n" + encodeQuery(query) + "\n" + headerBlock + "\n"
 	stringToSign := "sha1\n" + signTime + "\n" + sha1Hex(formatString) + "\n"
 	// Sign with the STS temp keys so COS accepts the token that matches them.
@@ -62,7 +72,7 @@ func (c *client) presignURL(ctx context.Context, method, key string, extra url.V
 	q.Set("q-ak", credentialID)
 	q.Set("q-sign-time", signTime)
 	q.Set("q-key-time", signTime)
-	q.Set("q-header-list", "host")
+	q.Set("q-header-list", strings.Join(headerList, ";"))
 	q.Set("q-url-param-list", paramList)
 	q.Set("q-signature", signature)
 
@@ -131,6 +141,17 @@ func sortedParamNames(v url.Values) string {
 		esc = append(esc, url.PathEscape(k))
 	}
 	return strings.Join(esc, ";")
+}
+
+// sortedHeaderNames returns the sorted lowercase header names in h. q-header-list
+// must be lowercase per the COS spec; the client echoes them back lowercase.
+func sortedHeaderNames(h http.Header) []string {
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, strings.ToLower(k))
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func hmacSHA1(key, data string) []byte {

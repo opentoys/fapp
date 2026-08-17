@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -30,7 +31,7 @@ func TestPresignURLShape(t *testing.T) {
 		secretKey: "SECRET",
 		baseURL:   "https://test-1250000000.cos.ap-guangzhou.myqcloud.com",
 	}
-	u, err := c.presignURL(context.Background(), "put", "exampleobject", nil, time.Hour, nil)
+	u, err := c.presignURL(context.Background(), "put", "exampleobject", nil, nil, time.Hour, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +62,7 @@ func TestPresignURLShape(t *testing.T) {
 
 func TestPresignURLAddsSessionToken(t *testing.T) {
 	c := &client{secretID: "AKID", secretKey: "SECRET", baseURL: "https://b.cos.region.myqcloud.com"}
-	u, _ := c.presignURL(context.Background(), "put", "1/0/a.apk", nil, time.Hour,
+	u, _ := c.presignURL(context.Background(), "put", "1/0/a.apk", nil, nil, time.Hour,
 		&stsCredentials{secretID: "tmpAK", secretKey: "tmpSK", sessionToken: "v4/sessionfoo"})
 	q, _ := url.ParseQuery(u.RawQuery)
 	if got := q.Get("x-cos-security-token"); got != "v4/sessionfoo" {
@@ -78,7 +79,7 @@ func TestPresignURLAddsSessionToken(t *testing.T) {
 
 func TestPresignURLNoTokenByDefault(t *testing.T) {
 	c := &client{secretID: "AKID", secretKey: "SECRET", baseURL: "https://b.cos.region.myqcloud.com"}
-	u, _ := c.presignURL(context.Background(), "put", "1/0/a.apk", nil, time.Hour, nil)
+	u, _ := c.presignURL(context.Background(), "put", "1/0/a.apk", nil, nil, time.Hour, nil)
 	q, _ := url.ParseQuery(u.RawQuery)
 	if _, ok := q["x-cos-security-token"]; ok {
 		t.Fatal("token present without session credentials")
@@ -87,7 +88,7 @@ func TestPresignURLNoTokenByDefault(t *testing.T) {
 
 func TestPresignURLEncodesPathSegments(t *testing.T) {
 	c := &client{secretID: "AKID", secretKey: "SECRET", baseURL: "https://b.cos.region.myqcloud.com"}
-	u, _ := c.presignURL(context.Background(), "get", "1/0/a b.png", nil, time.Hour, nil)
+	u, _ := c.presignURL(context.Background(), "get", "1/0/a b.png", nil, nil, time.Hour, nil)
 	if u.Path != "/1/0/a%20b.png" {
 		t.Fatalf("path = %q", u.Path)
 	}
@@ -96,7 +97,7 @@ func TestPresignURLEncodesPathSegments(t *testing.T) {
 func TestPresignURLCoversExtraParams(t *testing.T) {
 	c := &client{secretID: "AKID", secretKey: "SECRET", baseURL: "https://b.cos.region.myqcloud.com"}
 	extra := url.Values{"response-content-disposition": {"attachment; filename=\"a.png\""}}
-	u, _ := c.presignURL(context.Background(), "get", "1/0/a.png", extra, time.Hour, nil)
+	u, _ := c.presignURL(context.Background(), "get", "1/0/a.png", extra, nil, time.Hour, nil)
 	q, _ := url.ParseQuery(u.RawQuery)
 	if got := q.Get("response-content-disposition"); !strings.Contains(got, "a.png") {
 		t.Fatalf("extra param = %q", got)
@@ -117,5 +118,55 @@ func TestDownloadURLSignsParam(t *testing.T) {
 	}
 	if !strings.Contains(u, "response-content-disposition") || !strings.Contains(u, "q-signature=") {
 		t.Fatalf("download url = %q", u)
+	}
+}
+func TestPresignURLSignsHeaders(t *testing.T) {
+	c := &client{secretID: "AKID", secretKey: "SECRET", baseURL: "https://b.cos.region.myqcloud.com"}
+	hdr := http.Header{}
+	hdr.Set("x-cos-forbid-overwrite", "true")
+	u, err := c.presignURL(context.Background(), "put", "1/0/a.apk", nil, hdr, time.Hour,
+		&stsCredentials{secretID: "tmpAK", secretKey: "tmpSK", sessionToken: ""})
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, _ := url.ParseQuery(u.RawQuery)
+	// The header is covered by the signature: it appears in q-header-list.
+	if got := q.Get("q-header-list"); !strings.Contains(got, "x-cos-forbid-overwrite") {
+		t.Fatalf("q-header-list = %q", got)
+	}
+	// q-header-list starts with the mandatory host header.
+	if got := q.Get("q-header-list"); !strings.HasPrefix(got, "host") {
+		t.Fatalf("q-header-list = %q, want host first", got)
+	}
+}
+
+func TestUploadURLSignsForbidOverwrite(t *testing.T) {
+	c := &client{secretID: "AKID", secretKey: "SECRET", baseURL: "https://b.cos.region.myqcloud.com"}
+	c.fetchSts = func(context.Context) (*stsCredentials, error) {
+		return &stsCredentials{secretID: "AKID", secretKey: "SECRET", sessionToken: ""}, nil
+	}
+	u, err := c.UploadURL(context.Background(), "1/0/a.apk", "", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, _ := url.ParseQuery(strings.SplitN(u, "?", 2)[1])
+	if !strings.Contains(q.Get("q-header-list"), "x-cos-forbid-overwrite") {
+		t.Fatalf("q-header-list = %q", q.Get("q-header-list"))
+	}
+}
+
+func TestUploadURLSignsContentType(t *testing.T) {
+	c := &client{secretID: "AKID", secretKey: "SECRET", baseURL: "https://b.cos.region.myqcloud.com"}
+	c.fetchSts = func(context.Context) (*stsCredentials, error) {
+		return &stsCredentials{secretID: "AKID", secretKey: "SECRET", sessionToken: ""}, nil
+	}
+	u, err := c.UploadURL(context.Background(), "1/0/a.apk", "application/vnd.android.package-archive", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, _ := url.ParseQuery(strings.SplitN(u, "?", 2)[1])
+	// content-type is lowercase and signed into the URL alongside the header.
+	if !strings.Contains(q.Get("q-header-list"), "content-type") {
+		t.Fatalf("q-header-list = %q", q.Get("q-header-list"))
 	}
 }

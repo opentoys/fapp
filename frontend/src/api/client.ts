@@ -119,9 +119,14 @@ export const api = {
 // presign endpoint ({key,url}). COS presigns a PUT URL; local signs a server
 // upload endpoint (/files/upload) that takes a POST — derive the method from
 // the url host/path so neither backend needs a method hint.
+//
+// A 409 Conflict (COS FileAlreadyExists, from the forbid-overwrite header that
+// COS signs into the URL) means the key already holds the same content, so the
+// upload is treated as a success rather than an error.
 export async function uploadViaURL(url: string, file: File): Promise<void> {
   const method = url.includes('/api/v1/files/upload') ? 'POST' : 'PUT'
   const res = await fetch(url, { method, body: file })
+  if (res.status === 409) return
   if (!res.ok) throw new Error(`upload failed: ${res.status}`)
 }
 

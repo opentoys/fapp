@@ -196,7 +196,7 @@ func TestKeyApiPresignAndUpload(t *testing.T) {
 	if res.Code != 0 || res.Data.Key == "" || res.Data.URL == "" {
 		t.Fatalf("presign failed: %s", w.Body.String())
 	}
-	if want := "distapp/" + itoa(app.ID) + "/0/"; !strings.HasPrefix(res.Data.Key, want) {
+	if want := "disapp/" + itoa(app.ID) + "/0/"; !strings.HasPrefix(res.Data.Key, want) {
 		t.Fatalf("key = %q, want prefix %q", res.Data.Key, want)
 	}
 

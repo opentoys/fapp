@@ -30,8 +30,8 @@ type client struct {
 	hc        *http.Client
 	now       func() time.Time
 
-	mu      sync.Mutex
-	sts     *stsCredentials
+	mu       sync.Mutex
+	sts      *stsCredentials
 	fetchSts func(ctx context.Context) (*stsCredentials, error) // test hook
 }
 
@@ -69,12 +69,19 @@ func NewFromConfig(secretID, secretKey, bucket, region, baseURL string) (Store, 
 
 // UploadURL presigns a PUT for the client to push bytes straight to storage.
 // Non-q-* query params are signed into the URL so extra params are covered.
+// The x-cos-forbid-overwrite header is signed into the URL so COS rejects a
+// second PUT to the same key; the client must send it with the upload request.
 func (c *client) UploadURL(ctx context.Context, key, contentType string, expire time.Duration) (string, error) {
 	creds, err := c.credentials(ctx)
 	if err != nil {
 		return "", err
 	}
-	u, err := c.presignURL(ctx, "put", key, nil, expire, creds)
+	headers := http.Header{}
+	if contentType != "" {
+		headers.Set("content-type", contentType)
+	}
+	headers.Set("x-cos-forbid-overwrite", "true")
+	u, err := c.presignURL(ctx, "put", key, nil, headers, expire, creds)
 	if err != nil {
 		return "", err
 	}
@@ -88,7 +95,7 @@ func (c *client) Delete(ctx context.Context, key string) error {
 	if err != nil {
 		return err
 	}
-	u, err := c.presignURL(ctx, "delete", key, nil, 5*time.Minute, creds)
+	u, err := c.presignURL(ctx, "delete", key, nil, nil, 5*time.Minute, creds)
 	if err != nil {
 		return err
 	}
@@ -116,7 +123,7 @@ func (c *client) DownloadURL(ctx context.Context, key, filename string, expire t
 	if err != nil {
 		return "", err
 	}
-	u, err := c.presignURL(ctx, "get", key, params, expire, creds)
+	u, err := c.presignURL(ctx, "get", key, params, nil, expire, creds)
 	if err != nil {
 		return "", err
 	}
