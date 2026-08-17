@@ -59,7 +59,7 @@ func (c *Controller) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		claims, err := c.SVC.ParseToken(raw)
 		if err != nil {
-			web.SendStatus(w, http.StatusUnauthorized, "未登录或登录已过期")
+			web.SendError(w, http.StatusUnauthorized, "未登录或登录已过期")
 			return
 		}
 		r = r.WithContext(withUser(r.Context(), claims))

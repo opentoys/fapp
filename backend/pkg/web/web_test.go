@@ -43,14 +43,6 @@ func TestSendError(t *testing.T) {
 	}
 }
 
-func TestSendStatus(t *testing.T) {
-	w := httptest.NewRecorder()
-	SendStatus(w, http.StatusNotFound, "no")
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("code = %d", w.Code)
-	}
-}
-
 func TestRateLimit(t *testing.T) {
 	h := Chain(RateLimit(2, time.Minute))(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

@@ -47,22 +47,13 @@ func SendError(w http.ResponseWriter, code int, msg string) {
 	})
 }
 
-func SendStatus(w http.ResponseWriter, code int, msg string) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]any{
-		"code": code,
-		"msg":  msg,
-	})
-}
-
 // Recoverer catches panics and returns 500.
 func Recoverer(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
 				log.Printf("panic: %v", rec)
-				SendStatus(w, http.StatusInternalServerError, "internal error")
+				SendError(w, http.StatusInternalServerError, "internal error")
 			}
 		}()
 		next(w, r)
@@ -103,7 +94,7 @@ func RateLimit(max int, window time.Duration) Middleware {
 			over := b.count > max
 			mu.Unlock()
 			if over {
-				SendStatus(w, http.StatusTooManyRequests, "too many requests")
+				SendError(w, http.StatusTooManyRequests, "too many requests")
 				return
 			}
 			next(w, r)
