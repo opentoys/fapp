@@ -6,7 +6,12 @@ frontend:
 build: frontend
 	rm -rf backend/static/dist
 	cp -r frontend/dist backend/static/dist
-	cd backend && go build -tags dist -o ../bin/disapp .
+	cd backend && go build -trimpath -ldflags="-s -w" -tags dist -o ../bin/disapp .
+
+build-linux: frontend
+	rm -rf backend/static/dist
+	cp -r frontend/dist backend/static/dist
+	cd backend && GOOS=linux go build -trimpath -ldflags="-s -w" -tags dist -o ../bin/disapp .
 
 run: build
 	./bin/disapp
