@@ -277,7 +277,7 @@ func TestAdminUploadAndSetIcon(t *testing.T) {
 
 	// The single /files presign returns a key scoped to the app; bytes are
 	// pushed there by the client, then the icon key is submitted on update.
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/files", strings.NewReader(`{"app_id":`+itoa(app.ID)+`,"file_name":"icon.png"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/files", strings.NewReader(`{"app_id":`+itoa(app.ID)+`,"file_name":"icon.png","sha256":"`+hashA+`","file_size":9}`))
 	w := httptest.NewRecorder()
 	s.PresignFile(w, req)
 
@@ -294,6 +294,9 @@ func TestAdminUploadAndSetIcon(t *testing.T) {
 	}
 	if want := "disapp/" + itoa(app.ID) + "/0/"; !strings.HasPrefix(res.Data.Key, want) {
 		t.Fatalf("key = %q, want prefix %q", res.Data.Key, want)
+	}
+	if want := "/" + hashA + "_9.png"; !strings.HasSuffix(res.Data.Key, want) {
+		t.Fatalf("key must be content-addressed {sha256}_{size}.ext, got %q, want suffix %q", res.Data.Key, want)
 	}
 	loc, _ := s.SVC.Storage.(*local.LocalStorage)
 	storeBytes(t, s, res.Data.Key, pngData)
@@ -328,11 +331,32 @@ func TestAdminUploadAndSetIcon(t *testing.T) {
 
 func TestAdminPresignRejectsMissingAppID(t *testing.T) {
 	s := testServer(t)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/files", strings.NewReader(`{"file_name":"icon.png"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/files", strings.NewReader(`{"file_name":"icon.png","sha256":"`+hashA+`","file_size":9}`))
 	w := httptest.NewRecorder()
 	s.PresignFile(w, req)
 	if codeOf(w) == 0 {
 		t.Fatalf("expected rejection, res = %s", w.Body.String())
+	}
+}
+
+func TestAdminPresignRequiresSha256Size(t *testing.T) {
+	s := testServer(t)
+	app := model.App{Name: "a"}
+	s.SVC.DB.Create(&app)
+
+	// Missing or malformed sha256 / file_size must be rejected.
+	for _, body := range []string{
+		`{"app_id":` + itoa(app.ID) + `,"file_name":"app.apk"}`,
+		`{"app_id":` + itoa(app.ID) + `,"file_name":"app.apk","sha256":"zz","file_size":9}`,
+		`{"app_id":` + itoa(app.ID) + `,"file_name":"app.apk","sha256":"aa","file_size":0}`,
+		`{"app_id":` + itoa(app.ID) + `,"file_name":"app.apk","sha256":"aa","file_size":9}`,
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/files", strings.NewReader(body))
+		w := httptest.NewRecorder()
+		s.PresignFile(w, req)
+		if codeOf(w) == 0 {
+			t.Fatalf("expected rejection for %s, res = %s", body, w.Body.String())
+		}
 	}
 }
 
@@ -376,7 +400,7 @@ func TestAdminScreenshotPresignAndDelete(t *testing.T) {
 	loc, _ := s.SVC.Storage.(*local.LocalStorage)
 
 	// Presign + write bytes at the returned key, then submit it on update.
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/files", strings.NewReader(`{"app_id":`+itoa(app.ID)+`,"file_name":"shot.png"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/files", strings.NewReader(`{"app_id":`+itoa(app.ID)+`,"file_name":"shot.png","sha256":"`+hashB+`","file_size":9}`))
 	w := httptest.NewRecorder()
 	s.PresignFile(w, req)
 	var res struct {
@@ -422,10 +446,11 @@ func TestAdminDeleteAppScreenshot(t *testing.T) {
 	s.SVC.DB.Create(&app)
 	loc, _ := s.SVC.Storage.(*local.LocalStorage)
 
-	// Presign two, write bytes, submit both, then delete one by key.
+	// Presign two, write bytes, submit both, then delete one by key. Distinct
+	// content per shot so content-addressed keys differ.
 	keys := []string{}
-	for i := 0; i < 2; i++ {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/files", strings.NewReader(`{"app_id":`+itoa(app.ID)+`,"file_name":"shot.png"}`))
+	for i, sha := range []string{hashA, hashB} {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/files", strings.NewReader(`{"app_id":`+itoa(app.ID)+`,"file_name":"shot.png","sha256":"`+sha+`","file_size":`+itoa(int64(9+i))+`}`))
 		w := httptest.NewRecorder()
 		s.PresignFile(w, req)
 		var res struct {
@@ -438,6 +463,9 @@ func TestAdminDeleteAppScreenshot(t *testing.T) {
 		}
 		keys = append(keys, res.Data.Key)
 		storeBytes(t, s, res.Data.Key, pngData)
+	}
+	if keys[0] == keys[1] {
+		t.Fatalf("distinct content must yield distinct keys, got %q", keys)
 	}
 	if len(keys) != 2 {
 		t.Fatalf("keys = %d", len(keys))

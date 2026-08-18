@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { Plus, Upload } from 'lucide-vue-next'
-import { api, fileURL, uploadViaURL } from '../../api/client'
+import { api, fileURL, sha256Hex, uploadViaURL } from '../../api/client'
 import { useI18n } from '../../composables/useI18n'
 import { PLATFORMS } from '../../constants/platform'
 import { fmtDate } from '../../utils/format'
@@ -90,7 +90,8 @@ async function confirmCreate() {
     const app = await api.createApp({ name: newName.value.trim(), platform: newPlatform.value })
     if (createIcon.value) {
       try {
-        const ticket = await api.presignFile(app.id, createIcon.value.name)
+        const sha = await sha256Hex(createIcon.value)
+        const ticket = await api.presignFile(app.id, createIcon.value.name, sha, createIcon.value.size)
         await uploadViaURL(ticket.url, createIcon.value)
         await api.updateApp(app.id, { icon: ticket.key })
       } catch (e) {
@@ -134,7 +135,8 @@ async function confirmEdit() {
   try {
     await api.updateApp(id, { name: editName.value.trim() })
     if (editIcon.value) {
-      const ticket = await api.presignFile(id, editIcon.value.name)
+      const sha = await sha256Hex(editIcon.value)
+      const ticket = await api.presignFile(id, editIcon.value.name, sha, editIcon.value.size)
       await uploadViaURL(ticket.url, editIcon.value)
       await api.updateApp(id, { icon: ticket.key })
     }

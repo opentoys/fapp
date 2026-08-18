@@ -63,9 +63,13 @@ export const api = {
   updateApp: (id: number, data: Partial<AppItem> & { password?: string }) =>
     client.put<ApiResp<AppItem>>(`/admin/apps/${id}`, data),
   // presignFile is the single presigned-upload endpoint for every file kind
-  // (version package, icon, screenshot): {app_id, file_name} → {url, key}.
-  presignFile: (appId: number, fileName: string) =>
-    client.post<ApiResp<UploadTicket>>('/files', { app_id: appId, file_name: fileName }).then((r) => r.data.data),
+  // (version package, icon, screenshot): {app_id, file_name, sha256, file_size}
+  // → {url, key}. The key is content-addressed as {sha256}_{size}.ext, so the
+  // caller must compute the checksum before presigning.
+  presignFile: (appId: number, fileName: string, sha256: string, fileSize: number) =>
+    client
+      .post<ApiResp<UploadTicket>>('/files', { app_id: appId, file_name: fileName, sha256, file_size: fileSize })
+      .then((r) => r.data.data),
   deleteAppScreenshot: (id: number, url: string) =>
     client
       .delete<ApiResp<AppItem>>(`/admin/apps/${id}/screenshots`, { params: { url } })
@@ -120,12 +124,19 @@ export const api = {
 // upload endpoint (/files/upload) that takes a POST — derive the method from
 // the url host/path so neither backend needs a method hint.
 //
-// A 409 Conflict (COS FileAlreadyExists, from the forbid-overwrite header that
-// COS signs into the URL) means the key already holds the same content, so the
-// upload is treated as a success rather than an error.
+// COS signs the x-cos-forbid-overwrite header into the URL, so it must be
+// echoed verbatim on the request or COS rejects the PUT with
+// SignatureDoesNotMatch. The header makes a second PUT to the same key return
+// 409 FileAlreadyExists, which here means the key already holds the same
+// content — treated as a success rather than an error.
 export async function uploadViaURL(url: string, file: File): Promise<void> {
-  const method = url.includes('/api/v1/files/upload') ? 'POST' : 'PUT'
-  const res = await fetch(url, { method, body: file })
+  // Absolute URL → COS presigned PUT; relative → local server upload (POST).
+  const isCOS = url.startsWith('http')
+  const res = await fetch(url, {
+    method: isCOS ? 'PUT' : 'POST',
+    body: file,
+    ...(isCOS ? { headers: { 'x-cos-forbid-overwrite': 'true' } } : {}),
+  })
   if (res.status === 409) return
   if (!res.ok) throw new Error(`upload failed: ${res.status}`)
 }

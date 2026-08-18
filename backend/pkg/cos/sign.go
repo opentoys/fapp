@@ -56,7 +56,10 @@ func (c *client) presignURL(ctx context.Context, method, key string, extra url.V
 	for _, k := range sortedHeaderNames(headers) {
 		hdr = append(hdr, k+"="+cosQueryEscape(headers.Get(k)))
 	}
-	headerBlock := strings.Join(hdr, ";")
+	// COS canonical HttpString joins the header k=v lines with '&', not ';'
+	// (the ';' only separates entries inside q-header-list). A multi-header URL
+	// signed with ';' fails SignatureDoesNotMatch against the '&' form.
+	headerBlock := strings.Join(hdr, "&")
 	formatString := method + "\n" + path + "\n" + encodeQuery(query) + "\n" + headerBlock + "\n"
 	stringToSign := "sha1\n" + signTime + "\n" + sha1Hex(formatString) + "\n"
 	// Sign with the STS temp keys so COS accepts the token that matches them.

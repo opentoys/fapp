@@ -2,13 +2,12 @@ package controller
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
-	"path"
+	"path/filepath"
 	"strconv"
-	"time"
 
 	"disapp/internal/resources/storage"
 	"disapp/internal/service"
@@ -130,12 +129,23 @@ type uploadTicket struct {
 	Key string `json:"key"`
 }
 
-// presignFor builds the {url, key} upload ticket for a file of an app. The key
-// is {prefix}/{app_id}/0/{file_name}; the caller pushes the bytes to url, then
-// submits key (with size + sha256) when saving the entity it belongs to.
-func (c *Controller) presignFor(ctx context.Context, appID int64, fileName string) (uploadTicket, error) {
-	file := fmt.Sprintf("%d-%s", time.Now().UnixNano(), path.Base(fileName))
-	key := storage.AppKey(c.SVC.Config.Storage.Prefix, appID, 0, file)
+// isValidSHA256 reports whether s is a 32-byte lowercase hex SHA-256 digest.
+func isValidSHA256(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	b, err := hex.DecodeString(s)
+	return err == nil && hex.EncodeToString(b) == s
+}
+
+// presignFor builds the {url, key} upload ticket for a file of an app. The
+// filename is content-addressed as {sha256}_{size}{ext}; identical bytes map to
+// the same key, so re-uploads of the same file collide (and dedupe). The caller
+// pushes the bytes to url, then submits key when saving the entity.
+func (c *Controller) presignFor(ctx context.Context, appID int64, fileName, sha256 string, size int64) (uploadTicket, error) {
+	base := filepath.Base(fileName)
+	name := sha256 + "_" + strconv.FormatInt(size, 10) + filepath.Ext(base)
+	key := storage.AppKey(c.SVC.Config.Storage.Prefix, appID, 0, name)
 	if !storage.ValidKey(key) {
 		return uploadTicket{}, &service.Error{Status: http.StatusBadRequest, Msg: "无效的 file_name"}
 	}
@@ -148,12 +158,15 @@ func (c *Controller) presignFor(ctx context.Context, appID int64, fileName strin
 }
 
 // PresignFile is the single presigned-upload endpoint for every file kind
-// (version package, icon, screenshot). The caller sends the target app id and
-// the upload file name; it gets back {url, key}. Requires JWT auth.
+// (version package, icon, screenshot). The caller sends the target app id, the
+// upload file name, and its sha256 + size; the storage key is derived from
+// those as {sha256}_{size}.ext. Requires JWT auth.
 func (c *Controller) PresignFile(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		AppID    int64  `json:"app_id"`
 		FileName string `json:"file_name"`
+		SHA256   string `json:"sha256"`
+		FileSize int64  `json:"file_size"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		web.SendError(w, web.CodeBadRequest, "bad request")
@@ -163,7 +176,11 @@ func (c *Controller) PresignFile(w http.ResponseWriter, r *http.Request) {
 		web.SendError(w, web.CodeBadRequest, "app_id 必填")
 		return
 	}
-	ticket, err := c.presignFor(r.Context(), req.AppID, req.FileName)
+	if !isValidSHA256(req.SHA256) || req.FileSize <= 0 {
+		web.SendError(w, web.CodeBadRequest, "sha256 与 file_size 必填")
+		return
+	}
+	ticket, err := c.presignFor(r.Context(), req.AppID, req.FileName, req.SHA256, req.FileSize)
 	if err != nil {
 		sendErr(w, err)
 		return

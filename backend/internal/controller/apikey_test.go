@@ -184,7 +184,7 @@ func TestKeyApiPresignAndUpload(t *testing.T) {
 
 	// Presign → {url, key} scoped to the app.
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/keys/"+itoa(app.ID)+"/files?apikey="+runKey,
-		bytes.NewBufferString(`{"file_name":"app.apk"}`))
+		bytes.NewBufferString(`{"file_name":"app.apk","sha256":"`+hashA+`","file_size":9}`))
 	req.SetPathValue("app_id", itoa(app.ID))
 	w := httptest.NewRecorder()
 	s.PresignKeyFile(w, req)
@@ -196,8 +196,8 @@ func TestKeyApiPresignAndUpload(t *testing.T) {
 	if res.Code != 0 || res.Data.Key == "" || res.Data.URL == "" {
 		t.Fatalf("presign failed: %s", w.Body.String())
 	}
-	if want := "disapp/" + itoa(app.ID) + "/0/"; !strings.HasPrefix(res.Data.Key, want) {
-		t.Fatalf("key = %q, want prefix %q", res.Data.Key, want)
+	if want := "disapp/" + itoa(app.ID) + "/0/" + hashA + "_9.apk"; res.Data.Key != want {
+		t.Fatalf("key = %q, want %q", res.Data.Key, want)
 	}
 
 	// Push bytes to the presigned url, then create the version with the key.

@@ -36,12 +36,18 @@ func (c *Controller) PresignKeyFile(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		FileName string `json:"file_name"`
+		SHA256   string `json:"sha256"`
+		FileSize int64  `json:"file_size"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		web.SendError(w, web.CodeBadRequest, "bad request")
 		return
 	}
-	ticket, err := c.presignFor(r.Context(), appID, req.FileName)
+	if !isValidSHA256(req.SHA256) || req.FileSize <= 0 {
+		web.SendError(w, web.CodeBadRequest, "sha256 与 file_size 必填")
+		return
+	}
+	ticket, err := c.presignFor(r.Context(), appID, req.FileName, req.SHA256, req.FileSize)
 	if err != nil {
 		sendErr(w, err)
 		return

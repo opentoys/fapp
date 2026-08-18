@@ -214,11 +214,11 @@ async function submit() {
       targetAppId = app.id
     }
 
-    // Upload the package bytes to the presigned url, then submit metadata
-    // (including the key, size and sha256) to persist the version.
-    const ticket = await api.presignFile(targetAppId, f.name)
-    await uploadViaURL(ticket.url, f)
+    // Compute the checksum first — the presigned key is content-addressed
+    // ({sha256}_{size}.ext). Then push bytes to the url, then submit metadata.
     const [sha256, fileSize] = await Promise.all([sha256Hex(f), Promise.resolve(f.size)])
+    const ticket = await api.presignFile(targetAppId, f.name, sha256, fileSize)
+    await uploadViaURL(ticket.url, f)
     await api.createVersion({
       app_id: targetAppId,
       version_code: versionCode.value ?? 0,
@@ -237,8 +237,10 @@ async function submit() {
     // New-app mode: push the parsed icon to storage and record its key on the app.
     if (mode.value === 'new' && parsed.value?.iconDataUri) {
       const iconBlob = dataUriToBlob(parsed.value.iconDataUri)
-      const iconTicket = await api.presignFile(targetAppId, 'icon.png')
-      await uploadViaURL(iconTicket.url, new File([iconBlob], 'icon.png'))
+      const iconFile = new File([iconBlob], 'icon.png')
+      const [iconSha, iconSize] = await Promise.all([sha256Hex(iconFile), Promise.resolve(iconFile.size)])
+      const iconTicket = await api.presignFile(targetAppId, 'icon.png', iconSha, iconSize)
+      await uploadViaURL(iconTicket.url, iconFile)
       await api.updateApp(targetAppId, { icon: iconTicket.key })
     }
 

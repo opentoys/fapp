@@ -17,12 +17,14 @@ const endpoints = [
     desc: 'apiDoc.epPresignDesc',
     docs: [
       { name: 'file_name', type: 'string', required: true, desc: 'apiDoc.fieldApk' },
+      { name: 'sha256', type: 'string', required: true, desc: 'apiDoc.fieldSha256' },
+      { name: 'file_size', type: 'int', required: true, desc: 'apiDoc.fieldFileSize' },
     ],
-    example: `curl -X POST "${base()}/api/v1/keys/123/files?apikey=dk_xxx" \\\n  -H "Content-Type: application/json" \\\n  -d '{"file_name":"app.apk"}'`,
+    example: `SHA=$(shasum -a 256 app.apk | cut -d' ' -f1)\nSIZE=$(stat -f%z app.apk)\ncurl -X POST "${base()}/api/v1/keys/123/files?apikey=dk_xxx" \\\n  -H "Content-Type: application/json" \\\n  -d "{\\"file_name\\":\\"app.apk\\",\\"sha256\\":\\"$SHA\\",\\"file_size\\":$SIZE}"`,
     resp: `{
   "code": 0,
   "data": {
-    "key": "distapp/123/0/1690000000-app.apk",
+    "key": "disapp/123/0/3f2a…c9b1_1048576.apk",
     "url": "…signed upload url…"
   },
   "msg": "ok"
@@ -41,7 +43,7 @@ const endpoints = [
       { name: 'version_name', type: 'string', required: true, desc: 'apiDoc.fieldVersionName' },
       { name: 'version_code', type: 'int', required: true, desc: 'apiDoc.fieldVersionCode' },
     ],
-    example: `KEY=$(curl -s -X POST "${base()}/api/v1/keys/123/files?apikey=dk_xxx" \\\n  -H "Content-Type: application/json" -d '{"file_name":"app.apk"}' | jq -r .data.key)\n# push bytes to the presigned url, then create the version\ncurl -X POST "${base()}/api/v1/keys/123/versions?apikey=dk_xxx" \\\n  -H "Content-Type: application/json" \\\n  -d "{\\"key\\":\\"$KEY\\",\\"file_name\\":\\"app.apk\\",\\"file_size\\":$(stat -f%z app.apk),\\"sha256\\":\\"$(shasum -a 256 app.apk | cut -d' ' -f1)\\",\\"version_name\\":\\"1.0.0\\",\\"version_code\\":1}"`,
+    example: `SHA=$(shasum -a 256 app.apk | cut -d' ' -f1)\nSIZE=$(stat -f%z app.apk)\nKEY=$(curl -s -X POST "${base()}/api/v1/keys/123/files?apikey=dk_xxx" \\\n  -H "Content-Type: application/json" \\\n  -d "{\\"file_name\\":\\"app.apk\\",\\"sha256\\":\\"$SHA\\",\\"file_size\\":$SIZE}" | jq -r .data.key)\n# push bytes to the presigned url, then create the version\ncurl -X POST "${base()}/api/v1/keys/123/versions?apikey=dk_xxx" \\\n  -H "Content-Type: application/json" \\\n  -d "{\\"key\\":\\"$KEY\\",\\"file_name\\":\\"app.apk\\",\\"file_size\\":$SIZE,\\"sha256\\":\\"$SHA\\",\\"version_name\\":\\"1.0.0\\",\\"version_code\\":1}"`,
     resp: `{
   "code": 0,
   "data": {

@@ -251,3 +251,10 @@ func itoa(n int64) string {
 	}
 	return string(b[i:])
 }
+
+// hashA/hashB are distinct valid SHA-256 hex digests for content-addressed key
+// tests.
+const (
+	hashA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	hashB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+)

@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Copy, Loader2, Upload as UploadIcon, X } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
-import { api, fileURL, uploadViaURL } from '../../api/client'
+import { api, fileURL, sha256Hex, uploadViaURL } from '../../api/client'
 import { useAuth } from '../../composables/useAuth'
 import { useI18n } from '../../composables/useI18n'
 import { formatArch } from '../../constants/platform'
@@ -202,9 +202,11 @@ function onInfoIconChange(f: File | File[] | null) {
   infoIconPreview.value = file ? URL.createObjectURL(file) : (data.value?.app.icon ? fileURL(data.value.app.icon) : '')
 }
 
-// presignUpload presigns, pushes bytes to the url, and returns the key.
-async function presignUpload(presign: () => Promise<{ key: string; url: string }>, file: File): Promise<string> {
-  const ticket = await presign()
+// presignUpload presigns (with the file's content-addressed sha256/size),
+// pushes bytes to the url, and returns the key.
+async function presignUpload(appId: number, file: File): Promise<string> {
+  const sha = await sha256Hex(file)
+  const ticket = await api.presignFile(appId, file.name, sha, file.size)
   await uploadViaURL(ticket.url, file)
   return ticket.key
 }
@@ -223,10 +225,7 @@ async function saveInfo() {
     await api.updateApp(id, { name: infoName.value.trim(), description: infoDescription.value })
     const icon = infoIcon.value
     if (icon) {
-      const key = await presignUpload(
-        () => api.presignFile(id, icon.name),
-        icon,
-      )
+      const key = await presignUpload(id, icon)
       await api.updateApp(id, { icon: key })
       if (data.value) data.value.app.icon = key
     }
@@ -249,10 +248,7 @@ async function onScreenshotsChange(files: File[] | File | null) {
   try {
     const keys: string[] = []
     for (const f of list) {
-      const key = await presignUpload(
-        () => api.presignFile(id, f.name),
-        f,
-      )
+      const key = await presignUpload(id, f)
       keys.push(key)
     }
     await api.updateApp(id, { screenshots: [...(data.value.app.screenshots), ...keys] })
